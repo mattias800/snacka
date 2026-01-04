@@ -42,6 +42,20 @@ miscord-csharp/
 └── README.md
 ```
 
+## Implementation Status
+
+### Current Progress
+- ✅ **Phase 1.1 - Database Setup (100%)**: All 7 entity models created with EF Core DbContext
+  - User, MiscordServer, Channel, Message, DirectMessage, UserServer, VoiceParticipant
+  - Migrations ready for deployment
+  - Foreign key relationships configured
+  - Unique constraints and indexes optimized
+- ⏳ **Phase 1.2 - User Authentication (0%)**: Next to implement
+- ⏳ **Phase 1.3 - SignalR Setup (0%)**: Planned after authentication
+- ⏳ **Phases 2-5**: Messaging, voice/media, UI, testing
+
+See [PLAN.md](PLAN.md) for complete implementation roadmap.
+
 ## Development
 
 ### Prerequisites
@@ -61,6 +75,17 @@ dotnet build
 ```bash
 dotnet test
 ```
+
+### Database
+
+The project uses Entity Framework Core with support for SQL Server and PostgreSQL. Database schema includes:
+- **Users**: User accounts with authentication
+- **MiscordServers**: Server/workspace management
+- **Channels**: Text and voice channels
+- **Messages**: Channel messages
+- **DirectMessages**: Private messages
+- **UserServers**: Server membership and roles
+- **VoiceParticipants**: Active voice channel tracking
 
 ## Code Style
 

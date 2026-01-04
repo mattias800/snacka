@@ -6,9 +6,9 @@ This document provides guidelines for AI agents working on the Miscord project.
 
 Miscord is a self-hosted Discord alternative built with C# and .NET. The project consists of:
 - **Miscord.Server**: ASP.NET Core server application
-- **Miscord.Client**: Desktop client application (to be implemented)
-- **Miscord.Shared**: Shared models and interfaces
-- **Miscord.WebRTC**: WebRTC/media handling library
+- **Miscord.Client**: Avalonia UI desktop client (✅ basic structure with App, MainWindow)
+- **Miscord.Shared**: Shared models and interfaces (✅ 7 database entities defined)
+- **Miscord.WebRTC**: WebRTC/media handling library (planned)
 
 ## Core Requirements
 
@@ -124,6 +124,24 @@ dotnet run --project src/Miscord.Server
 # Create a migration
 dotnet ef migrations add MigrationName --project src/Miscord.Server
 ```
+
+## Project Status
+
+### Completed
+- ✅ Project structure with 4 main libraries (Server, Client, Shared, WebRTC)
+- ✅ Avalonia UI 11.1.3 integrated with ReactiveUI
+- ✅ Database models (7 entities) with EF Core DbContext
+- ✅ Build pipeline working (zero errors)
+- ✅ Git repository on GitHub (private)
+- ✅ PLAN.md with complete feature roadmap
+
+### In Progress / Next
+- Phase 1.2: User authentication (register, login, JWT)
+- Phase 1.3: SignalR hub setup
+- Phase 2: Messaging (DMs and channels)
+- Phase 3: Voice/media (WebRTC, webcam, screen share)
+- Phase 4: UI implementation
+- Phase 5: Testing and optimization
 
 ## When You Make Mistakes
 
