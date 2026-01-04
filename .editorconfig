@@ -1,0 +1,45 @@
+root = true
+
+# C# files
+[*.cs]
+indent_style = space
+indent_size = 4
+max_line_length = 120
+charset = utf-8
+
+# Code style rules
+csharp_prefer_braces = true
+csharp_style_namespace_declarations = file_scoped:silent
+csharp_style_expression_bodied_methods = when_on_single_line:silent
+csharp_indent_case_contents = true
+csharp_indent_switch_labels = true
+
+# Naming conventions
+dotnet_naming_style.pascal_case_style.required_prefix = 
+dotnet_naming_style.pascal_case_style.required_suffix = 
+dotnet_naming_style.pascal_case_style.word_separator = 
+dotnet_naming_style.pascal_case_style.capitalization = pascal_case
+
+dotnet_naming_style.camel_case_style.required_prefix = 
+dotnet_naming_style.camel_case_style.required_suffix = 
+dotnet_naming_style.camel_case_style.word_separator = 
+dotnet_naming_style.camel_case_style.capitalization = camel_case
+
+# C# naming rules
+dotnet_naming_rule.interfaces_should_be_pascal_case.severity = suggestion
+dotnet_naming_rule.interfaces_should_be_pascal_case.symbols = interface_symbols
+dotnet_naming_rule.interfaces_should_be_pascal_case.style = pascal_case_style
+
+dotnet_naming_symbols.interface_symbols.applicable_kinds = interface
+dotnet_naming_symbols.interface_symbols.applicable_accessibilities = public, internal, private, protected, protected_internal, private_protected
+dotnet_naming_symbols.interface_symbols.required_modifiers = 
+
+# JSON files
+[*.json]
+indent_style = space
+indent_size = 2
+
+# YAML files
+[*.{yml,yaml}]
+indent_style = space
+indent_size = 2
