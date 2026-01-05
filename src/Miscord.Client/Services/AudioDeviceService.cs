@@ -28,7 +28,19 @@ public class AudioDeviceService : IAudioDeviceService
     [DllImport("SDL2")]
     private static extern void SDL_Quit();
 
+    [DllImport("SDL2")]
+    private static extern IntPtr SDL_GetError();
+
+    [DllImport("SDL2")]
+    private static extern void SDL_ClearError();
+
     private const uint SDL_INIT_AUDIO = 0x00000010;
+
+    private static string GetSdlError()
+    {
+        var ptr = SDL_GetError();
+        return ptr != IntPtr.Zero ? Marshal.PtrToStringAnsi(ptr) ?? "" : "";
+    }
 
     private SDL2AudioSource? _testAudioSource;
     private SDL2AudioEndPoint? _testAudioSink;
@@ -164,12 +176,29 @@ public class AudioDeviceService : IAudioDeviceService
 
         try
         {
+            EnsureSdl2Initialized();
+
             var audioEncoder = new AudioEncoder();
-            // Use device name or empty string for default
             _testAudioSource = new SDL2AudioSource(deviceName ?? string.Empty, audioEncoder);
 
             // Subscribe to raw audio samples for RMS calculation
             _testAudioSource.OnAudioSourceRawSample += OnTestAudioSample;
+
+            // Subscribe to error events
+            _testAudioSource.OnAudioSourceError += (error) =>
+            {
+                Console.WriteLine($"AudioDeviceService: Audio source error: {error}");
+            };
+
+            // Set audio format before starting - required for SDL2AudioSource to work
+            var formats = _testAudioSource.GetAudioSourceFormats();
+            if (formats.Count > 0)
+            {
+                var selectedFormat = formats.FirstOrDefault(f => f.FormatName == "PCMU");
+                if (selectedFormat.FormatName == null)
+                    selectedFormat = formats[0];
+                _testAudioSource.SetAudioSourceFormat(selectedFormat);
+            }
 
             await _testAudioSource.StartAudio();
             Console.WriteLine($"AudioDeviceService: Started input test on device: {deviceName ?? "(default)"}");
