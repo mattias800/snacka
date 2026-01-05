@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using SIPSorcery.Media;
 using SIPSorceryMedia.SDL2;
 using SIPSorceryMedia.Abstractions;
@@ -45,28 +46,64 @@ public class AudioDeviceService : IAudioDeviceService
         try
         {
             EnsureSdl2Loaded();
-            return SDL2Helper.GetAudioRecordingDevices();
+            Console.WriteLine("AudioDeviceService: Getting input devices...");
+            var devices = SDL2Helper.GetAudioRecordingDevices();
+            Console.WriteLine($"AudioDeviceService: Found {devices.Count} input devices");
+            foreach (var device in devices)
+            {
+                Console.WriteLine($"  - Input device: {device}");
+            }
+            return devices;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"AudioDeviceService: Failed to get input devices - {ex.Message}");
+            Console.WriteLine($"AudioDeviceService: Failed to get input devices - {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"AudioDeviceService: Stack trace: {ex.StackTrace}");
             return Array.Empty<string>();
         }
     }
 
     private static bool _sdl2LibraryLoaded;
     private static readonly object _sdl2LoadLock = new();
+    private static IntPtr _sdl2Handle;
 
-    private void EnsureSdl2Loaded()
+    private static void EnsureSdl2Loaded()
     {
-        // Note: SDL2 is initialized automatically by SIPSorceryMedia.SDL2 when needed.
-        // We just need to mark as loaded to avoid repeated checks.
         if (_sdl2LibraryLoaded) return;
 
         lock (_sdl2LoadLock)
         {
             if (_sdl2LibraryLoaded) return;
-            _sdl2LibraryLoaded = true;
+
+            // Try to load SDL2 from common locations on macOS
+            var possiblePaths = new[]
+            {
+                "/opt/homebrew/lib/libSDL2.dylib",      // Apple Silicon Homebrew
+                "/usr/local/lib/libSDL2.dylib",         // Intel Homebrew
+                "/usr/lib/libSDL2.dylib",               // System
+                "libSDL2.dylib",                        // Current directory / PATH
+                "SDL2"                                  // Let system find it
+            };
+
+            foreach (var path in possiblePaths)
+            {
+                try
+                {
+                    if (NativeLibrary.TryLoad(path, out _sdl2Handle))
+                    {
+                        Console.WriteLine($"AudioDeviceService: Loaded SDL2 from {path}");
+                        _sdl2LibraryLoaded = true;
+                        return;
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"AudioDeviceService: Failed to load SDL2 from {path}: {ex.Message}");
+                }
+            }
+
+            Console.WriteLine("AudioDeviceService: Could not load SDL2 from any known location");
+            _sdl2LibraryLoaded = true; // Mark as attempted even if failed
         }
     }
 
@@ -75,11 +112,19 @@ public class AudioDeviceService : IAudioDeviceService
         try
         {
             EnsureSdl2Loaded();
-            return SDL2Helper.GetAudioPlaybackDevices();
+            Console.WriteLine("AudioDeviceService: Getting output devices...");
+            var devices = SDL2Helper.GetAudioPlaybackDevices();
+            Console.WriteLine($"AudioDeviceService: Found {devices.Count} output devices");
+            foreach (var device in devices)
+            {
+                Console.WriteLine($"  - Output device: {device}");
+            }
+            return devices;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"AudioDeviceService: Failed to get output devices - {ex.Message}");
+            Console.WriteLine($"AudioDeviceService: Failed to get output devices - {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"AudioDeviceService: Stack trace: {ex.StackTrace}");
             return Array.Empty<string>();
         }
     }
