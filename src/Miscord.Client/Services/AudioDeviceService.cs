@@ -42,6 +42,7 @@ public class AudioDeviceService : IAudioDeviceService
         return ptr != IntPtr.Zero ? Marshal.PtrToStringAnsi(ptr) ?? "" : "";
     }
 
+    private readonly ISettingsStore? _settingsStore;
     private SDL2AudioSource? _testAudioSource;
     private SDL2AudioEndPoint? _testAudioSink;
     private Action<float>? _onRmsUpdate;
@@ -51,8 +52,9 @@ public class AudioDeviceService : IAudioDeviceService
     public bool IsTestingInput => _testAudioSource != null;
     public bool IsLoopbackEnabled => _isLoopbackEnabled;
 
-    public AudioDeviceService()
+    public AudioDeviceService(ISettingsStore? settingsStore = null)
     {
+        _settingsStore = settingsStore;
         EnsureSdl2Initialized();
     }
 
@@ -295,16 +297,35 @@ public class AudioDeviceService : IAudioDeviceService
     {
         if (sample.Length == 0) return;
 
-        // Calculate RMS
+        // Get gain and gate settings
+        var gain = _settingsStore?.Settings.InputGain ?? 1.0f;
+        var gateEnabled = _settingsStore?.Settings.GateEnabled ?? true;
+        var gateThreshold = _settingsStore?.Settings.GateThreshold ?? 0.02f;
+
+        // Apply gain and calculate RMS
         double sumOfSquares = 0;
         for (int i = 0; i < sample.Length; i++)
         {
-            sumOfSquares += sample[i] * sample[i];
+            // Apply gain to sample
+            var gainedSample = sample[i] * gain;
+            // Clamp to short range to prevent overflow
+            gainedSample = Math.Clamp(gainedSample, short.MinValue, short.MaxValue);
+            sample[i] = (short)gainedSample;
+            sumOfSquares += gainedSample * gainedSample;
         }
         double rms = Math.Sqrt(sumOfSquares / sample.Length);
 
         // Normalize to 0-1 range (short.MaxValue = 32767)
         float normalizedRms = (float)Math.Min(1.0, rms / 10000.0);
+
+        // Check if above gate threshold
+        var isAboveGate = normalizedRms > gateThreshold;
+
+        // If gate is enabled and audio is below threshold, zero out the samples
+        if (gateEnabled && !isAboveGate)
+        {
+            Array.Clear(sample, 0, sample.Length);
+        }
 
         _onRmsUpdate?.Invoke(normalizedRms);
 

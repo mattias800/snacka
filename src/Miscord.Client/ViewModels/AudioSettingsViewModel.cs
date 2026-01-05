@@ -200,9 +200,8 @@ public class AudioSettingsViewModel : ViewModelBase
                     _selectedInputDevice,
                     level => Dispatcher.UIThread.Post(() =>
                     {
-                        // Apply gain to the displayed level
-                        var adjustedLevel = Math.Min(1.0f, level * _inputGain);
-                        InputLevel = adjustedLevel;
+                        // Level already has gain applied by AudioDeviceService
+                        InputLevel = level;
                     })
                 );
                 IsTestingMicrophone = true;
@@ -227,9 +226,8 @@ public class AudioSettingsViewModel : ViewModelBase
                 _selectedInputDevice,
                 level => Dispatcher.UIThread.Post(() =>
                 {
-                    // Apply gain to the displayed level
-                    var adjustedLevel = Math.Min(1.0f, level * _inputGain);
-                    InputLevel = adjustedLevel;
+                    // Level already has gain applied by AudioDeviceService
+                    InputLevel = level;
                 })
             );
 

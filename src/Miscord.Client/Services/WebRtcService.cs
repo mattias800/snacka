@@ -170,11 +170,15 @@ public class WebRtcService : IWebRtcService
         var gateThreshold = _settingsStore?.Settings.GateThreshold ?? 0.02f;
 
         // Calculate RMS (Root Mean Square) for voice activity detection
-        // Apply gain to the calculation
+        // Apply gain during calculation and modify samples in-place
         double sumOfSquares = 0;
         for (int i = 0; i < sample.Length; i++)
         {
+            // Apply gain to sample
             var gainedSample = sample[i] * gain;
+            // Clamp to short range to prevent overflow
+            gainedSample = Math.Clamp(gainedSample, short.MinValue, short.MaxValue);
+            sample[i] = (short)gainedSample;
             sumOfSquares += gainedSample * gainedSample;
         }
         double rms = Math.Sqrt(sumOfSquares / sample.Length);
@@ -185,8 +189,15 @@ public class WebRtcService : IWebRtcService
         // Apply gate: only consider as voice activity if above threshold
         // Gate threshold is in 0-0.5 range, normalized RMS is 0-1
         var effectiveThreshold = gateEnabled ? gateThreshold : 0.0;
+        var isAboveGate = normalizedRms > effectiveThreshold;
 
-        if (normalizedRms > effectiveThreshold)
+        // If gate is enabled and audio is below threshold, zero out the samples
+        if (gateEnabled && !isAboveGate)
+        {
+            Array.Clear(sample, 0, sample.Length);
+        }
+
+        if (isAboveGate)
         {
             _lastAudioActivity = DateTime.UtcNow;
             if (!_isSpeaking)

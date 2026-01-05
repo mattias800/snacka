@@ -21,7 +21,7 @@ public partial class App : Application
             var connectionStore = new ServerConnectionStore();
             var signalR = new SignalRService();
             var settingsStore = new SettingsStore(Program.Profile);
-            var audioDeviceService = new AudioDeviceService();
+            var audioDeviceService = new AudioDeviceService(settingsStore);
             var webRtc = new WebRtcService(signalR, settingsStore);
 
             // Check for dev mode auto-login
