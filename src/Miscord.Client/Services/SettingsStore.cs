@@ -11,6 +11,7 @@ public interface ISettingsStore
 
 public class UserSettings
 {
+    // Audio settings
     public string? AudioInputDevice { get; set; }  // null = default device
     public string? AudioOutputDevice { get; set; } // null = default device
     public float InputVolume { get; set; } = 1.0f;
@@ -18,6 +19,9 @@ public class UserSettings
     public float InputGain { get; set; } = 1.0f;   // 0.0 to 3.0 (0% to 300%)
     public float GateThreshold { get; set; } = 0.02f; // 0.0 to 0.5 (normalized RMS threshold)
     public bool GateEnabled { get; set; } = true;
+
+    // Video settings
+    public string? VideoDevice { get; set; }  // null = default/first camera
 }
 
 public class SettingsStore : ISettingsStore
@@ -54,6 +58,7 @@ public class SettingsStore : ISettingsStore
                 Console.WriteLine($"SettingsStore: Loaded settings from {_settingsPath}");
                 Console.WriteLine($"  AudioInputDevice: {_settings.AudioInputDevice ?? "(default)"}");
                 Console.WriteLine($"  AudioOutputDevice: {_settings.AudioOutputDevice ?? "(default)"}");
+                Console.WriteLine($"  VideoDevice: {_settings.VideoDevice ?? "(default)"}");
             }
             else
             {

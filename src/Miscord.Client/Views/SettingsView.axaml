@@ -61,6 +61,21 @@
                                        FontSize="14"/>
                         </Button>
 
+                        <!-- Video -->
+                        <Button Command="{Binding SelectCategoryCommand}"
+                                CommandParameter="Video"
+                                Background="{Binding SelectedCategory, Converter={x:Static conv:SettingsCategoryBackgroundConverter.Instance}, ConverterParameter='Video'}"
+                                BorderThickness="0"
+                                HorizontalContentAlignment="Left"
+                                Padding="8,8"
+                                Margin="0,2"
+                                CornerRadius="4"
+                                Cursor="Hand">
+                            <TextBlock Text="Video"
+                                       Foreground="{Binding SelectedCategory, Converter={x:Static conv:SettingsCategoryForegroundConverter.Instance}, ConverterParameter='Video'}"
+                                       FontSize="14"/>
+                        </Button>
+
                         <!-- Placeholder for future settings -->
                         <TextBlock Text="USER SETTINGS"
                                    FontSize="11"
@@ -106,6 +121,9 @@
                 <ContentControl.DataTemplates>
                     <DataTemplate DataType="{x:Type vm:AudioSettingsViewModel}">
                         <Views:AudioSettingsView/>
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:VideoSettingsViewModel}">
+                        <Views:VideoSettingsView/>
                     </DataTemplate>
                 </ContentControl.DataTemplates>
             </ContentControl>

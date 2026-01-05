@@ -1,0 +1,152 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             x:Class="Miscord.Client.Views.VideoSettingsView"
+             x:DataType="vm:VideoSettingsViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="24" MaxWidth="600">
+            <!-- Header -->
+            <TextBlock Text="Video Settings"
+                       FontSize="20"
+                       FontWeight="SemiBold"
+                       Foreground="#ffffff"/>
+
+            <!-- Camera Device Section -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="CAMERA"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="#b9bbbe"/>
+                <ComboBox ItemsSource="{Binding VideoDevices}"
+                          SelectedValue="{Binding SelectedVideoDevice}"
+                          SelectedValueBinding="{Binding Value}"
+                          DisplayMemberBinding="{Binding DisplayName}"
+                          Background="#202225"
+                          Foreground="White"
+                          MinWidth="300"
+                          Padding="12,8"/>
+            </StackPanel>
+
+            <!-- Camera Test Section -->
+            <Border Background="#2f3136" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="CAMERA TEST"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#b9bbbe"/>
+
+                    <!-- Test Button and Status -->
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <Panel MinWidth="140">
+                            <Button Command="{Binding TestCameraCommand}"
+                                    Background="#5865f2"
+                                    Padding="16,10"
+                                    CornerRadius="4"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Stretch"
+                                    IsVisible="{Binding !IsTestingCamera}">
+                                <TextBlock Text="Test Camera"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+                            <Button Command="{Binding TestCameraCommand}"
+                                    Background="#ed4245"
+                                    Padding="16,10"
+                                    CornerRadius="4"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Stretch"
+                                    IsVisible="{Binding IsTestingCamera}">
+                                <TextBlock Text="Stop Test"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+                        </Panel>
+
+                        <Button Command="{Binding RefreshDevicesCommand}"
+                                Background="Transparent"
+                                Padding="8"
+                                CornerRadius="4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Refresh camera devices">
+                            <TextBlock Text="↻" Foreground="#b9bbbe" FontSize="16"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Camera Status -->
+                    <StackPanel Spacing="8" IsVisible="{Binding IsTestingCamera}">
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Text="Status:"
+                                       FontSize="12"
+                                       Foreground="#72767d"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding CameraStatus}"
+                                       FontSize="12"
+                                       Foreground="#3ba55c"
+                                       Margin="8,0,0,0"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Text="Resolution:"
+                                       FontSize="12"
+                                       Foreground="#72767d"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding Resolution}"
+                                       FontSize="12"
+                                       Foreground="#ffffff"
+                                       Margin="8,0,0,0"/>
+                        </Grid>
+                        <Grid ColumnDefinitions="Auto,*,Auto">
+                            <TextBlock Text="Frames received:"
+                                       FontSize="12"
+                                       Foreground="#72767d"/>
+                            <TextBlock Grid.Column="1"
+                                       Text="{Binding FrameCount}"
+                                       FontSize="12"
+                                       Foreground="#ffffff"
+                                       Margin="8,0,0,0"/>
+                        </Grid>
+                    </StackPanel>
+
+                    <!-- Instructions when not testing -->
+                    <TextBlock Text="Click 'Test Camera' to verify your camera is working. You'll see status information and frame count."
+                               FontSize="12"
+                               Foreground="#72767d"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding !IsTestingCamera}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Info Text -->
+            <TextBlock Text="Changes are saved automatically when you select a new device."
+                       FontSize="12"
+                       Foreground="#72767d"
+                       Margin="0,8,0,0"/>
+
+            <!-- FFmpeg requirement notice -->
+            <Border Background="#2f3136" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="REQUIREMENTS"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#b9bbbe"/>
+                    <TextBlock Text="Video capture requires FFmpeg to be installed:"
+                               FontSize="12"
+                               Foreground="#72767d"
+                               TextWrapping="Wrap"/>
+                    <TextBlock Text="macOS: brew install ffmpeg"
+                               FontSize="12"
+                               Foreground="#b9bbbe"
+                               FontFamily="Consolas,Monaco,monospace"/>
+                    <TextBlock Text="Windows: winget install ffmpeg"
+                               FontSize="12"
+                               Foreground="#b9bbbe"
+                               FontFamily="Consolas,Monaco,monospace"/>
+                    <TextBlock Text="Linux: apt install ffmpeg"
+                               FontSize="12"
+                               Foreground="#b9bbbe"
+                               FontFamily="Consolas,Monaco,monospace"/>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

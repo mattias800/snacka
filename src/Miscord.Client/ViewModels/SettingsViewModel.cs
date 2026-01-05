@@ -8,6 +8,7 @@ public class SettingsViewModel : ViewModelBase
     private readonly Action _onClose;
     private readonly Services.ISettingsStore _settingsStore;
     private readonly Services.IAudioDeviceService _audioDeviceService;
+    private readonly Services.IVideoDeviceService _videoDeviceService;
 
     private object? _currentPage;
     private string _selectedCategory = "Voice & Video";
@@ -15,17 +16,22 @@ public class SettingsViewModel : ViewModelBase
     public SettingsViewModel(
         Action onClose,
         Services.ISettingsStore settingsStore,
-        Services.IAudioDeviceService audioDeviceService)
+        Services.IAudioDeviceService audioDeviceService,
+        Services.IVideoDeviceService videoDeviceService)
     {
         _onClose = onClose;
         _settingsStore = settingsStore;
         _audioDeviceService = audioDeviceService;
+        _videoDeviceService = videoDeviceService;
 
         CloseCommand = ReactiveCommand.Create(Close);
         SelectCategoryCommand = ReactiveCommand.Create<string>(SelectCategory);
 
-        // Initialize with Voice & Video page
+        // Initialize ViewModels
         AudioSettingsViewModel = new AudioSettingsViewModel(_settingsStore, _audioDeviceService);
+        VideoSettingsViewModel = new VideoSettingsViewModel(_settingsStore, _videoDeviceService);
+
+        // Start with Voice & Video page
         CurrentPage = AudioSettingsViewModel;
     }
 
@@ -42,14 +48,16 @@ public class SettingsViewModel : ViewModelBase
     }
 
     public AudioSettingsViewModel AudioSettingsViewModel { get; }
+    public VideoSettingsViewModel VideoSettingsViewModel { get; }
 
     public ICommand CloseCommand { get; }
     public ICommand SelectCategoryCommand { get; }
 
     private void Close()
     {
-        // Stop any audio tests before closing
+        // Stop any tests before closing
         _ = _audioDeviceService.StopTestAsync();
+        _ = _videoDeviceService.StopTestAsync();
         _onClose();
     }
 
@@ -60,7 +68,7 @@ public class SettingsViewModel : ViewModelBase
         CurrentPage = category switch
         {
             "Voice & Video" => AudioSettingsViewModel,
-            // Future categories can be added here
+            "Video" => VideoSettingsViewModel,
             _ => AudioSettingsViewModel
         };
     }

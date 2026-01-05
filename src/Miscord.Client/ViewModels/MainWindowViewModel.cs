@@ -11,12 +11,13 @@ public class MainWindowViewModel : ViewModelBase
     private readonly IWebRtcService _webRtc;
     private readonly Services.ISettingsStore _settingsStore;
     private readonly Services.IAudioDeviceService _audioDeviceService;
+    private readonly Services.IVideoDeviceService _videoDeviceService;
     private ViewModelBase _currentView;
     private AuthResponse? _currentUser;
     private ServerConnection? _currentServer;
     private ServerInfoResponse? _currentServerInfo;
 
-    public MainWindowViewModel(IApiClient apiClient, IServerConnectionStore connectionStore, ISignalRService signalR, IWebRtcService webRtc, Services.ISettingsStore settingsStore, Services.IAudioDeviceService audioDeviceService, DevLoginConfig? devConfig = null)
+    public MainWindowViewModel(IApiClient apiClient, IServerConnectionStore connectionStore, ISignalRService signalR, IWebRtcService webRtc, Services.ISettingsStore settingsStore, Services.IAudioDeviceService audioDeviceService, Services.IVideoDeviceService videoDeviceService, DevLoginConfig? devConfig = null)
     {
         _apiClient = apiClient;
         _connectionStore = connectionStore;
@@ -24,6 +25,7 @@ public class MainWindowViewModel : ViewModelBase
         _webRtc = webRtc;
         _settingsStore = settingsStore;
         _audioDeviceService = audioDeviceService;
+        _videoDeviceService = videoDeviceService;
 
         // Dev mode: auto-login with provided credentials
         if (devConfig is not null)
@@ -382,7 +384,8 @@ public class MainWindowViewModel : ViewModelBase
         CurrentView = new SettingsViewModel(
             onClose: () => OnAuthSuccess(CurrentUser),
             settingsStore: _settingsStore,
-            audioDeviceService: _audioDeviceService
+            audioDeviceService: _audioDeviceService,
+            videoDeviceService: _videoDeviceService
         );
     }
 
