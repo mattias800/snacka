@@ -71,53 +71,64 @@ public class VideoDeviceService : IVideoDeviceService
     {
         try
         {
-            var psi = new System.Diagnostics.ProcessStartInfo
+            // Use Swift (built into macOS) to enumerate AVFoundation devices
+            // Use the older devices(for:) API which matches OpenCV's AVFoundation backend order
+            // (DiscoverySession uses a different order)
+            // Write to temp file to avoid escaping issues with -e flag
+            var swiftCode = @"import AVFoundation
+let devices = AVCaptureDevice.devices(for: .video)
+for (i, d) in devices.enumerated() {
+    print(""\(i):\(d.localizedName)"")
+}";
+
+            var tempFile = Path.Combine(Path.GetTempPath(), $"miscord_camera_enum_{Guid.NewGuid():N}.swift");
+            File.WriteAllText(tempFile, swiftCode);
+
+            try
             {
-                FileName = "ffmpeg",
-                Arguments = "-f avfoundation -list_devices true -i \"\"",
-                RedirectStandardError = true,
-                UseShellExecute = false,
-                CreateNoWindow = true
-            };
-
-            using var process = System.Diagnostics.Process.Start(psi);
-            if (process == null) return Array.Empty<VideoDeviceInfo>();
-
-            var stderr = process.StandardError.ReadToEnd();
-            process.WaitForExit(5000);
-
-            var devices = new List<VideoDeviceInfo>();
-            var lines = stderr.Split('\n');
-            var inVideoDevices = false;
-
-            foreach (var line in lines)
-            {
-                if (line.Contains("AVFoundation video devices:"))
+                var psi = new System.Diagnostics.ProcessStartInfo
                 {
-                    inVideoDevices = true;
-                    continue;
-                }
-                if (line.Contains("AVFoundation audio devices:"))
+                    FileName = "swift",
+                    Arguments = tempFile,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    UseShellExecute = false,
+                    CreateNoWindow = true
+                };
+
+                using var process = System.Diagnostics.Process.Start(psi);
+                if (process == null) return Array.Empty<VideoDeviceInfo>();
+
+                var output = process.StandardOutput.ReadToEnd();
+                var stderr = process.StandardError.ReadToEnd();
+                process.WaitForExit(15000); // Swift compilation can take a moment
+
+                if (!string.IsNullOrEmpty(stderr))
                 {
-                    inVideoDevices = false;
-                    continue;
+                    Console.WriteLine($"VideoDeviceService: Swift stderr: {stderr}");
                 }
 
-                if (inVideoDevices && line.Contains("[") && line.Contains("]"))
+                var devices = new List<VideoDeviceInfo>();
+                var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
+
+                foreach (var line in lines)
                 {
-                    var match = Regex.Match(line, @"\[(\d+)\]\s+(.+)$");
-                    if (match.Success)
+                    var parts = line.Split(':', 2);
+                    if (parts.Length == 2 && int.TryParse(parts[0], out var index))
                     {
-                        var index = match.Groups[1].Value;
-                        var name = match.Groups[2].Value.Trim();
-                        devices.Add(new VideoDeviceInfo(index, name));
+                        var name = parts[1].Trim();
+                        devices.Add(new VideoDeviceInfo(index.ToString(), name));
                         Console.WriteLine($"  - Camera {index}: {name}");
                     }
                 }
-            }
 
-            Console.WriteLine($"VideoDeviceService: Found {devices.Count} cameras via ffmpeg (macOS)");
-            return devices;
+                Console.WriteLine($"VideoDeviceService: Found {devices.Count} cameras via Swift/AVFoundation (macOS)");
+                return devices;
+            }
+            finally
+            {
+                try { File.Delete(tempFile); } catch { }
+            }
         }
         catch (Exception ex)
         {
