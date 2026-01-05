@@ -50,6 +50,7 @@ public enum PeerConnectionState
 public class WebRtcService : IWebRtcService
 {
     private readonly ISignalRService _signalR;
+    private readonly ISettingsStore? _settingsStore;
     private readonly ConcurrentDictionary<Guid, RTCPeerConnection> _peerConnections = new();
     private readonly ConcurrentDictionary<Guid, PeerConnectionState> _peerStates = new();
 
@@ -82,9 +83,10 @@ public class WebRtcService : IWebRtcService
     public event Action<VoiceConnectionStatus>? ConnectionStatusChanged;
     public event Action<bool>? SpeakingChanged;
 
-    public WebRtcService(ISignalRService signalR)
+    public WebRtcService(ISignalRService signalR, ISettingsStore? settingsStore = null)
     {
         _signalR = signalR;
+        _settingsStore = settingsStore;
 
         // Subscribe to WebRTC signaling events
         _signalR.WebRtcOfferReceived += async e => await HandleOfferAsync(e.FromUserId, e.Sdp);
@@ -120,9 +122,10 @@ public class WebRtcService : IWebRtcService
 
         try
         {
-            // Use default audio input device (empty string = default)
+            // Use selected audio input device from settings (empty string = default)
             var audioEncoder = new AudioEncoder();
-            _audioSource = new SDL2AudioSource(string.Empty, audioEncoder);
+            var inputDevice = _settingsStore?.Settings.AudioInputDevice ?? string.Empty;
+            _audioSource = new SDL2AudioSource(inputDevice, audioEncoder);
 
             // Subscribe to raw audio samples for voice activity detection
             _audioSource.OnAudioSourceRawSample += OnAudioSourceRawSample;
@@ -273,8 +276,9 @@ public class WebRtcService : IWebRtcService
         try
         {
             var audioEncoder = new AudioEncoder();
-            // Use default audio output device
-            audioSink = new SDL2AudioEndPoint(string.Empty, audioEncoder);
+            // Use selected audio output device from settings (empty string = default)
+            var outputDevice = _settingsStore?.Settings.AudioOutputDevice ?? string.Empty;
+            audioSink = new SDL2AudioEndPoint(outputDevice, audioEncoder);
             _audioSinks[remoteUserId] = audioSink;
 
             // Start playback

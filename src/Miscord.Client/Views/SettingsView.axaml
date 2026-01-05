@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             xmlns:conv="using:Miscord.Client.Converters"
+             xmlns:Views="using:Miscord.Client.Views"
+             x:Class="Miscord.Client.Views.SettingsView"
+             x:DataType="vm:SettingsViewModel">
+
+    <Grid Background="#36393f">
+        <Grid.ColumnDefinitions>
+            <ColumnDefinition Width="220"/>
+            <ColumnDefinition Width="*"/>
+        </Grid.ColumnDefinitions>
+
+        <!-- Left Menu Panel -->
+        <Border Grid.Column="0" Background="#2f3136">
+            <DockPanel>
+                <!-- Header with back button -->
+                <Border DockPanel.Dock="Top" Padding="16,12" Background="#202225">
+                    <Grid>
+                        <Button Command="{Binding CloseCommand}"
+                                HorizontalAlignment="Left"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Cursor="Hand">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="ESC" FontSize="11" Foreground="#72767d"/>
+                                <TextBlock Text="Back" FontSize="14" Foreground="#dcddde"/>
+                            </StackPanel>
+                        </Button>
+                        <TextBlock Text="Settings"
+                                   HorizontalAlignment="Right"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="#ffffff"/>
+                    </Grid>
+                </Border>
+
+                <!-- Menu Categories -->
+                <ScrollViewer DockPanel.Dock="Top" VerticalScrollBarVisibility="Auto">
+                    <StackPanel Margin="8,12">
+                        <!-- App Settings Section -->
+                        <TextBlock Text="APP SETTINGS"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#72767d"
+                                   Margin="8,0,0,8"/>
+
+                        <!-- Voice & Video -->
+                        <Button Command="{Binding SelectCategoryCommand}"
+                                CommandParameter="Voice &amp; Video"
+                                Background="{Binding SelectedCategory, Converter={x:Static conv:SettingsCategoryBackgroundConverter.Instance}, ConverterParameter='Voice &amp; Video'}"
+                                BorderThickness="0"
+                                HorizontalContentAlignment="Left"
+                                Padding="8,8"
+                                Margin="0,2"
+                                CornerRadius="4"
+                                Cursor="Hand">
+                            <TextBlock Text="Voice &amp; Video"
+                                       Foreground="{Binding SelectedCategory, Converter={x:Static conv:SettingsCategoryForegroundConverter.Instance}, ConverterParameter='Voice &amp; Video'}"
+                                       FontSize="14"/>
+                        </Button>
+
+                        <!-- Placeholder for future settings -->
+                        <TextBlock Text="USER SETTINGS"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#72767d"
+                                   Margin="8,16,0,8"/>
+
+                        <Button Command="{Binding SelectCategoryCommand}"
+                                CommandParameter="My Account"
+                                IsEnabled="False"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                HorizontalContentAlignment="Left"
+                                Padding="8,8"
+                                Margin="0,2"
+                                CornerRadius="4">
+                            <TextBlock Text="My Account"
+                                       Foreground="#72767d"
+                                       FontSize="14"/>
+                        </Button>
+
+                        <Button Command="{Binding SelectCategoryCommand}"
+                                CommandParameter="Appearance"
+                                IsEnabled="False"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                HorizontalContentAlignment="Left"
+                                Padding="8,8"
+                                Margin="0,2"
+                                CornerRadius="4">
+                            <TextBlock Text="Appearance"
+                                       Foreground="#72767d"
+                                       FontSize="14"/>
+                        </Button>
+                    </StackPanel>
+                </ScrollViewer>
+            </DockPanel>
+        </Border>
+
+        <!-- Content Area -->
+        <Border Grid.Column="1" Padding="40,20">
+            <ContentControl Content="{Binding CurrentPage}">
+                <ContentControl.DataTemplates>
+                    <DataTemplate DataType="{x:Type vm:AudioSettingsViewModel}">
+                        <Views:AudioSettingsView/>
+                    </DataTemplate>
+                </ContentControl.DataTemplates>
+            </ContentControl>
+        </Border>
+    </Grid>
+</UserControl>

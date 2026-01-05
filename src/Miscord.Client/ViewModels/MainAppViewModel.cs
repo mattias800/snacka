@@ -18,6 +18,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private readonly Action? _onSwitchServer;
     private readonly Action? _onOpenDMs;
     private readonly Action<Guid?, string?>? _onOpenDMsWithUser;
+    private readonly Action? _onOpenSettings;
     private readonly string _baseUrl;
 
     private CommunityResponse? _selectedCommunity;
@@ -44,7 +45,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Permission state
     private UserRole? _currentUserRole;
 
-    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null)
+    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null)
     {
         _apiClient = apiClient;
         _signalR = signalR;
@@ -55,6 +56,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _onSwitchServer = onSwitchServer;
         _onOpenDMs = onOpenDMs;
         _onOpenDMsWithUser = onOpenDMsWithUser;
+        _onOpenSettings = onOpenSettings;
 
         // Set local user ID for WebRTC
         if (_webRtc is WebRtcService webRtcService)
@@ -80,6 +82,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             : null;
         OpenDMsCommand = _onOpenDMs is not null
             ? ReactiveCommand.Create(_onOpenDMs)
+            : null;
+        OpenSettingsCommand = _onOpenSettings is not null
+            ? ReactiveCommand.Create(_onOpenSettings)
             : null;
         CreateCommunityCommand = ReactiveCommand.CreateFromTask(CreateCommunityAsync);
         RefreshCommunitiesCommand = ReactiveCommand.CreateFromTask(LoadCommunitiesAsync);
@@ -548,6 +553,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> LogoutCommand { get; }
     public ReactiveCommand<Unit, Unit>? SwitchServerCommand { get; }
     public ReactiveCommand<Unit, Unit>? OpenDMsCommand { get; }
+    public ReactiveCommand<Unit, Unit>? OpenSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> CreateCommunityCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommunitiesCommand { get; }
     public ReactiveCommand<CommunityResponse, Unit> SelectCommunityCommand { get; }

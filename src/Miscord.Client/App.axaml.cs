@@ -20,7 +20,9 @@ public partial class App : Application
             var apiClient = new ApiClient(httpClient);
             var connectionStore = new ServerConnectionStore();
             var signalR = new SignalRService();
-            var webRtc = new WebRtcService(signalR);
+            var settingsStore = new SettingsStore(Program.Profile);
+            var audioDeviceService = new AudioDeviceService();
+            var webRtc = new WebRtcService(signalR, settingsStore);
 
             // Check for dev mode auto-login
             DevLoginConfig? devConfig = null;
@@ -35,7 +37,7 @@ public partial class App : Application
                 );
             }
 
-            var viewModel = new MainWindowViewModel(apiClient, connectionStore, signalR, webRtc, devConfig);
+            var viewModel = new MainWindowViewModel(apiClient, connectionStore, signalR, webRtc, settingsStore, audioDeviceService, devConfig);
 
             var window = new MainWindow
             {

@@ -195,14 +195,24 @@
                                        FontSize="11"/>
                         </StackPanel>
 
-                        <Button Grid.Column="2"
-                                Command="{Binding LogoutCommand}"
-                                Background="Transparent"
-                                Foreground="#b9bbbe"
-                                Content="Exit"
-                                FontSize="11"
-                                Padding="8,4"
-                                Cursor="Hand"/>
+                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
+                            <Button Command="{Binding OpenSettingsCommand}"
+                                    Background="Transparent"
+                                    Padding="6,4"
+                                    Cursor="Hand"
+                                    ToolTip.Tip="Settings">
+                                <TextBlock Text="⚙"
+                                           Foreground="#b9bbbe"
+                                           FontSize="14"/>
+                            </Button>
+                            <Button Command="{Binding LogoutCommand}"
+                                    Background="Transparent"
+                                    Foreground="#b9bbbe"
+                                    Content="Exit"
+                                    FontSize="11"
+                                    Padding="8,4"
+                                    Cursor="Hand"/>
+                        </StackPanel>
                     </Grid>
                 </Border>
 

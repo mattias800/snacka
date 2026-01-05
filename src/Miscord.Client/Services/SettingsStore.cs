@@ -1,0 +1,82 @@
+using System.Text.Json;
+
+namespace Miscord.Client.Services;
+
+public interface ISettingsStore
+{
+    UserSettings Settings { get; }
+    void Save();
+    void Load();
+}
+
+public class UserSettings
+{
+    public string? AudioInputDevice { get; set; }  // null = default device
+    public string? AudioOutputDevice { get; set; } // null = default device
+    public float InputVolume { get; set; } = 1.0f;
+    public float OutputVolume { get; set; } = 1.0f;
+}
+
+public class SettingsStore : ISettingsStore
+{
+    private readonly string _settingsPath;
+    private UserSettings _settings = new();
+
+    public UserSettings Settings => _settings;
+
+    public SettingsStore(string? profileName = null)
+    {
+        var appData = Environment.GetFolderPath(Environment.SpecialFolder.ApplicationData);
+        var baseDir = Path.Combine(appData, "Miscord");
+
+        if (!string.IsNullOrEmpty(profileName))
+        {
+            baseDir = Path.Combine(baseDir, $"profile-{profileName}");
+        }
+
+        Directory.CreateDirectory(baseDir);
+        _settingsPath = Path.Combine(baseDir, "settings.json");
+
+        Load();
+    }
+
+    public void Load()
+    {
+        try
+        {
+            if (File.Exists(_settingsPath))
+            {
+                var json = File.ReadAllText(_settingsPath);
+                _settings = JsonSerializer.Deserialize<UserSettings>(json) ?? new UserSettings();
+                Console.WriteLine($"SettingsStore: Loaded settings from {_settingsPath}");
+                Console.WriteLine($"  AudioInputDevice: {_settings.AudioInputDevice ?? "(default)"}");
+                Console.WriteLine($"  AudioOutputDevice: {_settings.AudioOutputDevice ?? "(default)"}");
+            }
+            else
+            {
+                Console.WriteLine("SettingsStore: No settings file found, using defaults");
+                _settings = new UserSettings();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SettingsStore: Failed to load settings - {ex.Message}");
+            _settings = new UserSettings();
+        }
+    }
+
+    public void Save()
+    {
+        try
+        {
+            var options = new JsonSerializerOptions { WriteIndented = true };
+            var json = JsonSerializer.Serialize(_settings, options);
+            File.WriteAllText(_settingsPath, json);
+            Console.WriteLine($"SettingsStore: Saved settings to {_settingsPath}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SettingsStore: Failed to save settings - {ex.Message}");
+        }
+    }
+}

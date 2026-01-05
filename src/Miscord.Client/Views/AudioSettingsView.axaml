@@ -1,0 +1,153 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             xmlns:conv="using:Miscord.Client.Converters"
+             x:Class="Miscord.Client.Views.AudioSettingsView"
+             x:DataType="vm:AudioSettingsViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="24" MaxWidth="600">
+            <!-- Header -->
+            <TextBlock Text="Voice &amp; Video"
+                       FontSize="20"
+                       FontWeight="SemiBold"
+                       Foreground="#ffffff"/>
+
+            <!-- Input Device Section -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="INPUT DEVICE"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="#b9bbbe"/>
+                <ComboBox ItemsSource="{Binding InputDevices}"
+                          SelectedValue="{Binding SelectedInputDevice}"
+                          SelectedValueBinding="{Binding Value}"
+                          DisplayMemberBinding="{Binding DisplayName}"
+                          Background="#202225"
+                          Foreground="White"
+                          MinWidth="300"
+                          Padding="12,8"/>
+            </StackPanel>
+
+            <!-- Output Device Section -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="OUTPUT DEVICE"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="#b9bbbe"/>
+                <ComboBox ItemsSource="{Binding OutputDevices}"
+                          SelectedValue="{Binding SelectedOutputDevice}"
+                          SelectedValueBinding="{Binding Value}"
+                          DisplayMemberBinding="{Binding DisplayName}"
+                          Background="#202225"
+                          Foreground="White"
+                          MinWidth="300"
+                          Padding="12,8"/>
+            </StackPanel>
+
+            <!-- Mic Test Section -->
+            <Border Background="#2f3136" CornerRadius="8" Padding="16">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="MIC TEST"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#b9bbbe"/>
+
+                    <!-- Test Button and Status -->
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <Panel MinWidth="140">
+                            <Button Command="{Binding TestMicrophoneCommand}"
+                                    Background="#5865f2"
+                                    Padding="16,10"
+                                    CornerRadius="4"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Stretch"
+                                    IsVisible="{Binding !IsTestingMicrophone}">
+                                <TextBlock Text="Let's Check"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+                            <Button Command="{Binding TestMicrophoneCommand}"
+                                    Background="#ed4245"
+                                    Padding="16,10"
+                                    CornerRadius="4"
+                                    Cursor="Hand"
+                                    HorizontalAlignment="Stretch"
+                                    IsVisible="{Binding IsTestingMicrophone}">
+                                <TextBlock Text="Stop Testing"
+                                           Foreground="White"
+                                           HorizontalAlignment="Center"/>
+                            </Button>
+                        </Panel>
+
+                        <Button Command="{Binding ToggleLoopbackCommand}"
+                                IsEnabled="{Binding IsTestingMicrophone}"
+                                Background="Transparent"
+                                BorderBrush="#5865f2"
+                                BorderThickness="1"
+                                Padding="16,10"
+                                CornerRadius="4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Hear yourself to test audio quality">
+                            <Panel>
+                                <TextBlock Text="Enable Loopback"
+                                           Foreground="#b9bbbe"
+                                           IsVisible="{Binding !IsLoopbackEnabled}"/>
+                                <TextBlock Text="Disable Loopback"
+                                           Foreground="#5865f2"
+                                           IsVisible="{Binding IsLoopbackEnabled}"/>
+                            </Panel>
+                        </Button>
+
+                        <Button Command="{Binding RefreshDevicesCommand}"
+                                Background="Transparent"
+                                Padding="8"
+                                CornerRadius="4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Refresh audio devices">
+                            <TextBlock Text="↻" Foreground="#b9bbbe" FontSize="16"/>
+                        </Button>
+                    </StackPanel>
+
+                    <!-- Audio Level Indicator -->
+                    <StackPanel Spacing="8" IsVisible="{Binding IsTestingMicrophone}">
+                        <TextBlock Text="INPUT LEVEL"
+                                   FontSize="11"
+                                   Foreground="#72767d"/>
+
+                        <Grid Height="8">
+                            <!-- Background bar -->
+                            <Border Background="#202225"
+                                    CornerRadius="4"
+                                    HorizontalAlignment="Stretch"/>
+
+                            <!-- Level indicator -->
+                            <Border Background="#3ba55c"
+                                    CornerRadius="4"
+                                    HorizontalAlignment="Left"
+                                    Width="{Binding InputLevel, Converter={x:Static conv:AudioLevelToWidthConverter.Instance}, ConverterParameter=300}"/>
+                        </Grid>
+
+                        <TextBlock Text="Speak into your microphone to see the level meter move."
+                                   FontSize="12"
+                                   Foreground="#72767d"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <!-- Instructions when not testing -->
+                    <TextBlock Text="Click 'Let's Check' to test your microphone. You'll see a level indicator showing your input volume."
+                               FontSize="12"
+                               Foreground="#72767d"
+                               TextWrapping="Wrap"
+                               IsVisible="{Binding !IsTestingMicrophone}"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Info Text -->
+            <TextBlock Text="Changes are saved automatically when you select a new device."
+                       FontSize="12"
+                       Foreground="#72767d"
+                       Margin="0,8,0,0"/>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>
