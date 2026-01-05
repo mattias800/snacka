@@ -181,6 +181,60 @@ dotnet run --project src/Miscord.Client -- \
 - Phase 4: UI implementation
 - Phase 5: Testing and optimization
 
+## SDL2 and Audio on macOS
+
+The project uses `SIPSorceryMedia.SDL2` for audio capture/playback. On macOS, there are specific requirements:
+
+### SDL2 Library Loading
+
+SDL2 is NOT bundled with the NuGet package. On macOS, it must be installed via Homebrew:
+```bash
+brew install sdl2
+```
+
+The library is located at `/opt/homebrew/lib/libSDL2.dylib` (Apple Silicon) or `/usr/local/lib/libSDL2.dylib` (Intel).
+
+**Important:** You must use `NativeLibrary.SetDllImportResolver` to redirect P/Invoke calls to the Homebrew location. Simply setting `DYLD_LIBRARY_PATH` causes crashes with Avalonia UI.
+
+```csharp
+NativeLibrary.SetDllImportResolver(typeof(SDL2Helper).Assembly, (libraryName, assembly, searchPath) =>
+{
+    if (libraryName == "SDL2")
+    {
+        if (NativeLibrary.TryLoad("/opt/homebrew/lib/libSDL2.dylib", out var handle))
+            return handle;
+    }
+    return IntPtr.Zero;
+});
+```
+
+### SDL2 Audio Initialization
+
+Before enumerating audio devices, you MUST call `SDL_Init(SDL_INIT_AUDIO)`:
+
+```csharp
+[DllImport("SDL2")]
+private static extern int SDL_Init(uint flags);
+
+const uint SDL_INIT_AUDIO = 0x00000010;
+
+SDL_Init(SDL_INIT_AUDIO); // Call this before SDL2Helper.GetAudioRecordingDevices()
+```
+
+### SDL2AudioSource Requirements
+
+When using `SDL2AudioSource` for audio capture:
+
+1. **Set audio format BEFORE calling StartAudio()** - The audio source remains paused until a format is set:
+   ```csharp
+   var audioSource = new SDL2AudioSource(deviceName, audioEncoder);
+   var formats = audioSource.GetAudioSourceFormats();
+   audioSource.SetAudioSourceFormat(formats[0]); // Required!
+   await audioSource.StartAudio();
+   ```
+
+2. Without setting the format, `IsAudioSourcePaused()` will return `true` and no samples will be received.
+
 ## When You Make Mistakes
 
 If a user corrects you on something, update this file with the correction so future agents don't make the same mistake.
