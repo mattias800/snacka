@@ -130,6 +130,16 @@ public class WebRtcService : IWebRtcService
             // Subscribe to raw audio samples for voice activity detection
             _audioSource.OnAudioSourceRawSample += OnAudioSourceRawSample;
 
+            // Set audio format before starting - required for SDL2AudioSource to work
+            var formats = _audioSource.GetAudioSourceFormats();
+            if (formats.Count > 0)
+            {
+                var selectedFormat = formats.FirstOrDefault(f => f.FormatName == "PCMU");
+                if (selectedFormat.FormatName == null)
+                    selectedFormat = formats[0];
+                _audioSource.SetAudioSourceFormat(selectedFormat);
+            }
+
             // Start the speaking check timer
             _speakingTimer = new Timer(CheckSpeakingTimeout, null, SpeakingCheckIntervalMs, SpeakingCheckIntervalMs);
 

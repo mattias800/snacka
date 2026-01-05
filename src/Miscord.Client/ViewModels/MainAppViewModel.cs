@@ -360,13 +360,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Local speaking detection - broadcast to others and update own state
         _webRtc.SpeakingChanged += isSpeaking => Dispatcher.UIThread.Post(async () =>
         {
-            if (CurrentVoiceChannel is not null)
+            // Capture channel reference to avoid race condition during leave
+            var currentChannel = CurrentVoiceChannel;
+            if (currentChannel is not null)
             {
                 // Broadcast to others
-                await _signalR.UpdateSpeakingStateAsync(CurrentVoiceChannel.Id, isSpeaking);
+                await _signalR.UpdateSpeakingStateAsync(currentChannel.Id, isSpeaking);
 
                 // Update our own speaking state in the ViewModel
-                var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
+                var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == currentChannel.Id);
                 voiceChannel?.UpdateSpeakingState(_auth.UserId, isSpeaking);
             }
         });
