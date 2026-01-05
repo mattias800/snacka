@@ -1,3 +1,4 @@
+using System.Reflection;
 using System.Runtime.InteropServices;
 using SIPSorcery.Media;
 using SIPSorceryMedia.SDL2;
@@ -20,32 +21,34 @@ public interface IAudioDeviceService : IDisposable
 
 public class AudioDeviceService : IAudioDeviceService
 {
+    // SDL2 P/Invoke declarations
+    [DllImport("SDL2")]
+    private static extern int SDL_Init(uint flags);
+
+    [DllImport("SDL2")]
+    private static extern void SDL_Quit();
+
+    private const uint SDL_INIT_AUDIO = 0x00000010;
+
     private SDL2AudioSource? _testAudioSource;
     private SDL2AudioEndPoint? _testAudioSink;
     private Action<float>? _onRmsUpdate;
     private bool _isLoopbackEnabled;
     private CancellationTokenSource? _testCts;
-    private bool _sdlInitialized;
 
     public bool IsTestingInput => _testAudioSource != null;
     public bool IsLoopbackEnabled => _isLoopbackEnabled;
 
     public AudioDeviceService()
     {
-        InitializeSdl();
-    }
-
-    private void InitializeSdl()
-    {
-        if (_sdlInitialized) return;
-        _sdlInitialized = true;
+        EnsureSdl2Initialized();
     }
 
     public IReadOnlyList<string> GetInputDevices()
     {
         try
         {
-            EnsureSdl2Loaded();
+            EnsureSdl2Initialized();
             Console.WriteLine("AudioDeviceService: Getting input devices...");
             var devices = SDL2Helper.GetAudioRecordingDevices();
             Console.WriteLine($"AudioDeviceService: Found {devices.Count} input devices");
@@ -58,52 +61,75 @@ public class AudioDeviceService : IAudioDeviceService
         catch (Exception ex)
         {
             Console.WriteLine($"AudioDeviceService: Failed to get input devices - {ex.GetType().Name}: {ex.Message}");
-            Console.WriteLine($"AudioDeviceService: Stack trace: {ex.StackTrace}");
             return Array.Empty<string>();
         }
     }
 
-    private static bool _sdl2LibraryLoaded;
-    private static readonly object _sdl2LoadLock = new();
-    private static IntPtr _sdl2Handle;
+    private static bool _sdl2Initialized;
+    private static readonly object _sdl2InitLock = new();
 
-    private static void EnsureSdl2Loaded()
+    // SDL2 library paths to try on macOS
+    private static readonly string[] Sdl2Paths =
     {
-        if (_sdl2LibraryLoaded) return;
+        "/opt/homebrew/lib/libSDL2.dylib",      // Apple Silicon Homebrew
+        "/usr/local/lib/libSDL2.dylib",         // Intel Homebrew
+        "/usr/lib/libSDL2.dylib",               // System
+        "libSDL2.dylib",                        // Current directory / PATH
+        "SDL2"                                  // Let system find it
+    };
 
-        lock (_sdl2LoadLock)
+    private static IntPtr ResolveSdl2(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        if (libraryName == "SDL2" || libraryName == "libSDL2" || libraryName == "SDL2.dll")
         {
-            if (_sdl2LibraryLoaded) return;
-
-            // Try to load SDL2 from common locations on macOS
-            var possiblePaths = new[]
+            foreach (var path in Sdl2Paths)
             {
-                "/opt/homebrew/lib/libSDL2.dylib",      // Apple Silicon Homebrew
-                "/usr/local/lib/libSDL2.dylib",         // Intel Homebrew
-                "/usr/lib/libSDL2.dylib",               // System
-                "libSDL2.dylib",                        // Current directory / PATH
-                "SDL2"                                  // Let system find it
-            };
-
-            foreach (var path in possiblePaths)
-            {
-                try
+                if (NativeLibrary.TryLoad(path, out var handle))
                 {
-                    if (NativeLibrary.TryLoad(path, out _sdl2Handle))
-                    {
-                        Console.WriteLine($"AudioDeviceService: Loaded SDL2 from {path}");
-                        _sdl2LibraryLoaded = true;
-                        return;
-                    }
-                }
-                catch (Exception ex)
-                {
-                    Console.WriteLine($"AudioDeviceService: Failed to load SDL2 from {path}: {ex.Message}");
+                    return handle;
                 }
             }
+        }
+        return IntPtr.Zero;
+    }
 
-            Console.WriteLine("AudioDeviceService: Could not load SDL2 from any known location");
-            _sdl2LibraryLoaded = true; // Mark as attempted even if failed
+    private static void EnsureSdl2Initialized()
+    {
+        if (_sdl2Initialized) return;
+
+        lock (_sdl2InitLock)
+        {
+            if (_sdl2Initialized) return;
+
+            try
+            {
+                // Register DllImportResolver for the SDL2 assemblies
+                var sdl2HelperAssembly = typeof(SDL2Helper).Assembly;
+                NativeLibrary.SetDllImportResolver(sdl2HelperAssembly, ResolveSdl2);
+                Console.WriteLine($"AudioDeviceService: Registered DllImportResolver for {sdl2HelperAssembly.GetName().Name}");
+
+                // Also register for this assembly (for our local SDL_Init call)
+                NativeLibrary.SetDllImportResolver(typeof(AudioDeviceService).Assembly, ResolveSdl2);
+                Console.WriteLine("AudioDeviceService: Registered DllImportResolver for Miscord.Client");
+
+                // Initialize SDL2 audio subsystem
+                var result = SDL_Init(SDL_INIT_AUDIO);
+                if (result < 0)
+                {
+                    Console.WriteLine($"AudioDeviceService: SDL_Init(SDL_INIT_AUDIO) failed with code {result}");
+                }
+                else
+                {
+                    Console.WriteLine("AudioDeviceService: SDL2 audio subsystem initialized successfully");
+                }
+
+                _sdl2Initialized = true;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"AudioDeviceService: Failed to initialize SDL2 - {ex.GetType().Name}: {ex.Message}");
+                _sdl2Initialized = true; // Mark as attempted even if failed
+            }
         }
     }
 
@@ -111,7 +137,7 @@ public class AudioDeviceService : IAudioDeviceService
     {
         try
         {
-            EnsureSdl2Loaded();
+            EnsureSdl2Initialized();
             Console.WriteLine("AudioDeviceService: Getting output devices...");
             var devices = SDL2Helper.GetAudioPlaybackDevices();
             Console.WriteLine($"AudioDeviceService: Found {devices.Count} output devices");
@@ -124,7 +150,6 @@ public class AudioDeviceService : IAudioDeviceService
         catch (Exception ex)
         {
             Console.WriteLine($"AudioDeviceService: Failed to get output devices - {ex.GetType().Name}: {ex.Message}");
-            Console.WriteLine($"AudioDeviceService: Stack trace: {ex.StackTrace}");
             return Array.Empty<string>();
         }
     }
