@@ -1,9 +1,6 @@
-using System.Reflection;
-using System.Runtime.InteropServices;
-using SIPSorceryMedia.FFmpeg;
-using SIPSorceryMedia.Abstractions;
-using FFmpeg.AutoGen;
-using FFmpeg.AutoGen.Bindings.DynamicallyLoaded;
+using System.Text.RegularExpressions;
+using Emgu.CV;
+using Emgu.CV.CvEnum;
 
 namespace Miscord.Client.Services;
 
@@ -19,200 +16,61 @@ public interface IVideoDeviceService : IDisposable
 
 public record VideoDeviceInfo(string Path, string Name);
 
+/// <summary>
+/// Cross-platform video device service using Emgu CV (OpenCV wrapper).
+/// Supports macOS, Linux, and Windows.
+/// </summary>
 public class VideoDeviceService : IVideoDeviceService
 {
-    private static bool _ffmpegInitialized;
-    private static readonly object _ffmpegInitLock = new();
-
-    private readonly ISettingsStore? _settingsStore;
-    private FFmpegCameraSource? _testCameraSource;
-    private Action<byte[], int, int>? _onFrameReceived;
+    private VideoCapture? _capture;
     private CancellationTokenSource? _testCts;
+    private Action<byte[], int, int>? _onFrameReceived;
+    private Task? _captureTask;
 
-    public bool IsTestingCamera => _testCameraSource != null;
+    private const int PreviewWidth = 640;
+    private const int PreviewHeight = 360;
+    private const int TargetFps = 15;
 
-    // FFmpeg library paths to try on macOS
-    private static readonly string[] FFmpegLibPaths =
-    {
-        "/opt/homebrew/lib",      // Apple Silicon Homebrew
-        "/usr/local/lib",         // Intel Homebrew
-        "/usr/lib",               // System
-    };
+    public bool IsTestingCamera => _capture != null;
 
+    // Constructor accepts ISettingsStore for compatibility, but we don't need it
     public VideoDeviceService(ISettingsStore? settingsStore = null)
     {
-        _settingsStore = settingsStore;
-        EnsureFFmpegInitialized();
-    }
-
-    private static IntPtr ResolveFFmpegLibrary(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
-    {
-        // FFmpeg libraries: avcodec, avformat, avutil, avdevice, swscale, swresample
-        var ffmpegLibs = new[] { "avcodec", "avformat", "avutil", "avdevice", "swscale", "swresample", "avfilter" };
-
-        foreach (var libName in ffmpegLibs)
-        {
-            if (libraryName.Contains(libName))
-            {
-                foreach (var basePath in FFmpegLibPaths)
-                {
-                    // Try versioned library names (macOS uses .dylib)
-                    var paths = new[]
-                    {
-                        Path.Combine(basePath, $"lib{libName}.dylib"),
-                        Path.Combine(basePath, $"lib{libName}.so"),
-                    };
-
-                    foreach (var path in paths)
-                    {
-                        if (NativeLibrary.TryLoad(path, out var handle))
-                        {
-                            Console.WriteLine($"VideoDeviceService: Loaded {libraryName} from {path}");
-                            return handle;
-                        }
-                    }
-                }
-            }
-        }
-
-        return IntPtr.Zero;
-    }
-
-    private static void EnsureFFmpegInitialized()
-    {
-        if (_ffmpegInitialized) return;
-
-        lock (_ffmpegInitLock)
-        {
-            if (_ffmpegInitialized) return;
-
-            try
-            {
-                // Find the FFmpeg library path
-                string? ffmpegPath = null;
-                foreach (var basePath in FFmpegLibPaths)
-                {
-                    if (File.Exists(Path.Combine(basePath, "libavcodec.dylib")) ||
-                        File.Exists(Path.Combine(basePath, "libavcodec.so")))
-                    {
-                        ffmpegPath = basePath;
-                        break;
-                    }
-                }
-
-                if (ffmpegPath != null)
-                {
-                    Console.WriteLine($"VideoDeviceService: Found FFmpeg libraries in {ffmpegPath}");
-
-                    // Set FFmpeg.AutoGen paths - both RootPath and LibrariesPath
-                    ffmpeg.RootPath = ffmpegPath;
-                    FFmpeg.AutoGen.Bindings.DynamicallyLoaded.DynamicallyLoadedBindings.LibrariesPath = ffmpegPath;
-                    Console.WriteLine($"VideoDeviceService: Set FFmpeg library paths to {ffmpegPath}");
-
-                    // Register DllImportResolver as backup
-                    var ffmpegAutoGenAssembly = typeof(ffmpeg).Assembly;
-                    NativeLibrary.SetDllImportResolver(ffmpegAutoGenAssembly, ResolveFFmpegLibrary);
-                    Console.WriteLine($"VideoDeviceService: Registered DllImportResolver for {ffmpegAutoGenAssembly.GetName().Name}");
-
-                    // Initialize FFmpeg.AutoGen bindings directly
-                    try
-                    {
-                        FFmpeg.AutoGen.Bindings.DynamicallyLoaded.DynamicallyLoadedBindings.Initialize();
-                        Console.WriteLine("VideoDeviceService: FFmpeg.AutoGen bindings initialized");
-                    }
-                    catch (KeyNotFoundException knfe) when (knfe.Message.Contains("postproc"))
-                    {
-                        Console.WriteLine("VideoDeviceService: postproc library not found, trying without it...");
-                    }
-
-                    // Try FFmpegInit for SIPSorceryMedia.FFmpeg integration
-                    try
-                    {
-                        FFmpegInit.Initialise(FfmpegLogLevelEnum.AV_LOG_WARNING, ffmpegPath);
-                        Console.WriteLine("VideoDeviceService: FFmpeg initialized successfully via FFmpegInit");
-                    }
-                    catch (KeyNotFoundException knfe) when (knfe.Message.Contains("postproc"))
-                    {
-                        Console.WriteLine("VideoDeviceService: postproc library not found (expected on macOS Homebrew)");
-                    }
-                    catch (Exception ex)
-                    {
-                        Console.WriteLine($"VideoDeviceService: FFmpegInit failed - {ex.Message}");
-                    }
-                }
-                else
-                {
-                    Console.WriteLine("VideoDeviceService: FFmpeg libraries not found in standard paths, trying default...");
-                    FFmpegInit.Initialise(FfmpegLogLevelEnum.AV_LOG_WARNING);
-                }
-
-                _ffmpegInitialized = true;
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"VideoDeviceService: Failed to initialize FFmpeg - {ex.GetType().Name}: {ex.Message}");
-                Console.WriteLine($"  Stack trace: {ex.StackTrace}");
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"  Inner exception: {ex.InnerException.GetType().Name}: {ex.InnerException.Message}");
-                }
-                Console.WriteLine("  Make sure FFmpeg is installed:");
-                Console.WriteLine("    macOS: brew install ffmpeg");
-                Console.WriteLine("    Windows: winget install ffmpeg");
-                Console.WriteLine("    Linux: apt install ffmpeg");
-                _ffmpegInitialized = true; // Mark as attempted even if failed
-            }
-        }
     }
 
     public IReadOnlyList<VideoDeviceInfo> GetCameraDevices()
     {
-        Console.WriteLine("VideoDeviceService: Getting camera devices...");
+        Console.WriteLine("VideoDeviceService: Enumerating camera devices...");
 
-        // Try command-line ffmpeg first (more reliable on macOS)
-        var cmdLineDevices = GetCameraDevicesViaCommandLine();
-        if (cmdLineDevices.Count > 0)
+        // Try platform-specific enumeration first for better device names
+        var devices = GetCameraDevicesViaPlatformTools();
+        if (devices.Count > 0)
         {
-            return cmdLineDevices;
+            return devices;
         }
 
-        // Fall back to FFmpegCameraManager
-        try
-        {
-            EnsureFFmpegInitialized();
-
-            var devices = FFmpegCameraManager.GetCameraDevices();
-            if (devices == null)
-            {
-                return Array.Empty<VideoDeviceInfo>();
-            }
-            var result = devices.Select(d => new VideoDeviceInfo(d.Path, d.Name)).ToList();
-
-            Console.WriteLine($"VideoDeviceService: Found {result.Count} camera devices via FFmpegCameraManager");
-            foreach (var device in result)
-            {
-                Console.WriteLine($"  - Camera: {device.Name} ({device.Path})");
-            }
-
-            return result;
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"VideoDeviceService: Failed to get camera devices via FFmpegCameraManager - {ex.GetType().Name}: {ex.Message}");
-            return Array.Empty<VideoDeviceInfo>();
-        }
+        // Fall back to OpenCV probing
+        return GetCameraDevicesViaOpenCV();
     }
 
-    private IReadOnlyList<VideoDeviceInfo> GetCameraDevicesViaCommandLine()
+    private IReadOnlyList<VideoDeviceInfo> GetCameraDevicesViaPlatformTools()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return GetCameraDevicesViaMacOS();
+        }
+        if (OperatingSystem.IsLinux())
+        {
+            return GetCameraDevicesViaLinux();
+        }
+        // Windows: fall back to OpenCV
+        return Array.Empty<VideoDeviceInfo>();
+    }
+
+    private IReadOnlyList<VideoDeviceInfo> GetCameraDevicesViaMacOS()
     {
         try
         {
-            // On macOS, use ffmpeg to list avfoundation devices
-            if (!OperatingSystem.IsMacOS())
-            {
-                return Array.Empty<VideoDeviceInfo>();
-            }
-
             var psi = new System.Diagnostics.ProcessStartInfo
             {
                 FileName = "ffmpeg",
@@ -223,16 +81,11 @@ public class VideoDeviceService : IVideoDeviceService
             };
 
             using var process = System.Diagnostics.Process.Start(psi);
-            if (process == null)
-            {
-                return Array.Empty<VideoDeviceInfo>();
-            }
+            if (process == null) return Array.Empty<VideoDeviceInfo>();
 
             var stderr = process.StandardError.ReadToEnd();
             process.WaitForExit(5000);
 
-            // Parse the output to find video devices
-            // Format: [AVFoundation indev @ 0x...] [0] FaceTime HD Camera
             var devices = new List<VideoDeviceInfo>();
             var lines = stderr.Split('\n');
             var inVideoDevices = false;
@@ -252,30 +105,117 @@ public class VideoDeviceService : IVideoDeviceService
 
                 if (inVideoDevices && line.Contains("[") && line.Contains("]"))
                 {
-                    // Parse line like: [AVFoundation indev @ 0x...] [0] FaceTime HD Camera
-                    var match = System.Text.RegularExpressions.Regex.Match(line, @"\[(\d+)\]\s+(.+)$");
+                    var match = Regex.Match(line, @"\[(\d+)\]\s+(.+)$");
                     if (match.Success)
                     {
                         var index = match.Groups[1].Value;
                         var name = match.Groups[2].Value.Trim();
                         devices.Add(new VideoDeviceInfo(index, name));
+                        Console.WriteLine($"  - Camera {index}: {name}");
                     }
                 }
             }
 
-            Console.WriteLine($"VideoDeviceService: Found {devices.Count} camera devices via ffmpeg command line");
-            foreach (var device in devices)
-            {
-                Console.WriteLine($"  - Camera: {device.Name} (index {device.Path})");
-            }
-
+            Console.WriteLine($"VideoDeviceService: Found {devices.Count} cameras via ffmpeg (macOS)");
             return devices;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"VideoDeviceService: Failed to enumerate via command line - {ex.Message}");
+            Console.WriteLine($"VideoDeviceService: macOS enumeration failed - {ex.Message}");
             return Array.Empty<VideoDeviceInfo>();
         }
+    }
+
+    private IReadOnlyList<VideoDeviceInfo> GetCameraDevicesViaLinux()
+    {
+        try
+        {
+            // Use v4l2-ctl or enumerate /dev/video*
+            var devices = new List<VideoDeviceInfo>();
+
+            for (int i = 0; i < 10; i++)
+            {
+                var devicePath = $"/dev/video{i}";
+                if (File.Exists(devicePath))
+                {
+                    var name = $"Video Device {i}";
+
+                    // Try to get device name via v4l2-ctl
+                    try
+                    {
+                        var psi = new System.Diagnostics.ProcessStartInfo
+                        {
+                            FileName = "v4l2-ctl",
+                            Arguments = $"--device={devicePath} --info",
+                            RedirectStandardOutput = true,
+                            UseShellExecute = false,
+                            CreateNoWindow = true
+                        };
+
+                        using var process = System.Diagnostics.Process.Start(psi);
+                        if (process != null)
+                        {
+                            var output = process.StandardOutput.ReadToEnd();
+                            process.WaitForExit(2000);
+
+                            var match = Regex.Match(output, @"Card type\s*:\s*(.+)");
+                            if (match.Success)
+                            {
+                                name = match.Groups[1].Value.Trim();
+                            }
+                        }
+                    }
+                    catch { }
+
+                    devices.Add(new VideoDeviceInfo(i.ToString(), name));
+                    Console.WriteLine($"  - Camera {i}: {name}");
+                }
+            }
+
+            Console.WriteLine($"VideoDeviceService: Found {devices.Count} cameras via /dev/video* (Linux)");
+            return devices;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"VideoDeviceService: Linux enumeration failed - {ex.Message}");
+            return Array.Empty<VideoDeviceInfo>();
+        }
+    }
+
+    private IReadOnlyList<VideoDeviceInfo> GetCameraDevicesViaOpenCV()
+    {
+        Console.WriteLine("VideoDeviceService: Falling back to OpenCV enumeration...");
+        var devices = new List<VideoDeviceInfo>();
+
+        for (int i = 0; i < 10; i++)
+        {
+            try
+            {
+                using var testCapture = new VideoCapture(i);
+                if (testCapture.IsOpened)
+                {
+                    var width = testCapture.Get(CapProp.FrameWidth);
+                    var height = testCapture.Get(CapProp.FrameHeight);
+                    var name = $"Camera {i}";
+
+                    var backend = testCapture.BackendName;
+                    if (!string.IsNullOrEmpty(backend))
+                    {
+                        name = $"Camera {i} ({backend})";
+                    }
+
+                    devices.Add(new VideoDeviceInfo(i.ToString(), name));
+                    Console.WriteLine($"  - Found: {name} ({width}x{height})");
+                }
+            }
+            catch
+            {
+                // Camera not available
+            }
+        }
+
+        Console.WriteLine($"VideoDeviceService: Found {devices.Count} cameras via OpenCV");
+        return devices;
     }
 
     public async Task StartCameraTestAsync(string? devicePath, Action<byte[], int, int> onFrameReceived)
@@ -285,181 +225,145 @@ public class VideoDeviceService : IVideoDeviceService
         _onFrameReceived = onFrameReceived;
         _testCts = new CancellationTokenSource();
 
-        // If no device path specified, use device 0
-        if (string.IsNullOrEmpty(devicePath))
+        // Parse device index (default to 0)
+        var deviceIndex = 0;
+        if (!string.IsNullOrEmpty(devicePath) && int.TryParse(devicePath, out var parsed))
         {
-            devicePath = "0";
+            deviceIndex = parsed;
         }
 
-        Console.WriteLine($"VideoDeviceService: Starting camera test with device: {devicePath}");
+        Console.WriteLine($"VideoDeviceService: Starting camera capture on device {deviceIndex}...");
 
-        // Use command-line ffmpeg for camera capture on macOS (more reliable)
-        if (OperatingSystem.IsMacOS())
-        {
-            await StartCameraTestViaCommandLineAsync(devicePath);
-            return;
-        }
-
-        // Fall back to FFmpegCameraSource on other platforms
         try
         {
-            EnsureFFmpegInitialized();
-
-            Console.WriteLine($"VideoDeviceService: Creating FFmpegCameraSource for device: {devicePath}");
-            _testCameraSource = new FFmpegCameraSource(devicePath);
-
-            _testCameraSource.OnVideoSourceRawSample += OnVideoFrame;
-            _testCameraSource.OnVideoSourceError += (error) =>
+            // Use platform-specific backend to match enumeration
+            // macOS: AVFoundation (matches ffmpeg avfoundation enumeration)
+            // Linux: V4L2 (matches /dev/video* enumeration)
+            // Windows: default (MSMF or DirectShow)
+            var backend = VideoCapture.API.Any;
+            if (OperatingSystem.IsMacOS())
             {
-                Console.WriteLine($"VideoDeviceService: Camera error: {error}");
-            };
+                backend = VideoCapture.API.AVFoundation;
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                backend = VideoCapture.API.V4L2;
+            }
 
-            Console.WriteLine("VideoDeviceService: Starting video capture...");
-            await _testCameraSource.StartVideo();
-            Console.WriteLine($"VideoDeviceService: Started camera test on device: {devicePath}");
+            Console.WriteLine($"VideoDeviceService: Using backend: {backend}");
+            _capture = new VideoCapture(deviceIndex, backend);
+
+            if (!_capture.IsOpened)
+            {
+                throw new InvalidOperationException($"Failed to open camera {deviceIndex}");
+            }
+
+            // Set capture properties
+            _capture.Set(CapProp.FrameWidth, PreviewWidth);
+            _capture.Set(CapProp.FrameHeight, PreviewHeight);
+            _capture.Set(CapProp.Fps, TargetFps);
+
+            var actualWidth = (int)_capture.Get(CapProp.FrameWidth);
+            var actualHeight = (int)_capture.Get(CapProp.FrameHeight);
+            var actualFps = _capture.Get(CapProp.Fps);
+
+            Console.WriteLine($"VideoDeviceService: Camera opened - {actualWidth}x{actualHeight} @ {actualFps}fps");
+
+            // Start capture loop in background
+            var token = _testCts.Token;
+            _captureTask = Task.Run(() => CaptureLoop(actualWidth, actualHeight, token), token);
+
+            Console.WriteLine("VideoDeviceService: Camera capture started");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"VideoDeviceService: Failed to start camera test - {ex.GetType().Name}: {ex.Message}");
+            Console.WriteLine($"VideoDeviceService: Failed to start camera - {ex.Message}");
             await StopTestAsync();
             throw;
         }
     }
 
-    private System.Diagnostics.Process? _ffmpegProcess;
-    private const int PreviewWidth = 640;
-    private const int PreviewHeight = 360; // 16:9 aspect ratio
-
-    private async Task StartCameraTestViaCommandLineAsync(string deviceIndex)
+    private void CaptureLoop(int width, int height, CancellationToken token)
     {
-        Console.WriteLine($"VideoDeviceService: Starting ffmpeg capture for device {deviceIndex}");
+        using var frame = new Mat();
+        var frameIntervalMs = 1000 / TargetFps;
 
-        // Use ffmpeg to capture from avfoundation - let it use native resolution and scale down for preview
-        // No -video_size means use device default, then scale to preview size
-        var psi = new System.Diagnostics.ProcessStartInfo
-        {
-            FileName = "ffmpeg",
-            // Capture at native resolution, scale to preview size, output raw RGB24
-            Arguments = $"-f avfoundation -framerate 15 -i \"{deviceIndex}:none\" -vf \"scale={PreviewWidth}:{PreviewHeight}\" -f rawvideo -pix_fmt rgb24 -",
-            RedirectStandardOutput = true,
-            RedirectStandardError = true,
-            UseShellExecute = false,
-            CreateNoWindow = true
-        };
-
-        _ffmpegProcess = System.Diagnostics.Process.Start(psi);
-        if (_ffmpegProcess == null)
-        {
-            throw new InvalidOperationException("Failed to start ffmpeg process");
-        }
-
-        Console.WriteLine("VideoDeviceService: ffmpeg process started, reading frames...");
-
-        // Read frames in background
-        var token = _testCts!.Token;
-        _ = Task.Run(async () =>
+        while (!token.IsCancellationRequested && _capture != null)
         {
             try
             {
-                var stream = _ffmpegProcess.StandardOutput.BaseStream;
-                var frameSize = PreviewWidth * PreviewHeight * 3; // RGB24
-                var buffer = new byte[frameSize];
-
-                while (!token.IsCancellationRequested && !_ffmpegProcess.HasExited)
+                if (!_capture.Read(frame) || frame.IsEmpty)
                 {
-                    var bytesRead = 0;
-                    while (bytesRead < frameSize && !token.IsCancellationRequested)
-                    {
-                        var read = await stream.ReadAsync(buffer, bytesRead, frameSize - bytesRead, token);
-                        if (read == 0) break;
-                        bytesRead += read;
-                    }
-
-                    if (bytesRead == frameSize)
-                    {
-                        _onFrameReceived?.Invoke(buffer, PreviewWidth, PreviewHeight);
-                    }
-                    else if (bytesRead > 0)
-                    {
-                        Console.WriteLine($"VideoDeviceService: Incomplete frame ({bytesRead}/{frameSize} bytes)");
-                    }
+                    Thread.Sleep(10);
+                    continue;
                 }
+
+                // Convert frame to RGB byte array
+                using var rgbFrame = new Mat();
+                CvInvoke.CvtColor(frame, rgbFrame, ColorConversion.Bgr2Rgb);
+
+                // Get raw bytes
+                var frameWidth = rgbFrame.Width;
+                var frameHeight = rgbFrame.Height;
+                var dataSize = frameWidth * frameHeight * 3; // RGB24
+                var data = new byte[dataSize];
+
+                System.Runtime.InteropServices.Marshal.Copy(rgbFrame.DataPointer, data, 0, dataSize);
+
+                // Invoke callback
+                _onFrameReceived?.Invoke(data, frameWidth, frameHeight);
+
+                // Throttle to target FPS
+                Thread.Sleep(frameIntervalMs);
             }
             catch (OperationCanceledException)
             {
-                // Expected when stopping
+                break;
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"VideoDeviceService: Error reading frames - {ex.Message}");
+                Console.WriteLine($"VideoDeviceService: Frame capture error - {ex.Message}");
+                Thread.Sleep(100);
             }
-        }, token);
+        }
 
-        // Log stderr in background
-        _ = Task.Run(async () =>
-        {
-            try
-            {
-                var stderr = await _ffmpegProcess.StandardError.ReadToEndAsync();
-                if (!string.IsNullOrWhiteSpace(stderr) && stderr.Contains("error"))
-                {
-                    Console.WriteLine($"VideoDeviceService: ffmpeg stderr: {stderr}");
-                }
-            }
-            catch { }
-        });
-
-        Console.WriteLine("VideoDeviceService: Camera test started via ffmpeg command line");
-    }
-
-    private void OnVideoFrame(uint durationMilliseconds, int width, int height, byte[] sample, VideoPixelFormatsEnum pixelFormat)
-    {
-        // Forward the frame to the UI
-        // The sample is in the specified pixel format (usually I420 or RGB24)
-        _onFrameReceived?.Invoke(sample, width, height);
+        Console.WriteLine("VideoDeviceService: Capture loop ended");
     }
 
     public async Task StopTestAsync()
     {
+        Console.WriteLine("VideoDeviceService: Stopping camera test...");
+
         _testCts?.Cancel();
+
+        if (_captureTask != null)
+        {
+            try
+            {
+                await _captureTask.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (TimeoutException)
+            {
+                Console.WriteLine("VideoDeviceService: Capture task did not stop in time");
+            }
+            catch (OperationCanceledException)
+            {
+                // Expected
+            }
+            _captureTask = null;
+        }
+
         _testCts?.Dispose();
         _testCts = null;
 
-        // Stop ffmpeg process if running
-        if (_ffmpegProcess != null)
+        if (_capture != null)
         {
-            try
-            {
-                if (!_ffmpegProcess.HasExited)
-                {
-                    _ffmpegProcess.Kill();
-                    _ffmpegProcess.WaitForExit(1000);
-                }
-                _ffmpegProcess.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"VideoDeviceService: Error stopping ffmpeg - {ex.Message}");
-            }
-            _ffmpegProcess = null;
-        }
-
-        if (_testCameraSource != null)
-        {
-            try
-            {
-                _testCameraSource.OnVideoSourceRawSample -= OnVideoFrame;
-                await _testCameraSource.CloseVideo();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"VideoDeviceService: Error closing camera - {ex.Message}");
-            }
-            _testCameraSource = null;
+            _capture.Dispose();
+            _capture = null;
         }
 
         _onFrameReceived = null;
-        Console.WriteLine("VideoDeviceService: Stopped camera test");
+        Console.WriteLine("VideoDeviceService: Camera test stopped");
     }
 
     public void Dispose()

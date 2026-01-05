@@ -22,6 +22,19 @@
     <PackageReference Include="FFmpeg.AutoGen" Version="8.0.0" />
     <PackageReference Include="FFmpeg.AutoGen.Bindings.DynamicallyLoaded" Version="8.0.0" />
     <PackageReference Include="SIPSorceryMedia.SDL2" Version="8.0.7" />
+    <!-- Emgu CV for cross-platform camera capture -->
+    <PackageReference Include="Emgu.CV" Version="4.11.0.5746" />
+  </ItemGroup>
+
+  <!-- Platform-specific Emgu CV runtimes -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <PackageReference Include="Emgu.CV.runtime.mini.macos" Version="4.11.0.5746" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
+    <PackageReference Include="Emgu.CV.runtime.ubuntu-x64" Version="4.11.0.5746" />
+  </ItemGroup>
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+    <PackageReference Include="Emgu.CV.runtime.windows" Version="4.11.0.5746" />
   </ItemGroup>
 
   <ItemGroup>

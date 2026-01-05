@@ -181,37 +181,38 @@ public class VideoSettingsViewModel : ViewModelBase
             _frameWidth = width;
             _frameHeight = height;
             this.RaisePropertyChanged(nameof(Resolution));
+        }
 
-            // Create new bitmap with correct size (Avalonia uses Bgra8888)
-            PreviewBitmap = new WriteableBitmap(
+        // Create new bitmap each frame - Avalonia needs a new object to detect changes
+        if (frameData.Length == width * height * 3)
+        {
+            var bitmap = new WriteableBitmap(
                 new PixelSize(width, height),
                 new Vector(96, 96),
                 Avalonia.Platform.PixelFormat.Bgra8888,
                 AlphaFormat.Opaque);
-        }
 
-        // Update bitmap with frame data - convert RGB24 to BGRA8888
-        if (PreviewBitmap != null && frameData.Length == width * height * 3)
-        {
-            using var lockedBitmap = PreviewBitmap.Lock();
-            var destPtr = lockedBitmap.Address;
-            var rgbIndex = 0;
-            var bgraData = new byte[width * height * 4];
-
-            for (int i = 0; i < width * height; i++)
+            using (var lockedBitmap = bitmap.Lock())
             {
-                bgraData[i * 4 + 0] = frameData[rgbIndex + 2]; // B
-                bgraData[i * 4 + 1] = frameData[rgbIndex + 1]; // G
-                bgraData[i * 4 + 2] = frameData[rgbIndex + 0]; // R
-                bgraData[i * 4 + 3] = 255;                     // A
-                rgbIndex += 3;
+                var destPtr = lockedBitmap.Address;
+                var rgbIndex = 0;
+                var bgraData = new byte[width * height * 4];
+
+                for (int i = 0; i < width * height; i++)
+                {
+                    bgraData[i * 4 + 0] = frameData[rgbIndex + 2]; // B
+                    bgraData[i * 4 + 1] = frameData[rgbIndex + 1]; // G
+                    bgraData[i * 4 + 2] = frameData[rgbIndex + 0]; // R
+                    bgraData[i * 4 + 3] = 255;                     // A
+                    rgbIndex += 3;
+                }
+
+                System.Runtime.InteropServices.Marshal.Copy(bgraData, 0, destPtr, bgraData.Length);
             }
 
-            System.Runtime.InteropServices.Marshal.Copy(bgraData, 0, destPtr, bgraData.Length);
+            // Assign new bitmap - this triggers UI update
+            PreviewBitmap = bitmap;
         }
-
-        // Force UI update for the bitmap
-        this.RaisePropertyChanged(nameof(PreviewBitmap));
     }
 
     private async Task StopCameraTestAsync()
