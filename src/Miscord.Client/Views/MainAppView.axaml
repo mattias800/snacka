@@ -745,9 +745,9 @@
                         </StackPanel>
                     </Border>
 
-                    <!-- Voice Channel Participants Grid -->
+                    <!-- Voice Channel Video Streams Grid -->
                     <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding VoiceChannelContent.Participants}">
+                        <ItemsControl ItemsSource="{Binding VoiceChannelContent.VideoStreams}">
                             <ItemsControl.ItemsPanel>
                                 <ItemsPanelTemplate>
                                     <WrapPanel Orientation="Horizontal"
@@ -757,7 +757,7 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <!-- Participant Box -->
+                                    <!-- Video Stream Box -->
                                     <Border Width="320" Height="240"
                                             Margin="8"
                                             CornerRadius="8"
@@ -766,7 +766,7 @@
                                             ClipToBounds="True">
 
                                         <Grid>
-                                            <!-- Video Feed (shown when camera is on and we have a frame) -->
+                                            <!-- Video Feed -->
                                             <Image Source="{Binding VideoBitmap}"
                                                    Stretch="UniformToFill"
                                                    IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
@@ -789,7 +789,7 @@
                                                 </Border>
                                             </StackPanel>
 
-                                            <!-- Username overlay at bottom -->
+                                            <!-- Username and stream type overlay at bottom -->
                                             <Border VerticalAlignment="Bottom"
                                                     Background="#80000000"
                                                     Padding="12,6">
@@ -799,29 +799,25 @@
                                                                FontSize="14"
                                                                FontWeight="SemiBold"
                                                                VerticalAlignment="Center"/>
-                                                    <TextBlock Text="🔇"
-                                                               FontSize="12"
-                                                               Foreground="#ed4245"
-                                                               VerticalAlignment="Center"
-                                                               IsVisible="{Binding IsMuted}"/>
-                                                    <TextBlock Text="🔕"
-                                                               FontSize="12"
-                                                               Foreground="#ed4245"
-                                                               VerticalAlignment="Center"
-                                                               IsVisible="{Binding IsDeafened}"/>
-                                                    <TextBlock Text="📹"
-                                                               FontSize="12"
-                                                               Foreground="#3ba55c"
-                                                               VerticalAlignment="Center"
-                                                               IsVisible="{Binding IsCameraOn}"/>
+                                                    <!-- Stream type label (shows "Screen" for screen shares) -->
+                                                    <Border Background="#5865f2"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            IsVisible="{Binding StreamLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                        <TextBlock Text="{Binding StreamLabel}"
+                                                                   Foreground="White"
+                                                                   FontSize="11"
+                                                                   FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
                                                 </StackPanel>
                                             </Border>
 
-                                            <!-- Speaking indicator ring -->
+                                            <!-- Speaking indicator ring (only for camera streams) -->
                                             <Border CornerRadius="8"
                                                     BorderThickness="3"
                                                     BorderBrush="#3ba55c"
-                                                    IsVisible="{Binding IsSpeaking}"/>
+                                                    IsVisible="{Binding ShowSpeakingIndicator}"/>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>

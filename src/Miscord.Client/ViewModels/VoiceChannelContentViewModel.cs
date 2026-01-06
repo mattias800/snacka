@@ -4,56 +4,55 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Miscord.Client.Services;
+using Miscord.Shared.Models;
 using ReactiveUI;
 
 namespace Miscord.Client.ViewModels;
 
 /// <summary>
-/// ViewModel for a participant in the voice channel grid view.
-/// Holds video frame data if camera is enabled.
+/// ViewModel for a single video stream in the voice channel grid view.
+/// Each user can have multiple streams (camera + screen share), each represented by one VideoStreamViewModel.
 /// </summary>
-public class VideoParticipantViewModel : ReactiveObject
+public class VideoStreamViewModel : ReactiveObject
 {
     private WriteableBitmap? _videoBitmap;
     private bool _isSpeaking;
 
-    public VideoParticipantViewModel(VoiceParticipantResponse participant)
+    public VideoStreamViewModel(Guid userId, string username, VideoStreamType streamType)
     {
-        Participant = participant;
+        UserId = userId;
+        Username = username;
+        StreamType = streamType;
     }
 
-    public VoiceParticipantResponse Participant { get; private set; }
+    public Guid UserId { get; }
+    public string Username { get; }
+    public VideoStreamType StreamType { get; }
 
-    public Guid UserId => Participant.UserId;
-    public string Username => Participant.Username;
-    public bool IsMuted => Participant.IsMuted;
-    public bool IsDeafened => Participant.IsDeafened;
-    public bool IsCameraOn => Participant.IsCameraOn;
+    /// <summary>
+    /// Display label shown on the tile. Empty for camera, "Screen" for screen share.
+    /// </summary>
+    public string StreamLabel => StreamType == VideoStreamType.ScreenShare ? "Screen" : "";
+
+    /// <summary>
+    /// Whether to show the speaking indicator. Only shows for camera streams.
+    /// </summary>
+    public bool ShowSpeakingIndicator => StreamType == VideoStreamType.Camera && IsSpeaking;
 
     public bool IsSpeaking
     {
         get => _isSpeaking;
-        set => this.RaiseAndSetIfChanged(ref _isSpeaking, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isSpeaking, value);
+            this.RaisePropertyChanged(nameof(ShowSpeakingIndicator));
+        }
     }
 
     public WriteableBitmap? VideoBitmap
     {
         get => _videoBitmap;
         set => this.RaiseAndSetIfChanged(ref _videoBitmap, value);
-    }
-
-    public void UpdateState(VoiceStateUpdate state)
-    {
-        Participant = Participant with
-        {
-            IsMuted = state.IsMuted ?? Participant.IsMuted,
-            IsDeafened = state.IsDeafened ?? Participant.IsDeafened,
-            IsScreenSharing = state.IsScreenSharing ?? Participant.IsScreenSharing,
-            IsCameraOn = state.IsCameraOn ?? Participant.IsCameraOn
-        };
-        this.RaisePropertyChanged(nameof(IsMuted));
-        this.RaisePropertyChanged(nameof(IsDeafened));
-        this.RaisePropertyChanged(nameof(IsCameraOn));
     }
 
     public void UpdateVideoFrame(byte[] rgbData, int width, int height)
@@ -95,22 +94,37 @@ public class VideoParticipantViewModel : ReactiveObject
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"VideoParticipantVM: Error updating video frame: {ex.Message}");
+                Console.WriteLine($"VideoStreamVM: Error updating video frame: {ex.Message}");
             }
         });
     }
 }
 
 /// <summary>
+/// Tracks participant info for managing video streams.
+/// </summary>
+public class ParticipantInfo
+{
+    public Guid UserId { get; init; }
+    public string Username { get; set; } = "";
+    public bool IsMuted { get; set; }
+    public bool IsDeafened { get; set; }
+    public bool IsCameraOn { get; set; }
+    public bool IsScreenSharing { get; set; }
+    public bool IsSpeaking { get; set; }
+}
+
+/// <summary>
 /// ViewModel for the voice channel content view.
-/// Displays a grid of participants with video streams.
+/// Displays a grid of video streams (one tile per camera or screen share).
 /// </summary>
 public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
 {
     private readonly IWebRtcService _webRtc;
     private readonly Guid _localUserId;
     private ChannelResponse? _channel;
-    private ObservableCollection<VideoParticipantViewModel> _participants = new();
+    private ObservableCollection<VideoStreamViewModel> _videoStreams = new();
+    private readonly Dictionary<Guid, ParticipantInfo> _participants = new();
 
     public VoiceChannelContentViewModel(IWebRtcService webRtc, Guid localUserId)
     {
@@ -136,20 +150,45 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     public string ChannelName => Channel?.Name ?? "";
     public bool HasChannel => Channel != null;
 
-    public ObservableCollection<VideoParticipantViewModel> Participants
+    /// <summary>
+    /// Collection of video streams to display. Each user may have 0, 1, or 2 streams
+    /// (camera and/or screen share).
+    /// </summary>
+    public ObservableCollection<VideoStreamViewModel> VideoStreams
     {
-        get => _participants;
-        set => this.RaiseAndSetIfChanged(ref _participants, value);
+        get => _videoStreams;
+        set => this.RaiseAndSetIfChanged(ref _videoStreams, value);
     }
 
     public void SetParticipants(IEnumerable<VoiceParticipantResponse> participants)
     {
         Dispatcher.UIThread.Post(() =>
         {
-            Participants.Clear();
+            _participants.Clear();
+            VideoStreams.Clear();
+
             foreach (var p in participants)
             {
-                Participants.Add(new VideoParticipantViewModel(p));
+                var info = new ParticipantInfo
+                {
+                    UserId = p.UserId,
+                    Username = p.Username,
+                    IsMuted = p.IsMuted,
+                    IsDeafened = p.IsDeafened,
+                    IsCameraOn = p.IsCameraOn,
+                    IsScreenSharing = p.IsScreenSharing
+                };
+                _participants[p.UserId] = info;
+
+                // Create streams for active video sources
+                if (p.IsCameraOn)
+                {
+                    VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.Camera));
+                }
+                if (p.IsScreenSharing)
+                {
+                    VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.ScreenShare));
+                }
             }
         });
     }
@@ -158,9 +197,28 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     {
         Dispatcher.UIThread.Post(() =>
         {
-            if (!Participants.Any(p => p.UserId == participant.UserId))
+            if (_participants.ContainsKey(participant.UserId))
+                return;
+
+            var info = new ParticipantInfo
             {
-                Participants.Add(new VideoParticipantViewModel(participant));
+                UserId = participant.UserId,
+                Username = participant.Username,
+                IsMuted = participant.IsMuted,
+                IsDeafened = participant.IsDeafened,
+                IsCameraOn = participant.IsCameraOn,
+                IsScreenSharing = participant.IsScreenSharing
+            };
+            _participants[participant.UserId] = info;
+
+            // Create streams for active video sources
+            if (participant.IsCameraOn)
+            {
+                VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.Camera));
+            }
+            if (participant.IsScreenSharing)
+            {
+                VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.ScreenShare));
             }
         });
     }
@@ -169,40 +227,110 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     {
         Dispatcher.UIThread.Post(() =>
         {
-            var participant = Participants.FirstOrDefault(p => p.UserId == userId);
-            if (participant != null)
+            _participants.Remove(userId);
+
+            // Remove all streams for this user
+            var toRemove = VideoStreams.Where(s => s.UserId == userId).ToList();
+            foreach (var stream in toRemove)
             {
-                Participants.Remove(participant);
+                VideoStreams.Remove(stream);
             }
         });
     }
 
     public void UpdateParticipantState(Guid userId, VoiceStateUpdate state)
     {
-        var participant = Participants.FirstOrDefault(p => p.UserId == userId);
-        participant?.UpdateState(state);
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (!_participants.TryGetValue(userId, out var info))
+                return;
+
+            var username = info.Username;
+
+            // Handle camera state change
+            if (state.IsCameraOn.HasValue)
+            {
+                var wasCameraOn = info.IsCameraOn;
+                info.IsCameraOn = state.IsCameraOn.Value;
+
+                if (state.IsCameraOn.Value && !wasCameraOn)
+                {
+                    // Camera turned on - add stream
+                    if (!VideoStreams.Any(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera))
+                    {
+                        VideoStreams.Add(new VideoStreamViewModel(userId, username, VideoStreamType.Camera));
+                    }
+                }
+                else if (!state.IsCameraOn.Value && wasCameraOn)
+                {
+                    // Camera turned off - remove stream
+                    var stream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera);
+                    if (stream != null)
+                    {
+                        VideoStreams.Remove(stream);
+                    }
+                }
+            }
+
+            // Handle screen share state change
+            if (state.IsScreenSharing.HasValue)
+            {
+                var wasScreenSharing = info.IsScreenSharing;
+                info.IsScreenSharing = state.IsScreenSharing.Value;
+
+                if (state.IsScreenSharing.Value && !wasScreenSharing)
+                {
+                    // Screen share turned on - add stream
+                    if (!VideoStreams.Any(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare))
+                    {
+                        VideoStreams.Add(new VideoStreamViewModel(userId, username, VideoStreamType.ScreenShare));
+                    }
+                }
+                else if (!state.IsScreenSharing.Value && wasScreenSharing)
+                {
+                    // Screen share turned off - remove stream
+                    var stream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare);
+                    if (stream != null)
+                    {
+                        VideoStreams.Remove(stream);
+                    }
+                }
+            }
+
+            // Update other state
+            if (state.IsMuted.HasValue)
+                info.IsMuted = state.IsMuted.Value;
+            if (state.IsDeafened.HasValue)
+                info.IsDeafened = state.IsDeafened.Value;
+        });
     }
 
     public void UpdateSpeakingState(Guid userId, bool isSpeaking)
     {
-        var participant = Participants.FirstOrDefault(p => p.UserId == userId);
-        if (participant != null)
+        // Only update speaking state on camera streams
+        var cameraStream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera);
+        if (cameraStream != null)
         {
-            participant.IsSpeaking = isSpeaking;
+            cameraStream.IsSpeaking = isSpeaking;
+        }
+
+        if (_participants.TryGetValue(userId, out var info))
+        {
+            info.IsSpeaking = isSpeaking;
         }
     }
 
-    private void OnVideoFrameReceived(Guid userId, int width, int height, byte[] rgbData)
+    private void OnVideoFrameReceived(Guid userId, VideoStreamType streamType, int width, int height, byte[] rgbData)
     {
-        var participant = Participants.FirstOrDefault(p => p.UserId == userId);
-        participant?.UpdateVideoFrame(rgbData, width, height);
+        var stream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == streamType);
+        stream?.UpdateVideoFrame(rgbData, width, height);
     }
 
-    private void OnLocalVideoFrameCaptured(int width, int height, byte[] rgbData)
+    private void OnLocalVideoFrameCaptured(VideoStreamType streamType, int width, int height, byte[] rgbData)
     {
-        // Update local user's video preview
-        var participant = Participants.FirstOrDefault(p => p.UserId == _localUserId);
-        participant?.UpdateVideoFrame(rgbData, width, height);
+        // Update local user's video preview for the appropriate stream
+        var stream = VideoStreams.FirstOrDefault(s => s.UserId == _localUserId && s.StreamType == streamType);
+        stream?.UpdateVideoFrame(rgbData, width, height);
     }
 
     public void Dispose()

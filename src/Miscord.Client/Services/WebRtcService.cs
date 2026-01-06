@@ -10,6 +10,7 @@ using SIPSorceryMedia.FFmpeg;
 using SIPSorceryMedia.Encoders;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
+using Miscord.Shared.Models;
 
 namespace Miscord.Client.Services;
 
@@ -42,13 +43,13 @@ public interface IWebRtcService : IAsyncDisposable
     event Action<bool>? CameraStateChanged;
     event Action<bool>? ScreenSharingStateChanged;
     /// <summary>
-    /// Fired when a video frame is received from a peer. Args: (userId, width, height, rgbData)
+    /// Fired when a video frame is received from a peer. Args: (userId, streamType, width, height, rgbData)
     /// </summary>
-    event Action<Guid, int, int, byte[]>? VideoFrameReceived;
+    event Action<Guid, VideoStreamType, int, int, byte[]>? VideoFrameReceived;
     /// <summary>
-    /// Fired when a local video frame is captured (for self-preview). Args: (width, height, rgbData)
+    /// Fired when a local video frame is captured (for self-preview). Args: (streamType, width, height, rgbData)
     /// </summary>
-    event Action<int, int, byte[]>? LocalVideoFrameCaptured;
+    event Action<VideoStreamType, int, int, byte[]>? LocalVideoFrameCaptured;
 }
 
 public enum VoiceConnectionStatus
@@ -273,11 +274,11 @@ public class WebRtcService : IWebRtcService
     public event Action<bool>? SpeakingChanged;
     public event Action<bool>? CameraStateChanged;
     public event Action<bool>? ScreenSharingStateChanged;
-    public event Action<Guid, int, int, byte[]>? VideoFrameReceived;
+    public event Action<Guid, VideoStreamType, int, int, byte[]>? VideoFrameReceived;
     /// <summary>
-    /// Fired when a local video frame is captured (for self-preview). Args: (width, height, rgbData)
+    /// Fired when a local video frame is captured (for self-preview). Args: (streamType, width, height, rgbData)
     /// </summary>
-    public event Action<int, int, byte[]>? LocalVideoFrameCaptured;
+    public event Action<VideoStreamType, int, int, byte[]>? LocalVideoFrameCaptured;
 
     public WebRtcService(ISignalRService signalR, ISettingsStore? settingsStore = null)
     {
@@ -619,7 +620,8 @@ public class WebRtcService : IWebRtcService
             var decoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264);
             decoder.OnDecodedFrame += (width, height, rgbData) =>
             {
-                VideoFrameReceived?.Invoke(userId, width, height, rgbData);
+                // TODO: Determine stream type from SSRC once dual-track is fully implemented
+                VideoFrameReceived?.Invoke(userId, VideoStreamType.Camera, width, height, rgbData);
             };
             decoder.Start();
             _videoDecoders[userId] = decoder;
@@ -916,7 +918,8 @@ public class WebRtcService : IWebRtcService
             videoDecoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264);
             videoDecoder.OnDecodedFrame += (width, height, rgbData) =>
             {
-                VideoFrameReceived?.Invoke(remoteUserId, width, height, rgbData);
+                // TODO: Determine stream type from SSRC once dual-track is fully implemented
+                VideoFrameReceived?.Invoke(remoteUserId, VideoStreamType.Camera, width, height, rgbData);
             };
             videoDecoder.Start();
             _videoDecoders[remoteUserId] = videoDecoder;
@@ -1324,7 +1327,7 @@ public class WebRtcService : IWebRtcService
                         rgbData[i + 1] = buffer[i + 1]; // G
                         rgbData[i + 2] = buffer[i];     // B
                     }
-                    LocalVideoFrameCaptured?.Invoke(ScreenWidth, ScreenHeight, rgbData);
+                    LocalVideoFrameCaptured?.Invoke(VideoStreamType.ScreenShare, ScreenWidth, ScreenHeight, rgbData);
                 }
             }
         }
@@ -1530,7 +1533,7 @@ public class WebRtcService : IWebRtcService
                 if (LocalVideoFrameCaptured != null && frameCount % 2 == 0) // Every other frame for performance
                 {
                     var rgbData = BgrToRgb(bgrData, frameWidth, frameHeight);
-                    LocalVideoFrameCaptured.Invoke(frameWidth, frameHeight, rgbData);
+                    LocalVideoFrameCaptured.Invoke(VideoStreamType.Camera, frameWidth, frameHeight, rgbData);
                 }
 
                 Thread.Sleep(frameIntervalMs);
