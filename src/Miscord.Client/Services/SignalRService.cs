@@ -19,10 +19,14 @@ public interface ISignalRService : IAsyncDisposable
     Task UpdateVoiceStateAsync(Guid channelId, VoiceStateUpdate update);
     Task UpdateSpeakingStateAsync(Guid channelId, bool isSpeaking);
 
-    // WebRTC signaling methods
+    // WebRTC signaling methods (P2P - legacy)
     Task SendWebRtcOfferAsync(Guid targetUserId, string sdp);
     Task SendWebRtcAnswerAsync(Guid targetUserId, string sdp);
     Task SendIceCandidateAsync(Guid targetUserId, string candidate, string? sdpMid, int? sdpMLineIndex);
+
+    // SFU signaling methods
+    Task SendSfuAnswerAsync(Guid channelId, string sdp);
+    Task SendSfuIceCandidateAsync(Guid channelId, string candidate, string? sdpMid, int? sdpMLineIndex);
 
     // Channel events
     event Action<ChannelResponse>? ChannelCreated;
@@ -51,10 +55,14 @@ public interface ISignalRService : IAsyncDisposable
     event Action<VoiceStateChangedEvent>? VoiceStateChanged;
     event Action<SpeakingStateChangedEvent>? SpeakingStateChanged;
 
-    // WebRTC signaling events
+    // WebRTC signaling events (P2P - legacy)
     event Action<WebRtcOfferEvent>? WebRtcOfferReceived;
     event Action<WebRtcAnswerEvent>? WebRtcAnswerReceived;
     event Action<IceCandidateEvent>? IceCandidateReceived;
+
+    // SFU signaling events
+    event Action<SfuOfferEvent>? SfuOfferReceived;
+    event Action<SfuIceCandidateEvent>? SfuIceCandidateReceived;
 }
 
 public class SignalRService : ISignalRService
@@ -90,10 +98,14 @@ public class SignalRService : ISignalRService
     public event Action<VoiceStateChangedEvent>? VoiceStateChanged;
     public event Action<SpeakingStateChangedEvent>? SpeakingStateChanged;
 
-    // WebRTC signaling events
+    // WebRTC signaling events (P2P - legacy)
     public event Action<WebRtcOfferEvent>? WebRtcOfferReceived;
     public event Action<WebRtcAnswerEvent>? WebRtcAnswerReceived;
     public event Action<IceCandidateEvent>? IceCandidateReceived;
+
+    // SFU signaling events
+    public event Action<SfuOfferEvent>? SfuOfferReceived;
+    public event Action<SfuIceCandidateEvent>? SfuIceCandidateReceived;
 
     public async Task ConnectAsync(string baseUrl, string accessToken)
     {
@@ -253,6 +265,20 @@ public class SignalRService : ISignalRService
         await _hubConnection.InvokeAsync("SendIceCandidate", targetUserId, candidate, sdpMid, sdpMLineIndex);
     }
 
+    // SFU signaling methods
+    public async Task SendSfuAnswerAsync(Guid channelId, string sdp)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("SendSfuAnswer", channelId, sdp);
+        Console.WriteLine($"SignalR: Sent SFU answer for channel {channelId}");
+    }
+
+    public async Task SendSfuIceCandidateAsync(Guid channelId, string candidate, string? sdpMid, int? sdpMLineIndex)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("SendSfuIceCandidate", channelId, candidate, sdpMid, sdpMLineIndex);
+    }
+
     private void RegisterHandlers()
     {
         if (_hubConnection is null) return;
@@ -379,6 +405,19 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: IceCandidate received from {e.FromUserId}");
             IceCandidateReceived?.Invoke(e);
+        });
+
+        // SFU signaling events
+        _hubConnection.On<SfuOfferEvent>("SfuOffer", e =>
+        {
+            Console.WriteLine($"SignalR: SfuOffer received for channel {e.ChannelId}");
+            SfuOfferReceived?.Invoke(e);
+        });
+
+        _hubConnection.On<SfuIceCandidateEvent>("SfuIceCandidate", e =>
+        {
+            Console.WriteLine($"SignalR: SfuIceCandidate received");
+            SfuIceCandidateReceived?.Invoke(e);
         });
 
         _hubConnection.Reconnecting += error =>

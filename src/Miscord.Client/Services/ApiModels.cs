@@ -143,7 +143,11 @@ public record VoiceParticipantLeftEvent(Guid ChannelId, Guid UserId);
 public record VoiceStateChangedEvent(Guid ChannelId, Guid UserId, VoiceStateUpdate State);
 public record SpeakingStateChangedEvent(Guid ChannelId, Guid UserId, bool IsSpeaking);
 
-// WebRTC Signaling Events
+// WebRTC Signaling Events (P2P - legacy)
 public record WebRtcOfferEvent(Guid FromUserId, string Sdp);
 public record WebRtcAnswerEvent(Guid FromUserId, string Sdp);
 public record IceCandidateEvent(Guid FromUserId, string Candidate, string? SdpMid, int? SdpMLineIndex);
+
+// SFU Signaling Events
+public record SfuOfferEvent(string Sdp, Guid ChannelId);
+public record SfuIceCandidateEvent(string Candidate, string? SdpMid, int? SdpMLineIndex);

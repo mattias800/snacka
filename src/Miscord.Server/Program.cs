@@ -5,6 +5,7 @@ using Microsoft.IdentityModel.Tokens;
 using Miscord.Server.Data;
 using Miscord.Server.Hubs;
 using Miscord.Server.Services;
+using Miscord.Server.Services.Sfu;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -73,6 +74,9 @@ builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDirectMessageService, DirectMessageService>();
 builder.Services.AddScoped<ICommunityService, CommunityService>();
 builder.Services.AddScoped<IVoiceService, VoiceService>();
+
+// Add SFU service (Singleton to maintain WebRTC connections across requests)
+builder.Services.AddSingleton<ISfuService, SfuService>();
 
 // Add controllers
 builder.Services.AddControllers();

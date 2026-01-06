@@ -45,7 +45,8 @@ public class FfmpegProcessEncoder : IDisposable
         var codecArg = _codec switch
         {
             VideoCodecsEnum.VP8 => "-c:v libvpx -deadline realtime -cpu-used 8 -b:v 500k",
-            VideoCodecsEnum.H264 => "-c:v libx264 -preset ultrafast -tune zerolatency -b:v 500k",
+            // Ultra low-latency H264: zerolatency disables B-frames, intra-refresh for faster recovery
+            VideoCodecsEnum.H264 => "-c:v libx264 -preset ultrafast -tune zerolatency -g 15 -bf 0 -b:v 1000k -maxrate 1000k -bufsize 500k",
             _ => "-c:v libvpx -deadline realtime -cpu-used 8 -b:v 500k"
         };
 
@@ -55,8 +56,10 @@ public class FfmpegProcessEncoder : IDisposable
         var startInfo = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-f rawvideo -pixel_format bgr24 -video_size {_width}x{_height} -framerate {_fps} -i pipe:0 " +
-                       $"{codecArg} -f {outputFormat} pipe:1",
+            // Ultra low-latency: no buffering, flush packets immediately
+            Arguments = $"-fflags nobuffer -flags low_delay -strict experimental " +
+                       $"-f rawvideo -pixel_format bgr24 -video_size {_width}x{_height} -framerate {_fps} -i pipe:0 " +
+                       $"{codecArg} -flush_packets 1 -f {outputFormat} pipe:1",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -73,15 +76,18 @@ public class FfmpegProcessEncoder : IDisposable
         // Start reading encoded output
         _outputReaderTask = Task.Run(ReadEncodedOutputAsync);
 
-        // Log stderr for debugging
+        // Log stderr line by line for debugging (ReadToEndAsync blocks until process exits)
         Task.Run(async () =>
         {
             try
             {
-                var stderr = await _ffmpegProcess.StandardError.ReadToEndAsync();
-                if (!string.IsNullOrWhiteSpace(stderr))
+                string? line;
+                while ((line = await _ffmpegProcess.StandardError.ReadLineAsync()) != null)
                 {
-                    Console.WriteLine($"FfmpegProcessEncoder stderr: {stderr.Substring(0, Math.Min(500, stderr.Length))}");
+                    if (line.Contains("error") || line.Contains("Error") || line.Contains("Invalid") || line.Contains("failed"))
+                    {
+                        Console.WriteLine($"FfmpegProcessEncoder ERROR: {line}");
+                    }
                 }
             }
             catch { }
@@ -211,11 +217,7 @@ public class FfmpegProcessEncoder : IDisposable
         var durationRtpUnits = (uint)(90000 / _fps);
 
         // H264 Annex B format: NAL units separated by start codes (0x00 0x00 0x00 0x01 or 0x00 0x00 0x01)
-        // We need to find frame boundaries - a new frame starts with:
-        // - SPS (NAL type 7)
-        // - PPS (NAL type 8)
-        // - IDR slice (NAL type 5)
-        // - Non-IDR slice (NAL type 1)
+        // For low latency, emit each complete NAL unit immediately instead of waiting for frame boundaries
 
         // Find all NAL unit start positions
         var nalStarts = new List<int>();
@@ -236,56 +238,38 @@ public class FfmpegProcessEncoder : IDisposable
             }
         }
 
-        if (nalStarts.Count == 0)
+        if (nalStarts.Count < 2)
         {
-            return; // No complete NAL units yet
+            return; // Need at least 2 start codes to know where one NAL ends
         }
 
-        // Group NAL units into frames (Access Units)
-        // A frame typically contains: [SPS, PPS,] IDR/non-IDR slice(s)
-        var frameStart = 0;
+        // Emit each complete NAL unit immediately (except the last one which may be incomplete)
         var lastEmittedEnd = 0;
-
-        for (int i = 1; i < nalStarts.Count; i++)
+        for (int i = 0; i < nalStarts.Count - 1; i++)
         {
             var nalStart = nalStarts[i];
-            var headerOffset = (data[nalStart + 2] == 1) ? 3 : 4;
-            var nalType = data[nalStart + headerOffset] & 0x1F;
+            var nalEnd = nalStarts[i + 1];
+            var nalSize = nalEnd - nalStart;
 
-            // New frame starts with slice NAL (type 1 or 5) after non-slice NALs
-            // Or if we see another slice after a slice
-            if (nalType == 1 || nalType == 5)
+            if (nalSize > 0)
             {
-                // Check if previous NAL was also a slice - if so, emit frame
-                var prevNalStart = nalStarts[i - 1];
-                var prevHeaderOffset = (data[prevNalStart + 2] == 1) ? 3 : 4;
-                var prevNalType = data[prevNalStart + prevHeaderOffset] & 0x1F;
+                var nalData = new byte[nalSize];
+                Buffer.BlockCopy(data, nalStart, nalData, 0, nalSize);
 
-                if (prevNalType == 1 || prevNalType == 5)
+                _frameCount++;
+                if (_frameCount <= 5 || _frameCount % 100 == 0)
                 {
-                    // Emit previous frame
-                    var frameEnd = nalStart;
-                    var frameSize = frameEnd - frameStart;
-                    if (frameSize > 0)
-                    {
-                        var frameData = new byte[frameSize];
-                        Buffer.BlockCopy(data, frameStart, frameData, 0, frameSize);
-
-                        _frameCount++;
-                        if (_frameCount <= 5 || _frameCount % 100 == 0)
-                        {
-                            Console.WriteLine($"FfmpegProcessEncoder: Emitting H264 frame {_frameCount}, size={frameSize} bytes");
-                        }
-
-                        OnEncodedFrame?.Invoke(durationRtpUnits, frameData);
-                        lastEmittedEnd = frameEnd;
-                    }
-                    frameStart = nalStart;
+                    var headerOffset = (data[nalStart + 2] == 1) ? 3 : 4;
+                    var nalType = data[nalStart + headerOffset] & 0x1F;
+                    Console.WriteLine($"FfmpegProcessEncoder: Emitting H264 NAL {_frameCount}, type={nalType}, size={nalSize} bytes");
                 }
+
+                OnEncodedFrame?.Invoke(durationRtpUnits, nalData);
+                lastEmittedEnd = nalEnd;
             }
         }
 
-        // Keep unprocessed data in buffer
+        // Keep the last incomplete NAL unit in buffer
         _buffer.SetLength(0);
         if (lastEmittedEnd < data.Length)
         {

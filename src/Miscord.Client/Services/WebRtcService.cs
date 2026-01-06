@@ -196,15 +196,28 @@ public class WebRtcService : IWebRtcService
 
     private readonly ISignalRService _signalR;
     private readonly ISettingsStore? _settingsStore;
+
+    // SFU mode: single connection to server
+    private RTCPeerConnection? _serverConnection;
+    private PeerConnectionState _serverConnectionState = PeerConnectionState.Closed;
+
+    // Legacy P2P: keep for backward compatibility if needed
     private readonly ConcurrentDictionary<Guid, RTCPeerConnection> _peerConnections = new();
     private readonly ConcurrentDictionary<Guid, PeerConnectionState> _peerStates = new();
 
-    // Shared audio source (microphone) for all peer connections
+    // Shared audio source (microphone) for server connection
     private SDL2AudioSource? _audioSource;
-    // Per-peer audio sinks (speakers) for receiving audio
+    // Single audio sink for receiving audio from server
+    private SDL2AudioEndPoint? _audioSink;
+    // Legacy P2P: per-peer audio sinks
     private readonly ConcurrentDictionary<Guid, SDL2AudioEndPoint> _audioSinks = new();
-    // Per-peer video decoders for receiving video
+    // Per-user video decoders (keyed by userId, server tells us which SSRC maps to which user)
     private readonly ConcurrentDictionary<Guid, FfmpegProcessDecoder> _videoDecoders = new();
+    // SSRC to UserId mapping for incoming video
+    private readonly ConcurrentDictionary<uint, Guid> _ssrcToUserMap = new();
+
+    // Pending SFU offer (received before JoinVoiceChannelAsync was called)
+    private (Guid ChannelId, string Sdp)? _pendingSfuOffer;
 
     // Video capture and encoding
     private VideoCapture? _videoCapture;
@@ -253,17 +266,23 @@ public class WebRtcService : IWebRtcService
         _signalR = signalR;
         _settingsStore = settingsStore;
 
-        // Subscribe to WebRTC signaling events
+        // Subscribe to SFU signaling events
+        _signalR.SfuOfferReceived += async e => await HandleSfuOfferAsync(e.ChannelId, e.Sdp);
+        _signalR.SfuIceCandidateReceived += async e => await HandleSfuIceCandidateAsync(e.Candidate, e.SdpMid, e.SdpMLineIndex);
+
+        // Legacy P2P signaling events (kept for backward compatibility)
         _signalR.WebRtcOfferReceived += async e => await HandleOfferAsync(e.FromUserId, e.Sdp);
         _signalR.WebRtcAnswerReceived += async e => await HandleAnswerAsync(e.FromUserId, e.Sdp);
         _signalR.IceCandidateReceived += async e => await HandleIceCandidateAsync(e.FromUserId, e.Candidate, e.SdpMid, e.SdpMLineIndex);
 
-        // Handle participant events
-        _signalR.VoiceParticipantJoined += async e =>
+        // Handle participant events - in SFU mode, we track participants for UI/video decoders
+        // but don't create P2P connections
+        _signalR.VoiceParticipantJoined += e =>
         {
             if (_currentChannelId == e.ChannelId && e.Participant.UserId != _localUserId)
             {
-                await CreatePeerConnectionAsync(e.Participant.UserId, isInitiator: true);
+                // In SFU mode, just ensure we have a video decoder ready for this user
+                EnsureVideoDecoderForUser(e.Participant.UserId);
             }
         };
 
@@ -271,6 +290,9 @@ public class WebRtcService : IWebRtcService
         {
             if (_currentChannelId == e.ChannelId)
             {
+                // Clean up video decoder for this user
+                RemoveVideoDecoderForUser(e.UserId);
+                // Legacy P2P cleanup
                 ClosePeerConnection(e.UserId);
             }
         };
@@ -387,20 +409,37 @@ public class WebRtcService : IWebRtcService
         await LeaveVoiceChannelAsync();
 
         _currentChannelId = channelId;
-        Console.WriteLine($"WebRTC: Joining voice channel {channelId}");
+        Console.WriteLine($"WebRTC: Joining voice channel {channelId} (SFU mode)");
 
         // Initialize microphone capture
         await InitializeAudioSourceAsync();
 
-        var otherParticipants = existingParticipants.Count(p => p.UserId != _localUserId);
+        // Initialize audio sink for receiving audio from server
+        await InitializeAudioSinkAsync();
 
-        // Don't create peer connections here as initiator.
-        // Existing participants will receive VoiceParticipantJoined event and will initiate.
-        // This prevents both sides from sending offers simultaneously.
-        Console.WriteLine($"WebRTC: Waiting for {otherParticipants} existing participants to initiate connections");
+        // Prepare video decoders for existing participants
+        foreach (var p in existingParticipants)
+        {
+            if (p.UserId != _localUserId)
+            {
+                EnsureVideoDecoderForUser(p.UserId);
+            }
+        }
 
-        // Set status to Connecting if we're waiting for peers, otherwise Connected (solo in channel)
-        UpdateConnectionStatus(otherParticipants > 0 ? VoiceConnectionStatus.Connecting : VoiceConnectionStatus.Connected);
+        // In SFU mode, the server will send us an SDP offer after we join
+        // Check if we already received a pending offer (timing issue where offer arrives before this method)
+        if (_pendingSfuOffer.HasValue && _pendingSfuOffer.Value.ChannelId == channelId)
+        {
+            Console.WriteLine($"WebRTC: Processing pending SFU offer for channel {channelId}");
+            var pending = _pendingSfuOffer.Value;
+            _pendingSfuOffer = null;
+            await ProcessSfuOfferAsync(pending.ChannelId, pending.Sdp);
+        }
+        else
+        {
+            Console.WriteLine($"WebRTC: Waiting for SFU offer from server...");
+            UpdateConnectionStatus(VoiceConnectionStatus.Connecting);
+        }
     }
 
     public async Task LeaveVoiceChannelAsync()
@@ -428,13 +467,40 @@ public class WebRtcService : IWebRtcService
             CameraStateChanged?.Invoke(false);
         }
 
-        // Close all peer connections and audio/video sinks
+        // Close SFU server connection
+        if (_serverConnection != null)
+        {
+            try
+            {
+                if (_audioSource != null)
+                {
+                    _audioSource.OnAudioSourceEncodedSample -= _serverConnection.SendAudio;
+                }
+                _serverConnection.close();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Error closing server connection: {ex.Message}");
+            }
+            _serverConnection = null;
+            _serverConnectionState = PeerConnectionState.Closed;
+        }
+
+        // Close all legacy P2P peer connections
         foreach (var userId in _peerConnections.Keys.ToList())
         {
             ClosePeerConnection(userId);
         }
 
-        // Stop and dispose audio source
+        // Clean up all video decoders
+        foreach (var userId in _videoDecoders.Keys.ToList())
+        {
+            RemoveVideoDecoderForUser(userId);
+        }
+        _ssrcToUserMap.Clear();
+        _pendingSfuOffer = null;
+
+        // Stop and dispose audio source (microphone)
         if (_audioSource != null)
         {
             try
@@ -449,9 +515,293 @@ public class WebRtcService : IWebRtcService
             _audioSource = null;
         }
 
+        // Stop and dispose audio sink (speaker)
+        if (_audioSink != null)
+        {
+            try
+            {
+                await _audioSink.CloseAudioSink();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Error closing audio sink: {ex.Message}");
+            }
+            _audioSink = null;
+        }
+
         _currentChannelId = null;
         UpdateConnectionStatus(VoiceConnectionStatus.Disconnected);
     }
+
+    // ==================== SFU Methods ====================
+
+    private async Task InitializeAudioSinkAsync()
+    {
+        if (_audioSink != null) return;
+
+        try
+        {
+            var audioEncoder = new AudioEncoder();
+            var outputDevice = _settingsStore?.Settings.AudioOutputDevice ?? string.Empty;
+            _audioSink = new SDL2AudioEndPoint(outputDevice, audioEncoder);
+            await _audioSink.StartAudioSink();
+            Console.WriteLine("WebRTC: Audio sink initialized");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WebRTC: Failed to initialize audio sink: {ex.Message}");
+            _audioSink = null;
+        }
+    }
+
+    private void EnsureVideoDecoderForUser(Guid userId)
+    {
+        if (_videoDecoders.ContainsKey(userId)) return;
+
+        try
+        {
+            // Use 720p 16:9 for incoming video (will scale with aspect ratio preservation)
+            var decoder = new FfmpegProcessDecoder(1280, 720, VideoCodecsEnum.H264);
+            decoder.OnDecodedFrame += (width, height, rgbData) =>
+            {
+                VideoFrameReceived?.Invoke(userId, width, height, rgbData);
+            };
+            decoder.Start();
+            _videoDecoders[userId] = decoder;
+            Console.WriteLine($"WebRTC: Created video decoder for user {userId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WebRTC: Failed to create video decoder for user {userId}: {ex.Message}");
+        }
+    }
+
+    private void RemoveVideoDecoderForUser(Guid userId)
+    {
+        if (_videoDecoders.TryRemove(userId, out var decoder))
+        {
+            try
+            {
+                decoder.Dispose();
+                Console.WriteLine($"WebRTC: Removed video decoder for user {userId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Error disposing video decoder: {ex.Message}");
+            }
+        }
+    }
+
+    /// <summary>
+    /// Handles the SDP offer from the SFU server.
+    /// Creates a server connection and sends back an answer.
+    /// </summary>
+    private async Task HandleSfuOfferAsync(Guid channelId, string sdp)
+    {
+        // If we don't have a current channel yet, cache the offer for later
+        if (_currentChannelId == null)
+        {
+            Console.WriteLine($"WebRTC: Caching SFU offer for channel {channelId} (no current channel yet)");
+            _pendingSfuOffer = (channelId, sdp);
+            return;
+        }
+
+        if (_currentChannelId != channelId)
+        {
+            Console.WriteLine($"WebRTC: Ignoring SFU offer for channel {channelId} (current: {_currentChannelId})");
+            return;
+        }
+
+        await ProcessSfuOfferAsync(channelId, sdp);
+    }
+
+    /// <summary>
+    /// Actually processes the SFU offer - separated out so it can be called from HandleSfuOfferAsync or JoinVoiceChannelAsync
+    /// </summary>
+    private async Task ProcessSfuOfferAsync(Guid channelId, string sdp)
+    {
+
+        Console.WriteLine($"WebRTC: Received SFU offer for channel {channelId}");
+
+        // Close existing server connection if any
+        if (_serverConnection != null)
+        {
+            try
+            {
+                _serverConnection.close();
+            }
+            catch { }
+            _serverConnection = null;
+        }
+
+        var config = new RTCConfiguration
+        {
+            iceServers = new List<RTCIceServer>
+            {
+                new RTCIceServer { urls = "stun:stun.l.google.com:19302" },
+                new RTCIceServer { urls = "stun:stun1.l.google.com:19302" }
+            }
+        };
+
+        _serverConnection = new RTCPeerConnection(config);
+        _serverConnectionState = PeerConnectionState.New;
+
+        // Add audio track for sending our microphone audio to server
+        if (_audioSource != null)
+        {
+            var audioFormats = _audioSource.GetAudioSourceFormats();
+            var audioTrack = new MediaStreamTrack(audioFormats, MediaStreamStatusEnum.SendRecv);
+            _serverConnection.addTrack(audioTrack);
+            _audioSource.OnAudioSourceEncodedSample += _serverConnection.SendAudio;
+        }
+
+        // Add video track for sending our camera video to server
+        var videoFormats = new List<VideoFormat>
+        {
+            new VideoFormat(VideoCodecsEnum.H264, VideoFps)
+        };
+        var videoTrack = new MediaStreamTrack(videoFormats, MediaStreamStatusEnum.SendRecv);
+        _serverConnection.addTrack(videoTrack);
+
+        // Handle audio format negotiation
+        _serverConnection.OnAudioFormatsNegotiated += formats =>
+        {
+            Console.WriteLine($"WebRTC SFU: Audio formats negotiated: {string.Join(", ", formats.Select(f => f.FormatName))}");
+            var format = formats.First();
+            _audioSource?.SetAudioSourceFormat(format);
+            _audioSink?.SetAudioSinkFormat(format);
+        };
+
+        // Handle video format negotiation
+        _serverConnection.OnVideoFormatsNegotiated += formats =>
+        {
+            Console.WriteLine($"WebRTC SFU: Video formats negotiated: {string.Join(", ", formats.Select(f => f.FormatName))}");
+            _videoCodec = formats.First().Codec;
+        };
+
+        // Handle incoming RTP packets (audio and video from server)
+        _serverConnection.OnRtpPacketReceived += (rep, media, rtpPkt) =>
+        {
+            if (media == SDPMediaTypesEnum.audio)
+            {
+                if (!_isDeafened && _audioSink != null)
+                {
+                    _audioSink.GotAudioRtp(rep, rtpPkt.Header.SyncSource, rtpPkt.Header.SequenceNumber,
+                        rtpPkt.Header.Timestamp, rtpPkt.Header.PayloadType,
+                        rtpPkt.Header.MarkerBit == 1, rtpPkt.Payload);
+                }
+            }
+        };
+
+        // Handle incoming video frames from server
+        // In SFU mode, server forwards video from all participants
+        // TODO: Need SSRC mapping to know which user each video stream is from
+        // For now, we'll use a simple approach: route to first non-local video decoder
+        var receivedFrameCount = 0;
+        _serverConnection.OnVideoFrameReceived += (rep, timestamp, frame, format) =>
+        {
+            receivedFrameCount++;
+            if (receivedFrameCount <= 5 || receivedFrameCount % 100 == 0)
+            {
+                Console.WriteLine($"WebRTC SFU: Received video frame {receivedFrameCount}, size={frame.Length}");
+            }
+
+            // Route video to appropriate decoder
+            // For now, route to first available decoder (will improve with SSRC mapping)
+            var decoder = _videoDecoders.Values.FirstOrDefault();
+            if (decoder != null)
+            {
+                try
+                {
+                    decoder.DecodeFrame(frame);
+                }
+                catch (Exception ex)
+                {
+                    if (receivedFrameCount <= 5)
+                    {
+                        Console.WriteLine($"WebRTC SFU: DecodeFrame error: {ex.Message}");
+                    }
+                }
+            }
+        };
+
+        // ICE candidate handling
+        _serverConnection.onicecandidate += async candidate =>
+        {
+            if (candidate?.candidate != null && _currentChannelId.HasValue)
+            {
+                await _signalR.SendSfuIceCandidateAsync(
+                    _currentChannelId.Value,
+                    candidate.candidate,
+                    candidate.sdpMid,
+                    (int?)candidate.sdpMLineIndex
+                );
+            }
+        };
+
+        // Connection state changes
+        _serverConnection.onconnectionstatechange += state =>
+        {
+            Console.WriteLine($"WebRTC SFU: Connection state: {state}");
+            _serverConnectionState = state switch
+            {
+                RTCPeerConnectionState.connecting => PeerConnectionState.Connecting,
+                RTCPeerConnectionState.connected => PeerConnectionState.Connected,
+                RTCPeerConnectionState.disconnected => PeerConnectionState.Disconnected,
+                RTCPeerConnectionState.failed => PeerConnectionState.Failed,
+                RTCPeerConnectionState.closed => PeerConnectionState.Closed,
+                _ => PeerConnectionState.New
+            };
+
+            if (state == RTCPeerConnectionState.connected)
+            {
+                UpdateConnectionStatus(VoiceConnectionStatus.Connected);
+            }
+            else if (state == RTCPeerConnectionState.failed)
+            {
+                UpdateConnectionStatus(VoiceConnectionStatus.Disconnected);
+            }
+        };
+
+        // Set remote description (server's offer)
+        var remoteDesc = new RTCSessionDescriptionInit
+        {
+            type = RTCSdpType.offer,
+            sdp = sdp
+        };
+        _serverConnection.setRemoteDescription(remoteDesc);
+
+        // Create and send answer
+        var answer = _serverConnection.createAnswer();
+        await _serverConnection.setLocalDescription(answer);
+
+        Console.WriteLine($"WebRTC SFU: Sending answer to server");
+        await _signalR.SendSfuAnswerAsync(channelId, answer.sdp);
+    }
+
+    /// <summary>
+    /// Handles ICE candidates from the SFU server.
+    /// </summary>
+    private async Task HandleSfuIceCandidateAsync(string candidate, string? sdpMid, int? sdpMLineIndex)
+    {
+        if (_serverConnection == null)
+        {
+            Console.WriteLine("WebRTC SFU: Ignoring ICE candidate - no server connection");
+            return;
+        }
+
+        var iceCandidate = new RTCIceCandidateInit
+        {
+            candidate = candidate,
+            sdpMid = sdpMid ?? "0",
+            sdpMLineIndex = (ushort)(sdpMLineIndex ?? 0)
+        };
+
+        _serverConnection.addIceCandidate(iceCandidate);
+        await Task.CompletedTask;
+    }
+
+    // ==================== Legacy P2P Methods ====================
 
     private async Task CreatePeerConnectionAsync(Guid remoteUserId, bool isInitiator)
     {
@@ -512,7 +862,7 @@ public class WebRtcService : IWebRtcService
         FfmpegProcessDecoder? videoDecoder = null;
         try
         {
-            // Use 1280x720 as default, will recreate if needed
+            // Use 720p 16:9 for incoming video (will scale with aspect ratio preservation)
             videoDecoder = new FfmpegProcessDecoder(1280, 720, VideoCodecsEnum.H264);
             videoDecoder.OnDecodedFrame += (width, height, rgbData) =>
             {
@@ -870,10 +1220,16 @@ public class WebRtcService : IWebRtcService
         _sentVideoFrameCount++;
         if (_sentVideoFrameCount <= 5 || _sentVideoFrameCount % 100 == 0)
         {
-            Console.WriteLine($"WebRTC: Sending video frame {_sentVideoFrameCount}, size={encodedSample.Length}, peers={_peerConnections.Count}");
+            Console.WriteLine($"WebRTC: Sending video frame {_sentVideoFrameCount}, size={encodedSample.Length}, server={_serverConnection != null}, peers={_peerConnections.Count}");
         }
 
-        // Send encoded video to all peer connections
+        // SFU mode: send to server connection
+        if (_serverConnection != null && _serverConnectionState == PeerConnectionState.Connected)
+        {
+            _serverConnection.SendVideo(durationRtpUnits, encodedSample);
+        }
+
+        // Legacy P2P mode: send to all peer connections
         foreach (var pc in _peerConnections.Values)
         {
             pc.SendVideo(durationRtpUnits, encodedSample);
@@ -914,7 +1270,10 @@ public class WebRtcService : IWebRtcService
                 System.Runtime.InteropServices.Marshal.Copy(frame.DataPointer, bgrData, 0, dataSize);
 
                 // Send frame to encoder (encoding happens asynchronously in FfmpegProcessEncoder)
-                if (_processEncoder != null && _peerConnections.Count > 0)
+                // SFU mode: check _serverConnection, P2P mode: check _peerConnections
+                var hasServerConnection = _serverConnection != null && _serverConnectionState == PeerConnectionState.Connected;
+                var hasPeerConnections = _peerConnections.Count > 0;
+                if (_processEncoder != null && (hasServerConnection || hasPeerConnections))
                 {
                     try
                     {

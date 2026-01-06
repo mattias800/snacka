@@ -47,11 +47,15 @@ public class FfmpegProcessDecoder : IDisposable
         };
 
         // Decode H264/VP8 Annex B input to raw RGB24 output
+        // Ultra low-latency: minimal probing, no buffering
+        // Scale to target size while preserving aspect ratio
         var startInfo = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-f {(_codec == VideoCodecsEnum.H264 ? "h264" : "ivf")} -i pipe:0 " +
-                       $"-f rawvideo -pix_fmt rgb24 -s {_width}x{_height} pipe:1",
+            Arguments = $"-fflags nobuffer -flags low_delay -probesize 32 -analyzeduration 0 " +
+                       $"-f {(_codec == VideoCodecsEnum.H264 ? "h264" : "ivf")} -i pipe:0 " +
+                       $"-vf \"scale={_width}:{_height}:force_original_aspect_ratio=decrease,pad={_width}:{_height}:(ow-iw)/2:(oh-ih)/2\" " +
+                       $"-f rawvideo -pix_fmt rgb24 pipe:1",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -67,15 +71,18 @@ public class FfmpegProcessDecoder : IDisposable
         // Start reading decoded output
         _outputReaderTask = Task.Run(ReadDecodedOutputAsync);
 
-        // Log stderr for debugging
+        // Log stderr line by line for debugging
         Task.Run(async () =>
         {
             try
             {
-                var stderr = await _ffmpegProcess.StandardError.ReadToEndAsync();
-                if (!string.IsNullOrWhiteSpace(stderr) && stderr.Contains("error"))
+                string? line;
+                while ((line = await _ffmpegProcess.StandardError.ReadLineAsync()) != null)
                 {
-                    Console.WriteLine($"FfmpegProcessDecoder stderr: {stderr.Substring(0, Math.Min(500, stderr.Length))}");
+                    if (line.Contains("error") || line.Contains("Error") || line.Contains("Invalid") || line.Contains("failed"))
+                    {
+                        Console.WriteLine($"FfmpegProcessDecoder ERROR: {line}");
+                    }
                 }
             }
             catch { }

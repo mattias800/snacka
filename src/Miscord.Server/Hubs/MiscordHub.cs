@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Miscord.Server.Data;
 using Miscord.Server.DTOs;
 using Miscord.Server.Services;
+using Miscord.Server.Services.Sfu;
 
 namespace Miscord.Server.Hubs;
 
@@ -15,15 +16,19 @@ public class MiscordHub : Hub
 {
     private readonly MiscordDbContext _db;
     private readonly IVoiceService _voiceService;
+    private readonly ISfuService _sfuService;
+    private readonly IHubContext<MiscordHub> _hubContext;
     private readonly ILogger<MiscordHub> _logger;
     private static readonly Dictionary<string, Guid> ConnectedUsers = new();
     private static readonly Dictionary<Guid, string> UserConnections = new(); // UserId -> ConnectionId
     private static readonly object Lock = new();
 
-    public MiscordHub(MiscordDbContext db, IVoiceService voiceService, ILogger<MiscordHub> logger)
+    public MiscordHub(MiscordDbContext db, IVoiceService voiceService, ISfuService sfuService, IHubContext<MiscordHub> hubContext, ILogger<MiscordHub> logger)
     {
         _db = db;
         _voiceService = voiceService;
+        _sfuService = sfuService;
+        _hubContext = hubContext;
         _logger = logger;
     }
 
@@ -95,6 +100,9 @@ public class MiscordHub : Hub
                 // Get the channel to find its community
                 var channel = await _db.Channels
                     .FirstOrDefaultAsync(c => c.Id == currentChannel.Value);
+
+                // Remove SFU session
+                _sfuService.RemoveSession(currentChannel.Value, userId.Value);
 
                 await _voiceService.LeaveChannelAsync(currentChannel.Value, userId.Value);
 
@@ -209,6 +217,54 @@ public class MiscordHub : Hub
             // Join the voice channel SignalR group (for WebRTC signaling)
             await Groups.AddToGroupAsync(Context.ConnectionId, $"voice:{channelId}");
 
+            // Create SFU session for this user
+            var session = _sfuService.GetOrCreateSession(channelId, userId.Value);
+
+            // Capture connection ID for ICE candidate callback
+            var connectionId = Context.ConnectionId;
+
+            // Subscribe to ICE candidates from this session
+            // Use captured hubContext since the hub instance may be disposed when this fires
+            var hubContext = _hubContext;
+            session.OnIceCandidate += candidate =>
+            {
+                // Queue the ICE candidate to be sent asynchronously
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        string? targetConnectionId;
+                        lock (Lock)
+                        {
+                            UserConnections.TryGetValue(userId.Value, out targetConnectionId);
+                        }
+
+                        if (targetConnectionId != null)
+                        {
+                            await hubContext.Clients.Client(targetConnectionId).SendAsync("SfuIceCandidate", new
+                            {
+                                Candidate = candidate.candidate,
+                                SdpMid = candidate.sdpMid,
+                                SdpMLineIndex = candidate.sdpMLineIndex
+                            });
+                            _logger.LogDebug("Sent ICE candidate to user {UserId}", userId.Value);
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to send ICE candidate to user {UserId}", userId.Value);
+                    }
+                });
+            };
+
+            // Add media tracks and create offer
+            session.AddMediaTracks();
+            var sdpOffer = await session.CreateOfferAsync();
+
+            // Send SFU offer to the client
+            await Clients.Caller.SendAsync("SfuOffer", new { Sdp = sdpOffer, ChannelId = channelId });
+            _logger.LogInformation("Sent SFU offer to user {UserId} for channel {ChannelId}", userId.Value, channelId);
+
             // Notify ALL users in the community (so everyone can see who's in voice)
             await Clients.OthersInGroup($"community:{channel.CommunityId}")
                 .SendAsync("VoiceParticipantJoined", new VoiceParticipantJoinedEvent(channelId, participant));
@@ -224,6 +280,48 @@ public class MiscordHub : Hub
         }
     }
 
+    /// <summary>
+    /// Receives the SDP answer from a client for the SFU connection.
+    /// </summary>
+    public async Task SendSfuAnswer(Guid channelId, string sdp)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        var session = _sfuService.GetSession(channelId, userId.Value);
+        if (session is null)
+        {
+            _logger.LogWarning("No SFU session found for user {UserId} in channel {ChannelId}", userId.Value, channelId);
+            return;
+        }
+
+        session.SetRemoteAnswer(sdp);
+        _logger.LogInformation("Set SFU answer from user {UserId} for channel {ChannelId}", userId.Value, channelId);
+
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Receives an ICE candidate from a client for the SFU connection.
+    /// </summary>
+    public async Task SendSfuIceCandidate(Guid channelId, string candidate, string? sdpMid, int? sdpMLineIndex)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        var session = _sfuService.GetSession(channelId, userId.Value);
+        if (session is null)
+        {
+            _logger.LogWarning("No SFU session found for user {UserId} in channel {ChannelId}", userId.Value, channelId);
+            return;
+        }
+
+        session.AddIceCandidate(candidate, sdpMid, sdpMLineIndex);
+        _logger.LogDebug("Added ICE candidate from user {UserId} for channel {ChannelId}", userId.Value, channelId);
+
+        await Task.CompletedTask;
+    }
+
     public async Task LeaveVoiceChannel(Guid channelId)
     {
         var userId = GetUserId();
@@ -232,6 +330,9 @@ public class MiscordHub : Hub
         // Get the channel to find its community
         var channel = await _db.Channels
             .FirstOrDefaultAsync(c => c.Id == channelId);
+
+        // Remove SFU session
+        _sfuService.RemoveSession(channelId, userId.Value);
 
         await _voiceService.LeaveChannelAsync(channelId, userId.Value);
         await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"voice:{channelId}");
