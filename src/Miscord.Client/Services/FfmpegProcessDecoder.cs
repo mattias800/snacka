@@ -117,10 +117,29 @@ public class FfmpegProcessDecoder : IDisposable
 
         try
         {
-            while (!_cts.Token.IsCancellationRequested)
+            while (!_cts.Token.IsCancellationRequested && _ffmpegProcess != null && !_ffmpegProcess.HasExited)
             {
-                var bytesToRead = _frameSize - bytesInBuffer;
-                var bytesRead = await stream.ReadAsync(frameBuffer, bytesInBuffer, bytesToRead, _cts.Token);
+                // Use a timeout to periodically check process status
+                using var readCts = CancellationTokenSource.CreateLinkedTokenSource(_cts.Token);
+                readCts.CancelAfter(TimeSpan.FromSeconds(5));
+
+                int bytesRead;
+                try
+                {
+                    var bytesToRead = _frameSize - bytesInBuffer;
+                    bytesRead = await stream.ReadAsync(frameBuffer, bytesInBuffer, bytesToRead, readCts.Token);
+                }
+                catch (OperationCanceledException) when (!_cts.Token.IsCancellationRequested)
+                {
+                    // Read timeout - check if process is still alive
+                    if (_ffmpegProcess == null || _ffmpegProcess.HasExited)
+                    {
+                        Console.WriteLine("FfmpegProcessDecoder: Process exited during read");
+                        break;
+                    }
+                    continue; // Try again
+                }
+
                 if (bytesRead == 0) break;
 
                 bytesInBuffer += bytesRead;

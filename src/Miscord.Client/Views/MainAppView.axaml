@@ -234,6 +234,27 @@
                                     <TextBlock Text="📷" Foreground="White" FontSize="16"/>
                                 </Button>
                             </Panel>
+                            <!-- Screen Share Button - green when sharing -->
+                            <Panel>
+                                <Button Command="{Binding ToggleScreenShareCommand}"
+                                        Padding="8"
+                                        CornerRadius="4"
+                                        Cursor="Hand"
+                                        Background="#3ba55c"
+                                        ToolTip.Tip="Stop sharing"
+                                        IsVisible="{Binding IsScreenSharing}">
+                                    <TextBlock Text="🖥️" Foreground="White" FontSize="16"/>
+                                </Button>
+                                <Button Command="{Binding ToggleScreenShareCommand}"
+                                        Padding="8"
+                                        CornerRadius="4"
+                                        Cursor="Hand"
+                                        Background="Transparent"
+                                        ToolTip.Tip="Share screen"
+                                        IsVisible="{Binding !IsScreenSharing}">
+                                    <TextBlock Text="🖥️" Foreground="White" FontSize="16"/>
+                                </Button>
+                            </Panel>
                             <Button Command="{Binding LeaveVoiceChannelCommand}"
                                     Background="#ed4245"
                                     Padding="8"

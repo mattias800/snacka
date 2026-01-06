@@ -37,6 +37,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isMuted;
     private bool _isDeafened;
     private bool _isCameraOn;
+    private bool _isScreenSharing;
     private VoiceConnectionStatus _voiceConnectionStatus = VoiceConnectionStatus.Disconnected;
     private ObservableCollection<VoiceParticipantResponse> _voiceParticipants = new();
 
@@ -153,6 +154,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         ToggleMuteCommand = ReactiveCommand.CreateFromTask(ToggleMuteAsync);
         ToggleDeafenCommand = ReactiveCommand.CreateFromTask(ToggleDeafenAsync);
         ToggleCameraCommand = ReactiveCommand.CreateFromTask(ToggleCameraAsync);
+        ToggleScreenShareCommand = ReactiveCommand.CreateFromTask(ToggleScreenShareAsync);
 
         var canSendMessage = this.WhenAnyValue(
             x => x.MessageInput,
@@ -580,6 +582,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isCameraOn, value);
     }
 
+    public bool IsScreenSharing
+    {
+        get => _isScreenSharing;
+        set => this.RaiseAndSetIfChanged(ref _isScreenSharing, value);
+    }
+
     public VoiceConnectionStatus VoiceConnectionStatus
     {
         get => _voiceConnectionStatus;
@@ -739,6 +747,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleMuteCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleDeafenCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleCameraCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleScreenShareCommand { get; }
 
     public bool CanSwitchServer => _onSwitchServer is not null;
 
@@ -1416,6 +1425,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsMuted = false;
         IsDeafened = false;
         IsCameraOn = false;
+        IsScreenSharing = false;
 
         // Clear voice channel content view
         SelectedVoiceChannelForViewing = null;
@@ -1480,6 +1490,36 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to toggle camera: {ex.Message}");
+        }
+    }
+
+    private async Task ToggleScreenShareAsync()
+    {
+        if (CurrentVoiceChannel is null) return;
+
+        try
+        {
+            var newState = !IsScreenSharing;
+            await _webRtc.SetScreenSharingAsync(newState);
+            IsScreenSharing = newState;
+
+            // If screen sharing is on, camera is off (WebRTC service handles this)
+            if (newState)
+            {
+                IsCameraOn = false;
+            }
+
+            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: IsScreenSharing, IsCameraOn: IsCameraOn));
+
+            // Update our own state in the local view models
+            var state = new VoiceStateUpdate(IsScreenSharing: newState, IsCameraOn: IsCameraOn);
+            var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
+            voiceChannel?.UpdateParticipantState(_auth.UserId, state);
+            _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to toggle screen share: {ex.Message}");
         }
     }
 

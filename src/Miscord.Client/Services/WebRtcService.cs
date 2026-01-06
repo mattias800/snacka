@@ -1,4 +1,5 @@
 using System.Collections.Concurrent;
+using System.Diagnostics;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using SIPSorcery.Media;
@@ -20,6 +21,7 @@ public interface IWebRtcService : IAsyncDisposable
     IReadOnlyDictionary<Guid, PeerConnectionState> PeerStates { get; }
     bool IsSpeaking { get; }
     bool IsCameraOn { get; }
+    bool IsScreenSharing { get; }
 
     Task JoinVoiceChannelAsync(Guid channelId, IEnumerable<VoiceParticipantResponse> existingParticipants);
     Task LeaveVoiceChannelAsync();
@@ -31,12 +33,14 @@ public interface IWebRtcService : IAsyncDisposable
     void SetMuted(bool muted);
     void SetDeafened(bool deafened);
     Task SetCameraAsync(bool enabled);
+    Task SetScreenSharingAsync(bool enabled);
 
     event Action<Guid>? PeerConnected;
     event Action<Guid>? PeerDisconnected;
     event Action<VoiceConnectionStatus>? ConnectionStatusChanged;
     event Action<bool>? SpeakingChanged;
     event Action<bool>? CameraStateChanged;
+    event Action<bool>? ScreenSharingStateChanged;
     /// <summary>
     /// Fired when a video frame is received from a peer. Args: (userId, width, height, rgbData)
     /// </summary>
@@ -230,6 +234,18 @@ public class WebRtcService : IWebRtcService
     private const int VideoHeight = 480;
     private const int VideoFps = 15;
 
+    // Screen sharing
+    private Process? _screenCaptureProcess;
+    private FfmpegProcessEncoder? _screenEncoder;
+    private CancellationTokenSource? _screenCts;
+    private Task? _screenCaptureTask;
+    private bool _isScreenSharing;
+    // Screen share at 1080p 30fps - good balance for game streaming
+    // TODO: Make this configurable for 4K support
+    private const int ScreenWidth = 1920;
+    private const int ScreenHeight = 1080;
+    private const int ScreenFps = 30;
+
     private Guid? _currentChannelId;
     private Guid _localUserId;
     private bool _isMuted;
@@ -249,12 +265,14 @@ public class WebRtcService : IWebRtcService
     public IReadOnlyDictionary<Guid, PeerConnectionState> PeerStates => _peerStates;
     public bool IsSpeaking => _isSpeaking;
     public bool IsCameraOn => _isCameraOn;
+    public bool IsScreenSharing => _isScreenSharing;
 
     public event Action<Guid>? PeerConnected;
     public event Action<Guid>? PeerDisconnected;
     public event Action<VoiceConnectionStatus>? ConnectionStatusChanged;
     public event Action<bool>? SpeakingChanged;
     public event Action<bool>? CameraStateChanged;
+    public event Action<bool>? ScreenSharingStateChanged;
     public event Action<Guid, int, int, byte[]>? VideoFrameReceived;
     /// <summary>
     /// Fired when a local video frame is captured (for self-preview). Args: (width, height, rgbData)
@@ -495,6 +513,14 @@ public class WebRtcService : IWebRtcService
             CameraStateChanged?.Invoke(false);
         }
 
+        // Stop screen sharing
+        if (_isScreenSharing)
+        {
+            await StopScreenCaptureAsync();
+            _isScreenSharing = false;
+            ScreenSharingStateChanged?.Invoke(false);
+        }
+
         // Close SFU server connection
         if (_serverConnection != null)
         {
@@ -589,7 +615,8 @@ public class WebRtcService : IWebRtcService
         try
         {
             // Use 720p 16:9 for incoming video (will scale with aspect ratio preservation)
-            var decoder = new FfmpegProcessDecoder(1280, 720, VideoCodecsEnum.H264);
+            // Use 1080p to support both camera (upscaled) and screen share (native)
+            var decoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264);
             decoder.OnDecodedFrame += (width, height, rgbData) =>
             {
                 VideoFrameReceived?.Invoke(userId, width, height, rgbData);
@@ -885,8 +912,8 @@ public class WebRtcService : IWebRtcService
         FfmpegProcessDecoder? videoDecoder = null;
         try
         {
-            // Use 720p 16:9 for incoming video (will scale with aspect ratio preservation)
-            videoDecoder = new FfmpegProcessDecoder(1280, 720, VideoCodecsEnum.H264);
+            // Use 1080p to support both camera (upscaled) and screen share (native)
+            videoDecoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264);
             videoDecoder.OnDecodedFrame += (width, height, rgbData) =>
             {
                 VideoFrameReceived?.Invoke(remoteUserId, width, height, rgbData);
@@ -1171,6 +1198,193 @@ public class WebRtcService : IWebRtcService
         }
 
         CameraStateChanged?.Invoke(enabled);
+    }
+
+    public async Task SetScreenSharingAsync(bool enabled)
+    {
+        if (_isScreenSharing == enabled) return;
+
+        _isScreenSharing = enabled;
+        Console.WriteLine($"WebRTC: Screen Sharing = {enabled}");
+
+        if (enabled)
+        {
+            // Stop camera if it's on - can only do one video source at a time for now
+            if (_isCameraOn)
+            {
+                await SetCameraAsync(false);
+            }
+            await StartScreenCaptureAsync();
+        }
+        else
+        {
+            await StopScreenCaptureAsync();
+        }
+
+        ScreenSharingStateChanged?.Invoke(enabled);
+    }
+
+    private async Task StartScreenCaptureAsync()
+    {
+        if (_screenCaptureProcess != null) return;
+
+        try
+        {
+            Console.WriteLine("WebRTC: Starting screen capture...");
+
+            // Create encoder for screen content (same as camera but larger resolution)
+            _screenEncoder = new FfmpegProcessEncoder(ScreenWidth, ScreenHeight, ScreenFps, VideoCodecsEnum.H264);
+            _screenEncoder.OnEncodedFrame += OnLocalVideoEncoded;
+            _screenEncoder.Start();
+
+            // Start FFmpeg screen capture process
+            // On macOS, use avfoundation with "Capture screen 0"
+            var ffmpegPath = "ffmpeg";
+            var captureDevice = OperatingSystem.IsMacOS() ? "avfoundation" : "x11grab";
+            var inputDevice = OperatingSystem.IsMacOS() ? "Capture screen 0" : ":0.0";
+
+            var args = $"-f {captureDevice} -framerate {ScreenFps} -i \"{inputDevice}\" " +
+                       $"-vf \"scale={ScreenWidth}:{ScreenHeight}:force_original_aspect_ratio=decrease,pad={ScreenWidth}:{ScreenHeight}:(ow-iw)/2:(oh-ih)/2,format=bgr24\" " +
+                       $"-f rawvideo -pix_fmt bgr24 pipe:1";
+
+            Console.WriteLine($"WebRTC: Screen capture command: {ffmpegPath} {args}");
+
+            _screenCaptureProcess = new Process
+            {
+                StartInfo = new ProcessStartInfo
+                {
+                    FileName = ffmpegPath,
+                    Arguments = args,
+                    UseShellExecute = false,
+                    RedirectStandardOutput = true,
+                    RedirectStandardError = true,
+                    CreateNoWindow = true
+                }
+            };
+
+            _screenCaptureProcess.Start();
+
+            // Start reading screen frames
+            _screenCts = new CancellationTokenSource();
+            _screenCaptureTask = Task.Run(() => ScreenCaptureLoop(_screenCts.Token));
+
+            Console.WriteLine("WebRTC: Screen capture started");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WebRTC: Failed to start screen capture: {ex.Message}");
+            await StopScreenCaptureAsync();
+            _isScreenSharing = false;
+            ScreenSharingStateChanged?.Invoke(false);
+        }
+    }
+
+    private void ScreenCaptureLoop(CancellationToken token)
+    {
+        var frameSize = ScreenWidth * ScreenHeight * 3; // BGR24
+        var buffer = new byte[frameSize];
+        var frameCount = 0;
+
+        Console.WriteLine($"WebRTC: Screen capture loop starting - {ScreenWidth}x{ScreenHeight} @ {ScreenFps}fps");
+
+        try
+        {
+            var stream = _screenCaptureProcess?.StandardOutput.BaseStream;
+            if (stream == null) return;
+
+            while (!token.IsCancellationRequested && _screenCaptureProcess != null && !_screenCaptureProcess.HasExited)
+            {
+                var bytesRead = 0;
+                while (bytesRead < frameSize && !token.IsCancellationRequested)
+                {
+                    var read = stream.Read(buffer, bytesRead, frameSize - bytesRead);
+                    if (read == 0) break;
+                    bytesRead += read;
+                }
+
+                if (bytesRead < frameSize) break;
+
+                frameCount++;
+                if (frameCount <= 5 || frameCount % 100 == 0)
+                {
+                    Console.WriteLine($"WebRTC: Screen capture frame {frameCount}");
+                }
+
+                // Send frame to encoder
+                _screenEncoder?.EncodeFrame(buffer);
+
+                // Generate preview (every 2nd frame to reduce overhead)
+                if (frameCount % 2 == 0)
+                {
+                    // Convert BGR to RGB for preview
+                    var rgbData = new byte[frameSize];
+                    for (var i = 0; i < frameSize; i += 3)
+                    {
+                        rgbData[i] = buffer[i + 2];     // R
+                        rgbData[i + 1] = buffer[i + 1]; // G
+                        rgbData[i + 2] = buffer[i];     // B
+                    }
+                    LocalVideoFrameCaptured?.Invoke(ScreenWidth, ScreenHeight, rgbData);
+                }
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!token.IsCancellationRequested)
+            {
+                Console.WriteLine($"WebRTC: Screen capture loop error: {ex.Message}");
+            }
+        }
+
+        Console.WriteLine($"WebRTC: Screen capture loop ended after {frameCount} frames");
+    }
+
+    private async Task StopScreenCaptureAsync()
+    {
+        Console.WriteLine("WebRTC: Stopping screen capture...");
+
+        _screenCts?.Cancel();
+
+        if (_screenCaptureTask != null)
+        {
+            try
+            {
+                await _screenCaptureTask.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (TimeoutException)
+            {
+                Console.WriteLine("WebRTC: Screen capture task did not stop in time");
+            }
+            catch (OperationCanceledException) { }
+            _screenCaptureTask = null;
+        }
+
+        _screenCts?.Dispose();
+        _screenCts = null;
+
+        if (_screenCaptureProcess != null)
+        {
+            try
+            {
+                if (!_screenCaptureProcess.HasExited)
+                {
+                    _screenCaptureProcess.Kill();
+                    await _screenCaptureProcess.WaitForExitAsync();
+                }
+            }
+            catch { }
+            _screenCaptureProcess.Dispose();
+            _screenCaptureProcess = null;
+        }
+
+        if (_screenEncoder != null)
+        {
+            _screenEncoder.OnEncodedFrame -= OnLocalVideoEncoded;
+            _screenEncoder.Dispose();
+            _screenEncoder = null;
+        }
+
+        Console.WriteLine("WebRTC: Screen capture stopped");
     }
 
     private async Task StartVideoCaptureAsync()

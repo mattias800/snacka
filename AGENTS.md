@@ -211,12 +211,32 @@ dotnet run --project src/Miscord.Client -- \
 - ✅ Voice channels with SFU architecture
 - ✅ Webcam streaming with low-latency H264
 - ✅ Audio device selection in settings
+- ✅ Direct messages (DMs) with inline view
 
 ### In Progress / Next
-- Screen sharing support
-- Direct messages (DMs)
+- Screen sharing: Currently toggle mode (camera OR screen). Phase 2: camera AND screen as separate streams
 - Testing and optimization
 - UI polish
+
+## Screen Sharing Architecture
+
+### Current Implementation (Phase 1 - Toggle Mode)
+- Screen share uses FFmpeg avfoundation to capture "Capture screen 0"
+- Resolution: 1920x1080 @ 30fps (suitable for game streaming)
+- Uses the same video track as camera (toggle between them)
+- Limitation: Can't share camera and screen simultaneously
+
+### Planned (Phase 2 - Dual Streams)
+For simultaneous camera and screen share, each user needs two video boxes in the grid:
+1. **Separate RTP streams**: Camera and screen need different SSRCs
+2. **SFU changes**: Server must forward both streams separately
+3. **UI changes**: Display two tiles per user if both are active
+4. **Signaling**: Signal which stream is camera vs screen
+
+Requirements for game streaming:
+- Support 4K resolution (configurable)
+- 60fps for smooth gameplay
+- Low-latency encoding (ultrafast preset)
 
 ## SDL2 and Audio on macOS
 
