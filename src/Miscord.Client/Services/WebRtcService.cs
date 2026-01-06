@@ -303,19 +303,47 @@ public class WebRtcService : IWebRtcService
         _localUserId = userId;
     }
 
+    // SDL2 P/Invoke for audio init
+    [DllImport("SDL2")]
+    private static extern int SDL_Init(uint flags);
+    private const uint SDL_INIT_AUDIO = 0x00000010;
+
+    private static bool _sdl2AudioInitialized;
+    private static readonly object _sdl2InitLock = new();
+
+    private static void EnsureSdl2AudioInitialized()
+    {
+        if (_sdl2AudioInitialized) return;
+        lock (_sdl2InitLock)
+        {
+            if (_sdl2AudioInitialized) return;
+            SDL_Init(SDL_INIT_AUDIO);
+            _sdl2AudioInitialized = true;
+        }
+    }
+
     private async Task InitializeAudioSourceAsync()
     {
         if (_audioSource != null) return;
 
         try
         {
-            // Use selected audio input device from settings (empty string = default)
+            // Ensure SDL2 audio is initialized
+            EnsureSdl2AudioInitialized();
+
+            // Use selected audio input device from settings
             var audioEncoder = new AudioEncoder();
             var inputDevice = _settingsStore?.Settings.AudioInputDevice ?? string.Empty;
             _audioSource = new SDL2AudioSource(inputDevice, audioEncoder);
 
             // Subscribe to raw audio samples for voice activity detection
             _audioSource.OnAudioSourceRawSample += OnAudioSourceRawSample;
+
+            // Subscribe to error events
+            _audioSource.OnAudioSourceError += (error) =>
+            {
+                Console.WriteLine($"WebRTC: Audio source error: {error}");
+            };
 
             // Set audio format before starting - required for SDL2AudioSource to work
             var formats = _audioSource.GetAudioSourceFormats();
@@ -663,13 +691,11 @@ public class WebRtcService : IWebRtcService
         var videoTrack = new MediaStreamTrack(videoFormats, MediaStreamStatusEnum.SendRecv);
         _serverConnection.addTrack(videoTrack);
 
-        // Handle audio format negotiation
+        // Handle audio format negotiation - only set sink format, not source (source is already running)
         _serverConnection.OnAudioFormatsNegotiated += formats =>
         {
             Console.WriteLine($"WebRTC SFU: Audio formats negotiated: {string.Join(", ", formats.Select(f => f.FormatName))}");
-            var format = formats.First();
-            _audioSource?.SetAudioSourceFormat(format);
-            _audioSink?.SetAudioSinkFormat(format);
+            _audioSink?.SetAudioSinkFormat(formats.First());
         };
 
         // Handle video format negotiation
@@ -679,17 +705,14 @@ public class WebRtcService : IWebRtcService
             _videoCodec = formats.First().Codec;
         };
 
-        // Handle incoming RTP packets (audio and video from server)
+        // Handle incoming RTP packets (audio from server)
         _serverConnection.OnRtpPacketReceived += (rep, media, rtpPkt) =>
         {
-            if (media == SDPMediaTypesEnum.audio)
+            if (media == SDPMediaTypesEnum.audio && !_isDeafened && _audioSink != null)
             {
-                if (!_isDeafened && _audioSink != null)
-                {
-                    _audioSink.GotAudioRtp(rep, rtpPkt.Header.SyncSource, rtpPkt.Header.SequenceNumber,
-                        rtpPkt.Header.Timestamp, rtpPkt.Header.PayloadType,
-                        rtpPkt.Header.MarkerBit == 1, rtpPkt.Payload);
-                }
+                _audioSink.GotAudioRtp(rep, rtpPkt.Header.SyncSource, rtpPkt.Header.SequenceNumber,
+                    rtpPkt.Header.Timestamp, rtpPkt.Header.PayloadType,
+                    rtpPkt.Header.MarkerBit == 1, rtpPkt.Payload);
             }
         };
 

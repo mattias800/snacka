@@ -272,6 +272,21 @@ When using `SDL2AudioSource` for audio capture:
 
 2. Without setting the format, `IsAudioSourcePaused()` will return `true` and no samples will be received.
 
+3. **Do NOT call SetAudioSourceFormat() on a running audio source** - Calling `SetAudioSourceFormat()` after `StartAudio()` will stop/reset the audio capture and no samples will be received. If you need to negotiate formats with WebRTC, set the format once before starting and don't change it:
+   ```csharp
+   // WRONG - this breaks audio capture:
+   await audioSource.StartAudio();
+   // ... later in OnAudioFormatsNegotiated:
+   audioSource.SetAudioSourceFormat(negotiatedFormat); // Breaks capture!
+
+   // CORRECT - set format once before starting:
+   audioSource.SetAudioSourceFormat(format);
+   await audioSource.StartAudio();
+   // Don't call SetAudioSourceFormat again!
+   ```
+
+4. **Empty string for device name doesn't work on macOS** - You must specify an actual device name. Use `SDL2Helper.GetAudioRecordingDevices()` to get the list of available devices.
+
 ## When You Make Mistakes
 
 If a user corrects you on something, update this file with the correction so future agents don't make the same mistake.

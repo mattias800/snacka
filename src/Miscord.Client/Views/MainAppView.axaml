@@ -6,6 +6,31 @@
              x:Class="Miscord.Client.Views.MainAppView"
              x:DataType="vm:MainAppViewModel"
              x:CompileBindings="False">
+    <UserControl.Styles>
+        <!-- Voice channel item style with hover/press highlights -->
+        <Style Selector="Border.voice-channel-item">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="Border.voice-channel-item:pointerover">
+            <Setter Property="Background" Value="#35373c"/>
+        </Style>
+        <Style Selector="Border.voice-channel-item:pressed">
+            <Setter Property="Background" Value="#3f4248"/>
+        </Style>
+
+        <!-- Text channel button style -->
+        <Style Selector="Button.channel-btn">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="Button.channel-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#35373c"/>
+        </Style>
+        <Style Selector="Button.channel-btn:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#3f4248"/>
+        </Style>
+    </UserControl.Styles>
     <Grid Background="#202225">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="72"/>
@@ -286,9 +311,9 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <Grid>
-                                        <Button Command="{Binding #TextChannelsList.DataContext.SelectChannelCommand}"
+                                        <Button Classes="channel-btn"
+                                                Command="{Binding #TextChannelsList.DataContext.SelectChannelCommand}"
                                                 CommandParameter="{Binding}"
-                                                Background="Transparent"
                                                 HorizontalAlignment="Stretch"
                                                 HorizontalContentAlignment="Stretch"
                                                 Padding="8,6"
@@ -360,14 +385,13 @@
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
                                     <StackPanel>
-                                        <Button Command="{Binding #VoiceChannelsList.DataContext.JoinVoiceChannelCommand}"
-                                                CommandParameter="{Binding Channel}"
-                                                Background="Transparent"
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Stretch"
+                                        <Border Classes="voice-channel-item"
                                                 Padding="8,6"
                                                 Margin="0,1"
-                                                Cursor="Hand">
+                                                Cursor="Hand"
+                                                PointerPressed="VoiceChannel_PointerPressed"
+                                                PointerReleased="VoiceChannel_PointerReleased"
+                                                Tag="{Binding Channel}">
                                             <StackPanel Orientation="Horizontal" Spacing="6">
                                                 <TextBlock Text="🔊"
                                                            Foreground="#72767d"
@@ -378,7 +402,7 @@
                                                            FontSize="15"
                                                            VerticalAlignment="Center"/>
                                             </StackPanel>
-                                        </Button>
+                                        </Border>
                                         <!-- Voice Participants - directly bound to ObservableCollection -->
                                         <ItemsControl ItemsSource="{Binding Participants}" Margin="24,0,0,4">
                                             <ItemsControl.ItemTemplate>

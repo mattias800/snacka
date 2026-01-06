@@ -71,4 +71,35 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
         // Shift+Enter = let AcceptsReturn handle it (inserts newline)
     }
+
+    // Called when clicking a voice channel
+    private void VoiceChannel_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Border border && border.Tag is Services.ChannelResponse channel)
+        {
+            // Visual feedback - darken on press
+            border.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#3f4248"));
+
+            // Check if already in this voice channel
+            if (ViewModel?.CurrentVoiceChannel?.Id == channel.Id)
+            {
+                // Already in this channel - just view it (don't rejoin)
+                ViewModel.SelectedVoiceChannelForViewing = channel;
+            }
+            else
+            {
+                // Join the channel
+                ViewModel?.JoinVoiceChannelCommand.Execute(channel).Subscribe();
+            }
+        }
+    }
+
+    // Reset background when pointer released
+    private void VoiceChannel_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (sender is Border border)
+        {
+            border.Background = Avalonia.Media.Brushes.Transparent;
+        }
+    }
 }
