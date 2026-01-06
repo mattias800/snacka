@@ -73,7 +73,9 @@ public class SfuChannelManager : IDisposable
 
         // Wire up raw RTP forwarding for minimal latency
         session.OnAudioRtpReceived += OnAudioRtpReceivedFromSession;
-        session.OnVideoRtpReceived += OnVideoRtpReceivedFromSession;
+        // Use stream-specific video events for dual-track support
+        session.OnCameraVideoRtpReceived += OnCameraVideoRtpReceivedFromSession;
+        session.OnScreenVideoRtpReceived += OnScreenVideoRtpReceivedFromSession;
 
         if (!_sessions.TryAdd(userId, session))
         {
@@ -104,7 +106,8 @@ public class SfuChannelManager : IDisposable
         if (_sessions.TryRemove(userId, out var session))
         {
             session.OnAudioRtpReceived -= OnAudioRtpReceivedFromSession;
-            session.OnVideoRtpReceived -= OnVideoRtpReceivedFromSession;
+            session.OnCameraVideoRtpReceived -= OnCameraVideoRtpReceivedFromSession;
+            session.OnScreenVideoRtpReceived -= OnScreenVideoRtpReceivedFromSession;
             session.Dispose();
 
             _logger.LogInformation("Removed SFU session for user {UserId} from channel {ChannelId}. Remaining sessions: {Count}",
@@ -131,7 +134,8 @@ public class SfuChannelManager : IDisposable
     public bool IsEmpty => _sessions.IsEmpty;
 
     private int _audioPacketCount;
-    private int _videoPacketCount;
+    private int _cameraVideoPacketCount;
+    private int _screenVideoPacketCount;
 
     private void OnAudioRtpReceivedFromSession(SfuSession sender, RTPPacket packet)
     {
@@ -160,16 +164,16 @@ public class SfuChannelManager : IDisposable
         }
     }
 
-    private void OnVideoRtpReceivedFromSession(SfuSession sender, RTPPacket packet)
+    private void OnCameraVideoRtpReceivedFromSession(SfuSession sender, RTPPacket packet)
     {
-        _videoPacketCount++;
-        if (_videoPacketCount <= 5 || _videoPacketCount % 500 == 0)
+        _cameraVideoPacketCount++;
+        if (_cameraVideoPacketCount <= 5 || _cameraVideoPacketCount % 500 == 0)
         {
-            _logger.LogInformation("Video RTP {Count} from {UserId}, size={Size}, marker={Marker}, forwarding to {OtherCount} sessions",
-                _videoPacketCount, sender.UserId, packet.Payload.Length, packet.Header.MarkerBit, _sessions.Count - 1);
+            _logger.LogInformation("Camera video RTP {Count} from {UserId}, SSRC={Ssrc}, size={Size}, forwarding to {OtherCount} sessions",
+                _cameraVideoPacketCount, sender.UserId, packet.Header.SyncSource, packet.Payload.Length, _sessions.Count - 1);
         }
 
-        // Forward raw RTP to all OTHER sessions (not back to sender)
+        // Forward camera video to all OTHER sessions' camera track
         foreach (var session in _sessions.Values)
         {
             if (session.UserId != sender.UserId &&
@@ -177,11 +181,38 @@ public class SfuChannelManager : IDisposable
             {
                 try
                 {
-                    session.ForwardVideoRtpRaw(packet);
+                    session.ForwardCameraVideoRtpRaw(packet);
                 }
                 catch (Exception ex)
                 {
-                    _logger.LogWarning(ex, "Failed to forward video to session {UserId}", session.UserId);
+                    _logger.LogWarning(ex, "Failed to forward camera video to session {UserId}", session.UserId);
+                }
+            }
+        }
+    }
+
+    private void OnScreenVideoRtpReceivedFromSession(SfuSession sender, RTPPacket packet)
+    {
+        _screenVideoPacketCount++;
+        if (_screenVideoPacketCount <= 5 || _screenVideoPacketCount % 500 == 0)
+        {
+            _logger.LogInformation("Screen video RTP {Count} from {UserId}, SSRC={Ssrc}, size={Size}, forwarding to {OtherCount} sessions",
+                _screenVideoPacketCount, sender.UserId, packet.Header.SyncSource, packet.Payload.Length, _sessions.Count - 1);
+        }
+
+        // Forward screen video to all OTHER sessions' screen track
+        foreach (var session in _sessions.Values)
+        {
+            if (session.UserId != sender.UserId &&
+                session.ConnectionState == RTCPeerConnectionState.connected)
+            {
+                try
+                {
+                    session.ForwardScreenVideoRtpRaw(packet);
+                }
+                catch (Exception ex)
+                {
+                    _logger.LogWarning(ex, "Failed to forward screen video to session {UserId}", session.UserId);
                 }
             }
         }
@@ -195,7 +226,8 @@ public class SfuChannelManager : IDisposable
         foreach (var session in _sessions.Values)
         {
             session.OnAudioRtpReceived -= OnAudioRtpReceivedFromSession;
-            session.OnVideoRtpReceived -= OnVideoRtpReceivedFromSession;
+            session.OnCameraVideoRtpReceived -= OnCameraVideoRtpReceivedFromSession;
+            session.OnScreenVideoRtpReceived -= OnScreenVideoRtpReceivedFromSession;
             session.Dispose();
         }
         _sessions.Clear();

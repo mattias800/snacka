@@ -1,3 +1,5 @@
+using System.Text.RegularExpressions;
+using Miscord.Shared.Models;
 using SIPSorcery.Net;
 using SIPSorceryMedia.Abstractions;
 
@@ -13,9 +15,23 @@ public class SfuSession : IDisposable
     private readonly RTCPeerConnection _peerConnection;
     private bool _disposed;
 
+    // SSRC tracking for dual video streams (for logging/debugging)
+    private uint? _cameraVideoSsrc;
+    private uint? _screenVideoSsrc;
+
     public Guid UserId { get; }
     public Guid ChannelId { get; }
     public RTCPeerConnection PeerConnection => _peerConnection;
+
+    /// <summary>
+    /// The SSRC used by this client for camera video.
+    /// </summary>
+    public uint? CameraVideoSsrc => _cameraVideoSsrc;
+
+    /// <summary>
+    /// The SSRC used by this client for screen share video.
+    /// </summary>
+    public uint? ScreenVideoSsrc => _screenVideoSsrc;
 
     /// <summary>
     /// Fired when audio RTP is received from this client.
@@ -24,10 +40,22 @@ public class SfuSession : IDisposable
     public event Action<SfuSession, RTPPacket>? OnAudioRtpReceived;
 
     /// <summary>
-    /// Fired when video RTP is received from this client.
+    /// Fired when video RTP is received from this client (any stream type).
     /// Args: (session, rtpPacket)
     /// </summary>
     public event Action<SfuSession, RTPPacket>? OnVideoRtpReceived;
+
+    /// <summary>
+    /// Fired when camera video RTP is received from this client.
+    /// Args: (session, rtpPacket)
+    /// </summary>
+    public event Action<SfuSession, RTPPacket>? OnCameraVideoRtpReceived;
+
+    /// <summary>
+    /// Fired when screen share video RTP is received from this client.
+    /// Args: (session, rtpPacket)
+    /// </summary>
+    public event Action<SfuSession, RTPPacket>? OnScreenVideoRtpReceived;
 
     /// <summary>
     /// Fired when an ICE candidate is gathered by the server.
@@ -88,9 +116,58 @@ public class SfuSession : IDisposable
             }
             else if (media == SDPMediaTypesEnum.video)
             {
+                var payloadType = rtpPkt.Header.PayloadType;
+                var ssrc = rtpPkt.Header.SyncSource;
+
+                // Route to stream-specific event based on payload type
+                // Payload type 96 = camera, 97 = screen share
+                var streamType = GetStreamTypeForPayloadType(payloadType, ssrc);
+
+                // Always fire the general video event for backward compatibility
                 OnVideoRtpReceived?.Invoke(this, rtpPkt);
+
+                // Fire stream-specific events
+                if (streamType == VideoStreamType.Camera)
+                {
+                    OnCameraVideoRtpReceived?.Invoke(this, rtpPkt);
+                }
+                else if (streamType == VideoStreamType.ScreenShare)
+                {
+                    OnScreenVideoRtpReceived?.Invoke(this, rtpPkt);
+                }
             }
         };
+    }
+
+    /// <summary>
+    /// Determines the stream type based on payload type.
+    /// Primary: Payload type 96 = camera, 97 = screen share.
+    /// Fallback: Uses SSRC heuristic if payload types aren't distinct.
+    /// </summary>
+    private VideoStreamType GetStreamTypeForPayloadType(int payloadType, uint ssrc)
+    {
+        // Primary detection: by payload type
+        // Camera uses payload type 96, screen share uses 97
+        if (payloadType == 97)
+        {
+            // Track screen SSRC for logging
+            if (_screenVideoSsrc != ssrc)
+            {
+                _screenVideoSsrc = ssrc;
+                _logger.LogInformation("SFU session {UserId}: Detected screen share video (PT={PayloadType}, SSRC={Ssrc})",
+                    UserId, payloadType, ssrc);
+            }
+            return VideoStreamType.ScreenShare;
+        }
+
+        // Payload type 96 or other = camera
+        if (_cameraVideoSsrc != ssrc)
+        {
+            _cameraVideoSsrc = ssrc;
+            _logger.LogInformation("SFU session {UserId}: Detected camera video (PT={PayloadType}, SSRC={Ssrc})",
+                UserId, payloadType, ssrc);
+        }
+        return VideoStreamType.Camera;
     }
 
     /// <summary>
@@ -183,16 +260,48 @@ public class SfuSession : IDisposable
 
     /// <summary>
     /// Forwards a raw video RTP packet to this client with minimal processing.
+    /// Uses the first (camera) video track.
     /// </summary>
     public void ForwardVideoRtpRaw(RTPPacket packet)
     {
         // Use SendRtpRaw to forward with minimal latency - no re-packetization
+        // This goes to the first video track (camera)
         _peerConnection.SendRtpRaw(
             SDPMediaTypesEnum.video,
             packet.Payload,
             packet.Header.Timestamp,
             packet.Header.MarkerBit,
             packet.Header.PayloadType);
+    }
+
+    /// <summary>
+    /// Forwards camera video RTP to this client's camera video track (first video track).
+    /// </summary>
+    public void ForwardCameraVideoRtpRaw(RTPPacket packet)
+    {
+        // Camera uses the first video track (payload type 96)
+        _peerConnection.SendRtpRaw(
+            SDPMediaTypesEnum.video,
+            packet.Payload,
+            packet.Header.Timestamp,
+            packet.Header.MarkerBit,
+            96); // H264 camera payload type
+    }
+
+    /// <summary>
+    /// Forwards screen share video RTP to this client's screen video track (second video track).
+    /// </summary>
+    public void ForwardScreenVideoRtpRaw(RTPPacket packet)
+    {
+        // Screen share uses the second video track (payload type 97)
+        // Note: SendRtpRaw with different payload type will route to the track
+        // that negotiated that payload type
+        _peerConnection.SendRtpRaw(
+            SDPMediaTypesEnum.video,
+            packet.Payload,
+            packet.Header.Timestamp,
+            packet.Header.MarkerBit,
+            97); // H264 screen payload type
     }
 
     public RTCPeerConnectionState ConnectionState => _peerConnection.connectionState;

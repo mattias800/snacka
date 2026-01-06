@@ -827,6 +827,8 @@ public class WebRtcService : IWebRtcService
             if (state == RTCPeerConnectionState.connected)
             {
                 UpdateConnectionStatus(VoiceConnectionStatus.Connected);
+                // Capture SSRCs for dual video tracks after connection is established
+                CaptureVideoTrackSsrcs();
             }
             else if (state == RTCPeerConnectionState.failed)
             {
@@ -848,6 +850,49 @@ public class WebRtcService : IWebRtcService
 
         Console.WriteLine($"WebRTC SFU: Sending answer to server");
         await _signalR.SendSfuAnswerAsync(channelId, answer.sdp);
+    }
+
+    /// <summary>
+    /// Captures the SSRCs assigned to our video tracks after connection is established.
+    /// This is needed for dual-track video sending - camera uses default SendVideo,
+    /// screen share uses SendRtpRaw with its specific SSRC.
+    /// </summary>
+    private void CaptureVideoTrackSsrcs()
+    {
+        try
+        {
+            // Get video tracks from the peer connection
+            var videoTracks = _serverConnection?.VideoStreamList;
+            if (videoTracks == null || videoTracks.Count == 0)
+            {
+                Console.WriteLine("WebRTC: No video tracks found to capture SSRCs");
+                return;
+            }
+
+            // Camera track is first, screen track is second
+            if (videoTracks.Count >= 1 && videoTracks[0].LocalTrack != null)
+            {
+                _cameraVideoSsrc = videoTracks[0].LocalTrack.Ssrc;
+                Console.WriteLine($"WebRTC: Camera video track SSRC = {_cameraVideoSsrc}");
+            }
+
+            if (videoTracks.Count >= 2 && videoTracks[1].LocalTrack != null)
+            {
+                _screenVideoSsrc = videoTracks[1].LocalTrack.Ssrc;
+                Console.WriteLine($"WebRTC: Screen video track SSRC = {_screenVideoSsrc}");
+            }
+            else
+            {
+                // If we only have one video stream but two tracks were added,
+                // generate a unique SSRC for the screen track
+                _screenVideoSsrc = (uint)new Random().Next(100000, int.MaxValue);
+                Console.WriteLine($"WebRTC: Generated screen video track SSRC = {_screenVideoSsrc}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WebRTC: Error capturing video track SSRCs: {ex.Message}");
+        }
     }
 
     /// <summary>
@@ -1497,38 +1542,206 @@ public class WebRtcService : IWebRtcService
         }
     }
 
+    // RTP timestamp tracking for screen video
+    private uint _screenRtpTimestamp;
+    private ushort _screenRtpSeqNum;
+
     /// <summary>
-    /// Handler for encoded screen share video frames. Sends to screen video track.
-    ///
-    /// LIMITATION: Currently both camera and screen share use the same SendVideo() method
-    /// which sends to the first video track. True dual-track support requires:
-    /// 1. Getting each track's SSRC after SDP negotiation
-    /// 2. Using SendRtpRaw() with explicit SSRC to target specific tracks
-    /// 3. Server-side SSRC routing to forward to correct track
-    ///
-    /// For now, if both camera and screen are active, the last-active encoder's
-    /// frames will be sent. Full simultaneous dual-track is a future enhancement.
+    /// Handler for encoded screen share video frames. Sends to screen video track
+    /// using SendRtpRaw with the screen track's SSRC for proper dual-track support.
     /// </summary>
     private void OnScreenVideoEncoded(uint durationRtpUnits, byte[] encodedSample)
     {
         _sentScreenFrameCount++;
         if (_sentScreenFrameCount <= 5 || _sentScreenFrameCount % 100 == 0)
         {
-            Console.WriteLine($"WebRTC: Sending screen frame {_sentScreenFrameCount}, size={encodedSample.Length}");
+            Console.WriteLine($"WebRTC: Sending screen frame {_sentScreenFrameCount}, size={encodedSample.Length}, SSRC={_screenVideoSsrc}");
         }
 
-        // SFU mode: send to server connection
-        // Note: SendVideo sends to first video track. Both camera and screen currently
-        // share this limitation. See method documentation for details.
-        if (_serverConnection != null && _serverConnectionState == PeerConnectionState.Connected && _screenVideoTrack != null)
+        // SFU mode: send to server connection using payload type 97 for screen share
+        // This allows the server to distinguish screen share from camera video
+        if (_serverConnection != null && _serverConnectionState == PeerConnectionState.Connected)
         {
-            _serverConnection.SendVideo(durationRtpUnits, encodedSample);
+            try
+            {
+                SendH264ForScreenShare(encodedSample, durationRtpUnits, ref _screenRtpTimestamp, ref _screenRtpSeqNum);
+            }
+            catch (Exception ex)
+            {
+                if (_sentScreenFrameCount <= 5)
+                {
+                    Console.WriteLine($"WebRTC: Error sending screen frame: {ex.Message}");
+                }
+            }
         }
 
-        // Legacy P2P mode: send to all peer connections
+        // Legacy P2P mode: send to all peer connections (uses default track)
         foreach (var pc in _peerConnections.Values)
         {
             pc.SendVideo(durationRtpUnits, encodedSample);
+        }
+    }
+
+    /// <summary>
+    /// Sends H264 encoded data for screen share using payload type 97.
+    /// Handles NAL unit packetization (single NAL or FU-A fragmentation).
+    /// The different payload type (97 vs 96 for camera) allows server to
+    /// distinguish screen share from camera video.
+    /// </summary>
+    private void SendH264ForScreenShare(byte[] encodedSample, uint durationRtpUnits, ref uint rtpTimestamp, ref ushort seqNum)
+    {
+        const int MaxRtpPayloadSize = 1400; // Leave room for headers
+        const byte H264PayloadType = 97; // Screen share uses payload type 97 (camera uses 96)
+
+        // Find NAL units in the encoded sample (separated by 00 00 00 01 or 00 00 01)
+        var nalUnits = FindH264NalUnits(encodedSample);
+
+        // Update timestamp
+        rtpTimestamp += durationRtpUnits;
+
+        for (int i = 0; i < nalUnits.Count; i++)
+        {
+            var nalUnit = nalUnits[i];
+            bool isLastNalUnit = (i == nalUnits.Count - 1);
+
+            if (nalUnit.Length <= MaxRtpPayloadSize)
+            {
+                // Single NAL unit packet - send as-is
+                seqNum++;
+                _serverConnection?.SendRtpRaw(
+                    SDPMediaTypesEnum.video,
+                    nalUnit,
+                    rtpTimestamp,
+                    isLastNalUnit ? 1 : 0, // Marker bit on last NAL of frame
+                    H264PayloadType);
+            }
+            else
+            {
+                // Large NAL unit - fragment using FU-A
+                SendFuAFragments(nalUnit, rtpTimestamp, isLastNalUnit, H264PayloadType, ref seqNum, MaxRtpPayloadSize);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Finds H264 NAL units in a byte stream (Annex B format).
+    /// </summary>
+    private List<byte[]> FindH264NalUnits(byte[] data)
+    {
+        var nalUnits = new List<byte[]>();
+        var startIndices = new List<int>();
+
+        // Find all start code positions (00 00 01 or 00 00 00 01)
+        for (int i = 0; i < data.Length - 3; i++)
+        {
+            if (data[i] == 0 && data[i + 1] == 0)
+            {
+                if (data[i + 2] == 1)
+                {
+                    startIndices.Add(i + 3); // 3-byte start code
+                }
+                else if (i < data.Length - 4 && data[i + 2] == 0 && data[i + 3] == 1)
+                {
+                    startIndices.Add(i + 4); // 4-byte start code
+                    i++; // Skip extra byte
+                }
+            }
+        }
+
+        // Extract NAL units between start codes
+        for (int i = 0; i < startIndices.Count; i++)
+        {
+            int start = startIndices[i];
+            int end = (i + 1 < startIndices.Count) ? FindStartCodeBefore(data, startIndices[i + 1]) : data.Length;
+            int length = end - start;
+
+            if (length > 0)
+            {
+                var nalUnit = new byte[length];
+                Array.Copy(data, start, nalUnit, 0, length);
+                nalUnits.Add(nalUnit);
+            }
+        }
+
+        // If no start codes found, treat entire buffer as single NAL unit
+        if (nalUnits.Count == 0 && data.Length > 0)
+        {
+            nalUnits.Add(data);
+        }
+
+        return nalUnits;
+    }
+
+    /// <summary>
+    /// Finds the start of the start code before the given position.
+    /// </summary>
+    private int FindStartCodeBefore(byte[] data, int position)
+    {
+        // Check for 4-byte start code
+        if (position >= 4 && data[position - 4] == 0 && data[position - 3] == 0 &&
+            data[position - 2] == 0 && data[position - 1] == 1)
+        {
+            return position - 4;
+        }
+        // Check for 3-byte start code
+        if (position >= 3 && data[position - 3] == 0 && data[position - 2] == 0 && data[position - 1] == 1)
+        {
+            return position - 3;
+        }
+        return position;
+    }
+
+    /// <summary>
+    /// Sends a large NAL unit using FU-A fragmentation (RFC 6184).
+    /// </summary>
+    private void SendFuAFragments(byte[] nalUnit, uint rtpTimestamp, bool isLastNalUnit,
+        byte payloadType, ref ushort seqNum, int maxPayloadSize)
+    {
+        if (nalUnit.Length == 0) return;
+
+        byte nalHeader = nalUnit[0];
+        byte nalType = (byte)(nalHeader & 0x1F);
+        byte nri = (byte)(nalHeader & 0x60);
+
+        // FU indicator: same NRI as original, type = 28 (FU-A)
+        byte fuIndicator = (byte)(nri | 28);
+
+        int offset = 1; // Skip NAL header
+        bool isFirst = true;
+
+        // Fragment payload size (account for FU indicator + FU header)
+        int fragmentPayloadSize = maxPayloadSize - 2;
+
+        while (offset < nalUnit.Length)
+        {
+            int remaining = nalUnit.Length - offset;
+            int fragmentSize = Math.Min(remaining, fragmentPayloadSize);
+            bool isLast = (offset + fragmentSize >= nalUnit.Length);
+
+            // FU header: S=start, E=end, R=0, Type=original NAL type
+            byte fuHeader = nalType;
+            if (isFirst) fuHeader |= 0x80; // S bit
+            if (isLast) fuHeader |= 0x40;  // E bit
+
+            // Build FU-A packet: FU indicator + FU header + payload
+            var fuPacket = new byte[2 + fragmentSize];
+            fuPacket[0] = fuIndicator;
+            fuPacket[1] = fuHeader;
+            Array.Copy(nalUnit, offset, fuPacket, 2, fragmentSize);
+
+            // Set marker bit only on last fragment of last NAL unit in frame
+            int marker = (isLast && isLastNalUnit) ? 1 : 0;
+
+            seqNum++;
+            _serverConnection?.SendRtpRaw(
+                SDPMediaTypesEnum.video,
+                fuPacket,
+                rtpTimestamp,
+                marker,
+                payloadType);
+
+            offset += fragmentSize;
+            isFirst = false;
         }
     }
 
