@@ -837,6 +837,7 @@ public class WebRtcService : IWebRtcService
 
                     if (decoder != null)
                     {
+                        Console.WriteLine($"WebRTC: Assembled {streamType} frame, size={completeFrame.Length}, sending to decoder");
                         try
                         {
                             decoder.DecodeFrame(completeFrame);
@@ -845,6 +846,10 @@ public class WebRtcService : IWebRtcService
                         {
                             Console.WriteLine($"WebRTC: Decode error for {streamType}: {ex.Message}");
                         }
+                    }
+                    else
+                    {
+                        Console.WriteLine($"WebRTC: No decoder found for {streamType}");
                     }
                 }
             }

@@ -47,13 +47,17 @@ public class FfmpegProcessDecoder : IDisposable
         };
 
         // Decode H264/VP8 Annex B input to raw RGB24 output
-        // Low-latency settings that work reliably
+        // Low-latency settings: single thread, no buffering, flush immediately
+        // -framerate 30 tells FFmpeg expected input rate for better timing
+        // -vsync 0 disables frame rate conversion/buffering
+        var inputFormat = _codec == VideoCodecsEnum.H264 ? "h264" : "ivf";
+
         var startInfo = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-fflags nobuffer -flags low_delay " +
-                       $"-f {(_codec == VideoCodecsEnum.H264 ? "h264" : "ivf")} -i pipe:0 " +
-                       $"-f rawvideo -pix_fmt rgb24 -s {_width}x{_height} pipe:1",
+            Arguments = $"-threads 1 -fflags nobuffer -flags low_delay -framerate 30 " +
+                       $"-f {inputFormat} -i pipe:0 " +
+                       $"-vsync 0 -threads 1 -f rawvideo -pix_fmt rgb24 -s {_width}x{_height} pipe:1",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -96,9 +100,21 @@ public class FfmpegProcessDecoder : IDisposable
         Console.WriteLine($"FfmpegProcessDecoder: Started ({_width}x{_height}, {_codec})");
     }
 
+    private int _inputFrameCount;
+
     public void DecodeFrame(byte[] encodedData)
     {
-        if (!_isRunning || _inputWriter == null) return;
+        if (!_isRunning || _inputWriter == null)
+        {
+            Console.WriteLine($"FfmpegProcessDecoder: DecodeFrame skipped - isRunning={_isRunning}, hasWriter={_inputWriter != null}");
+            return;
+        }
+
+        _inputFrameCount++;
+        if (_inputFrameCount <= 5 || _inputFrameCount % 100 == 0)
+        {
+            Console.WriteLine($"FfmpegProcessDecoder: Writing frame {_inputFrameCount}, size={encodedData.Length}");
+        }
 
         try
         {
@@ -133,10 +149,15 @@ public class FfmpegProcessDecoder : IDisposable
                 {
                     var bytesToRead = _frameSize - bytesInBuffer;
                     bytesRead = await stream.ReadAsync(frameBuffer, bytesInBuffer, bytesToRead, readCts.Token);
+                    if (bytesRead > 0 && (bytesInBuffer < 1000 || bytesInBuffer % 1000000 < bytesRead))
+                    {
+                        Console.WriteLine($"FfmpegProcessDecoder: Read {bytesRead} bytes, buffer={bytesInBuffer + bytesRead}/{_frameSize}");
+                    }
                 }
                 catch (OperationCanceledException) when (!_cts.Token.IsCancellationRequested)
                 {
                     // Read timeout - check if process is still alive
+                    Console.WriteLine($"FfmpegProcessDecoder: Read timeout, process alive={_ffmpegProcess != null && !_ffmpegProcess.HasExited}");
                     if (_ffmpegProcess == null || _ffmpegProcess.HasExited)
                     {
                         Console.WriteLine("FfmpegProcessDecoder: Process exited during read");
@@ -145,7 +166,11 @@ public class FfmpegProcessDecoder : IDisposable
                     continue; // Try again
                 }
 
-                if (bytesRead == 0) break;
+                if (bytesRead == 0)
+                {
+                    Console.WriteLine("FfmpegProcessDecoder: Read returned 0, EOF");
+                    break;
+                }
 
                 bytesInBuffer += bytesRead;
 
