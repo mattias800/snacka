@@ -63,6 +63,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isScreenSharePickerOpen;
     private ScreenSharePickerViewModel? _screenSharePicker;
 
+    // Video fullscreen state
+    private bool _isVideoFullscreen;
+    private VideoStreamViewModel? _fullscreenStream;
+
     public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null)
     {
         _apiClient = apiClient;
@@ -694,6 +698,30 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         get => _screenSharePicker;
         set => this.RaiseAndSetIfChanged(ref _screenSharePicker, value);
+    }
+
+    public bool IsVideoFullscreen
+    {
+        get => _isVideoFullscreen;
+        set => this.RaiseAndSetIfChanged(ref _isVideoFullscreen, value);
+    }
+
+    public VideoStreamViewModel? FullscreenStream
+    {
+        get => _fullscreenStream;
+        set => this.RaiseAndSetIfChanged(ref _fullscreenStream, value);
+    }
+
+    public void OpenFullscreen(VideoStreamViewModel stream)
+    {
+        FullscreenStream = stream;
+        IsVideoFullscreen = true;
+    }
+
+    public void CloseFullscreen()
+    {
+        IsVideoFullscreen = false;
+        FullscreenStream = null;
     }
 
     /// <summary>

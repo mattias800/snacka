@@ -159,4 +159,19 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             await ViewModel.VoiceChannelContent.WatchScreenShareAsync(stream);
         }
     }
+
+    // Called when clicking the close button on fullscreen video overlay
+    private void OnCloseFullscreenClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.CloseFullscreen();
+    }
+
+    // Called when clicking the fullscreen button on a video tile
+    private void OnFullscreenButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is VideoStreamViewModel stream)
+        {
+            ViewModel?.OpenFullscreen(stream);
+        }
+    }
 }

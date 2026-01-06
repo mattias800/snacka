@@ -858,6 +858,21 @@
                                                     BorderThickness="3"
                                                     BorderBrush="#3ba55c"
                                                     IsVisible="{Binding ShowSpeakingIndicator}"/>
+
+                                            <!-- Fullscreen button - top right corner (only for screen shares) -->
+                                            <Button VerticalAlignment="Top"
+                                                    HorizontalAlignment="Right"
+                                                    Margin="8"
+                                                    Padding="8,4"
+                                                    Background="#80000000"
+                                                    BorderThickness="0"
+                                                    CornerRadius="4"
+                                                    Cursor="Hand"
+                                                    IsVisible="{Binding StreamLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                                                    Click="OnFullscreenButtonClick"
+                                                    Tag="{Binding}">
+                                                <TextBlock Text="⛶" Foreground="White" FontSize="16"/>
+                                            </Button>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
@@ -1242,6 +1257,45 @@
             <views:ScreenSharePickerView DataContext="{Binding ScreenSharePicker}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- Video Fullscreen Overlay -->
+        <Border Grid.ColumnSpan="4"
+                Background="#FF000000"
+                IsVisible="{Binding IsVideoFullscreen}"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <Grid>
+                <!-- Video fills the space -->
+                <Image Source="{Binding FullscreenStream.VideoBitmap}"
+                       Stretch="Uniform"
+                       HorizontalAlignment="Stretch"
+                       VerticalAlignment="Stretch"/>
+
+                <!-- Close button - top right -->
+                <Button VerticalAlignment="Top"
+                        HorizontalAlignment="Right"
+                        Margin="16"
+                        Padding="8,4"
+                        Background="#60000000"
+                        BorderThickness="0"
+                        Cursor="Hand"
+                        Click="OnCloseFullscreenClick">
+                    <TextBlock Text="✕" Foreground="White" FontSize="20"/>
+                </Button>
+
+                <!-- Username label - bottom left -->
+                <Border VerticalAlignment="Bottom"
+                        HorizontalAlignment="Left"
+                        Background="#80000000"
+                        Padding="12,6"
+                        Margin="16"
+                        CornerRadius="4">
+                    <TextBlock Text="{Binding FullscreenStream.Username}"
+                               Foreground="White"
+                               FontSize="14"/>
+                </Border>
+            </Grid>
         </Border>
     </Grid>
 </UserControl>
