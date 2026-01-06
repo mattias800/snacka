@@ -77,6 +77,45 @@ public class SfuService : ISfuService, IDisposable
         return channelManager;
     }
 
+    public void AddScreenShareViewer(Guid channelId, Guid streamerUserId, Guid viewerUserId)
+    {
+        if (_channelManagers.TryGetValue(channelId, out var channelManager))
+        {
+            channelManager.AddScreenShareViewer(streamerUserId, viewerUserId);
+            _logger.LogInformation("User {ViewerId} started watching screen share from {StreamerId} in channel {ChannelId}",
+                viewerUserId, streamerUserId, channelId);
+        }
+    }
+
+    public void RemoveScreenShareViewer(Guid channelId, Guid streamerUserId, Guid viewerUserId)
+    {
+        if (_channelManagers.TryGetValue(channelId, out var channelManager))
+        {
+            channelManager.RemoveScreenShareViewer(streamerUserId, viewerUserId);
+            _logger.LogInformation("User {ViewerId} stopped watching screen share from {StreamerId} in channel {ChannelId}",
+                viewerUserId, streamerUserId, channelId);
+        }
+    }
+
+    public void ClearScreenShareViewers(Guid channelId, Guid streamerUserId)
+    {
+        if (_channelManagers.TryGetValue(channelId, out var channelManager))
+        {
+            channelManager.ClearScreenShareViewers(streamerUserId);
+            _logger.LogInformation("Cleared all screen share viewers for {StreamerId} in channel {ChannelId}",
+                streamerUserId, channelId);
+        }
+    }
+
+    public bool IsWatchingScreenShare(Guid channelId, Guid streamerUserId, Guid viewerUserId)
+    {
+        if (_channelManagers.TryGetValue(channelId, out var channelManager))
+        {
+            return channelManager.IsWatchingScreenShare(streamerUserId, viewerUserId);
+        }
+        return false;
+    }
+
     private SfuChannelManager GetOrCreateChannelManager(Guid channelId)
     {
         return _channelManagers.GetOrAdd(channelId, id =>

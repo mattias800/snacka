@@ -148,4 +148,15 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             e.Handled = true;
         }
     }
+
+    // Called when clicking the Watch button on a screen share
+    private async void OnWatchScreenShareClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button &&
+            button.Tag is VideoStreamViewModel stream &&
+            ViewModel?.VoiceChannelContent != null)
+        {
+            await ViewModel.VoiceChannelContent.WatchScreenShareAsync(stream);
+        }
+    }
 }

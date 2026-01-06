@@ -357,9 +357,15 @@ public class MiscordHub : Hub
         var userId = GetUserId();
         if (userId is null) return;
 
-        // Get the channel to find its community
+        // Get the channel and user info
         var channel = await _db.Channels
             .FirstOrDefaultAsync(c => c.Id == channelId);
+        var user = await _db.Users.FindAsync(userId.Value);
+
+        // Get current state before update
+        var currentParticipant = await _voiceService.GetParticipantAsync(channelId, userId.Value);
+        var wasCameraOn = currentParticipant?.IsCameraOn ?? false;
+        var wasScreenSharing = currentParticipant?.IsScreenSharing ?? false;
 
         var participant = await _voiceService.UpdateStateAsync(channelId, userId.Value, update);
         if (participant is not null && channel is not null)
@@ -367,6 +373,64 @@ public class MiscordHub : Hub
             // Notify ALL users in the community about the state change
             await Clients.OthersInGroup($"community:{channel.CommunityId}")
                 .SendAsync("VoiceStateChanged", new VoiceStateChangedEvent(channelId, userId.Value, update));
+
+            // Broadcast video stream start/stop events
+            var username = user?.Username ?? "Unknown";
+
+            // Camera started
+            if (update.IsCameraOn == true && !wasCameraOn)
+            {
+                await Clients.OthersInGroup($"community:{channel.CommunityId}")
+                    .SendAsync("VideoStreamStarted", new
+                    {
+                        ChannelId = channelId,
+                        UserId = userId.Value,
+                        Username = username,
+                        StreamType = Shared.Models.VideoStreamType.Camera
+                    });
+                _logger.LogInformation("User {Username} started camera in channel {ChannelId}", username, channelId);
+            }
+            // Camera stopped
+            else if (update.IsCameraOn == false && wasCameraOn)
+            {
+                await Clients.OthersInGroup($"community:{channel.CommunityId}")
+                    .SendAsync("VideoStreamStopped", new
+                    {
+                        ChannelId = channelId,
+                        UserId = userId.Value,
+                        StreamType = Shared.Models.VideoStreamType.Camera
+                    });
+                _logger.LogInformation("User {Username} stopped camera in channel {ChannelId}", username, channelId);
+            }
+
+            // Screen share started
+            if (update.IsScreenSharing == true && !wasScreenSharing)
+            {
+                await Clients.OthersInGroup($"community:{channel.CommunityId}")
+                    .SendAsync("VideoStreamStarted", new
+                    {
+                        ChannelId = channelId,
+                        UserId = userId.Value,
+                        Username = username,
+                        StreamType = Shared.Models.VideoStreamType.ScreenShare
+                    });
+                _logger.LogInformation("User {Username} started screen share in channel {ChannelId}", username, channelId);
+            }
+            // Screen share stopped
+            else if (update.IsScreenSharing == false && wasScreenSharing)
+            {
+                // Clear all viewers when screen share stops
+                _sfuService.ClearScreenShareViewers(channelId, userId.Value);
+
+                await Clients.OthersInGroup($"community:{channel.CommunityId}")
+                    .SendAsync("VideoStreamStopped", new
+                    {
+                        ChannelId = channelId,
+                        UserId = userId.Value,
+                        StreamType = Shared.Models.VideoStreamType.ScreenShare
+                    });
+                _logger.LogInformation("User {Username} stopped screen share in channel {ChannelId}", username, channelId);
+            }
         }
     }
 
@@ -385,6 +449,39 @@ public class MiscordHub : Hub
             await Clients.OthersInGroup($"community:{channel.CommunityId}")
                 .SendAsync("SpeakingStateChanged", new SpeakingStateChangedEvent(channelId, userId.Value, isSpeaking));
         }
+    }
+
+    // ==================== Screen Share Watching Methods ====================
+
+    /// <summary>
+    /// Request to start watching another user's screen share.
+    /// Screen shares require explicit opt-in (unlike camera which is auto-forwarded).
+    /// </summary>
+    public async Task WatchScreenShare(Guid channelId, Guid streamerUserId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        _sfuService.AddScreenShareViewer(channelId, streamerUserId, userId.Value);
+        _logger.LogInformation("User {ViewerId} started watching {StreamerId}'s screen share in channel {ChannelId}",
+            userId.Value, streamerUserId, channelId);
+
+        await Task.CompletedTask;
+    }
+
+    /// <summary>
+    /// Stop watching another user's screen share.
+    /// </summary>
+    public async Task StopWatchingScreenShare(Guid channelId, Guid streamerUserId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        _sfuService.RemoveScreenShareViewer(channelId, streamerUserId, userId.Value);
+        _logger.LogInformation("User {ViewerId} stopped watching {StreamerId}'s screen share in channel {ChannelId}",
+            userId.Value, streamerUserId, channelId);
+
+        await Task.CompletedTask;
     }
 
     // ==================== WebRTC Signaling Methods ====================

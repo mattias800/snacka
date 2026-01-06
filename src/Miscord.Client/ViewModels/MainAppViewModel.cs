@@ -78,7 +78,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
 
         // Create voice channel content view model for video grid
-        _voiceChannelContent = new VoiceChannelContentViewModel(_webRtc, auth.UserId);
+        _voiceChannelContent = new VoiceChannelContentViewModel(_webRtc, _signalR, auth.UserId);
 
         // Subscribe to WebRTC connection status changes
         _webRtc.ConnectionStatusChanged += status =>

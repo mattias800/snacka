@@ -151,3 +151,7 @@ public record IceCandidateEvent(Guid FromUserId, string Candidate, string? SdpMi
 // SFU Signaling Events
 public record SfuOfferEvent(string Sdp, Guid ChannelId);
 public record SfuIceCandidateEvent(string Candidate, string? SdpMid, int? SdpMLineIndex);
+
+// Video Stream Signaling Events
+public record VideoStreamStartedEvent(Guid ChannelId, Guid UserId, string Username, VideoStreamType StreamType);
+public record VideoStreamStoppedEvent(Guid ChannelId, Guid UserId, VideoStreamType StreamType);

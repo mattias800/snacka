@@ -28,6 +28,10 @@ public interface ISignalRService : IAsyncDisposable
     Task SendSfuAnswerAsync(Guid channelId, string sdp);
     Task SendSfuIceCandidateAsync(Guid channelId, string candidate, string? sdpMid, int? sdpMLineIndex);
 
+    // Screen share viewing methods
+    Task WatchScreenShareAsync(Guid channelId, Guid streamerUserId);
+    Task StopWatchingScreenShareAsync(Guid channelId, Guid streamerUserId);
+
     // Channel events
     event Action<ChannelResponse>? ChannelCreated;
     event Action<ChannelResponse>? ChannelUpdated;
@@ -63,6 +67,10 @@ public interface ISignalRService : IAsyncDisposable
     // SFU signaling events
     event Action<SfuOfferEvent>? SfuOfferReceived;
     event Action<SfuIceCandidateEvent>? SfuIceCandidateReceived;
+
+    // Video stream signaling events
+    event Action<VideoStreamStartedEvent>? VideoStreamStarted;
+    event Action<VideoStreamStoppedEvent>? VideoStreamStopped;
 }
 
 public class SignalRService : ISignalRService
@@ -106,6 +114,10 @@ public class SignalRService : ISignalRService
     // SFU signaling events
     public event Action<SfuOfferEvent>? SfuOfferReceived;
     public event Action<SfuIceCandidateEvent>? SfuIceCandidateReceived;
+
+    // Video stream signaling events
+    public event Action<VideoStreamStartedEvent>? VideoStreamStarted;
+    public event Action<VideoStreamStoppedEvent>? VideoStreamStopped;
 
     public async Task ConnectAsync(string baseUrl, string accessToken)
     {
@@ -279,6 +291,21 @@ public class SignalRService : ISignalRService
         await _hubConnection.InvokeAsync("SendSfuIceCandidate", channelId, candidate, sdpMid, sdpMLineIndex);
     }
 
+    // Screen share viewing methods
+    public async Task WatchScreenShareAsync(Guid channelId, Guid streamerUserId)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("WatchScreenShare", channelId, streamerUserId);
+        Console.WriteLine($"SignalR: Started watching screen share from {streamerUserId} in channel {channelId}");
+    }
+
+    public async Task StopWatchingScreenShareAsync(Guid channelId, Guid streamerUserId)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("StopWatchingScreenShare", channelId, streamerUserId);
+        Console.WriteLine($"SignalR: Stopped watching screen share from {streamerUserId} in channel {channelId}");
+    }
+
     private void RegisterHandlers()
     {
         if (_hubConnection is null) return;
@@ -418,6 +445,19 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: SfuIceCandidate received");
             SfuIceCandidateReceived?.Invoke(e);
+        });
+
+        // Video stream signaling events
+        _hubConnection.On<VideoStreamStartedEvent>("VideoStreamStarted", e =>
+        {
+            Console.WriteLine($"SignalR: VideoStreamStarted - {e.Username} started {e.StreamType} in channel {e.ChannelId}");
+            VideoStreamStarted?.Invoke(e);
+        });
+
+        _hubConnection.On<VideoStreamStoppedEvent>("VideoStreamStopped", e =>
+        {
+            Console.WriteLine($"SignalR: VideoStreamStopped - {e.UserId} stopped {e.StreamType} in channel {e.ChannelId}");
+            VideoStreamStopped?.Invoke(e);
         });
 
         _hubConnection.Reconnecting += error =>

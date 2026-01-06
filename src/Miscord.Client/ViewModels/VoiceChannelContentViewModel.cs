@@ -17,17 +17,57 @@ public class VideoStreamViewModel : ReactiveObject
 {
     private WriteableBitmap? _videoBitmap;
     private bool _isSpeaking;
+    private bool _isWatching;
+    private readonly Guid _localUserId;
 
-    public VideoStreamViewModel(Guid userId, string username, VideoStreamType streamType)
+    public VideoStreamViewModel(Guid userId, string username, VideoStreamType streamType, Guid localUserId)
     {
         UserId = userId;
         Username = username;
         StreamType = streamType;
+        _localUserId = localUserId;
+
+        // Local user's streams are always "watching" (they see their own preview)
+        // Camera streams from remote users are auto-watched (no opt-in needed)
+        // Remote screen shares require explicit opt-in
+        _isWatching = !IsRemoteScreenShare;
     }
 
     public Guid UserId { get; }
     public string Username { get; }
     public VideoStreamType StreamType { get; }
+
+    /// <summary>
+    /// Whether this is a screen share from a remote user (not the local user).
+    /// Remote screen shares require opt-in to view.
+    /// </summary>
+    public bool IsRemoteScreenShare => StreamType == VideoStreamType.ScreenShare && UserId != _localUserId;
+
+    /// <summary>
+    /// Whether the local user has opted in to watch this stream.
+    /// Always true for local streams and remote camera streams.
+    /// For remote screen shares, this is false until the user clicks "Watch".
+    /// </summary>
+    public bool IsWatching
+    {
+        get => _isWatching;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _isWatching, value);
+            this.RaisePropertyChanged(nameof(ShowWatchButton));
+            this.RaisePropertyChanged(nameof(ShowVideoContent));
+        }
+    }
+
+    /// <summary>
+    /// Whether to show the "Watch" button. Only for remote screen shares that aren't being watched.
+    /// </summary>
+    public bool ShowWatchButton => IsRemoteScreenShare && !IsWatching;
+
+    /// <summary>
+    /// Whether to show video content (bitmap or placeholder). True when watching or for non-screen shares.
+    /// </summary>
+    public bool ShowVideoContent => IsWatching;
 
     /// <summary>
     /// Display label shown on the tile. Empty for camera, "Screen" for screen share.
@@ -121,14 +161,16 @@ public class ParticipantInfo
 public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
 {
     private readonly IWebRtcService _webRtc;
+    private readonly ISignalRService _signalR;
     private readonly Guid _localUserId;
     private ChannelResponse? _channel;
     private ObservableCollection<VideoStreamViewModel> _videoStreams = new();
     private readonly Dictionary<Guid, ParticipantInfo> _participants = new();
 
-    public VoiceChannelContentViewModel(IWebRtcService webRtc, Guid localUserId)
+    public VoiceChannelContentViewModel(IWebRtcService webRtc, ISignalRService signalR, Guid localUserId)
     {
         _webRtc = webRtc;
+        _signalR = signalR;
         _localUserId = localUserId;
 
         // Subscribe to video frames from WebRTC
@@ -180,14 +222,13 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
                 };
                 _participants[p.UserId] = info;
 
-                // Create streams for active video sources
-                if (p.IsCameraOn)
-                {
-                    VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.Camera));
-                }
+                // Every participant always has a camera stream (shows avatar when camera off, video when on)
+                VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.Camera, _localUserId));
+
+                // Screen share adds a second stream
                 if (p.IsScreenSharing)
                 {
-                    VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.ScreenShare));
+                    VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.ScreenShare, _localUserId));
                 }
             }
         });
@@ -211,14 +252,13 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
             };
             _participants[participant.UserId] = info;
 
-            // Create streams for active video sources
-            if (participant.IsCameraOn)
-            {
-                VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.Camera));
-            }
+            // Every participant always has a camera stream (shows avatar when camera off, video when on)
+            VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.Camera, _localUserId));
+
+            // Screen share adds a second stream
             if (participant.IsScreenSharing)
             {
-                VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.ScreenShare));
+                VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.ScreenShare, _localUserId));
             }
         });
     }
@@ -247,32 +287,23 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
 
             var username = info.Username;
 
-            // Handle camera state change
+            // Handle camera state change - just update the state, stream is always present
             if (state.IsCameraOn.HasValue)
             {
-                var wasCameraOn = info.IsCameraOn;
                 info.IsCameraOn = state.IsCameraOn.Value;
 
-                if (state.IsCameraOn.Value && !wasCameraOn)
+                // If camera turned off, clear the video bitmap to show avatar
+                if (!state.IsCameraOn.Value)
                 {
-                    // Camera turned on - add stream
-                    if (!VideoStreams.Any(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera))
+                    var cameraStream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera);
+                    if (cameraStream != null)
                     {
-                        VideoStreams.Add(new VideoStreamViewModel(userId, username, VideoStreamType.Camera));
-                    }
-                }
-                else if (!state.IsCameraOn.Value && wasCameraOn)
-                {
-                    // Camera turned off - remove stream
-                    var stream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera);
-                    if (stream != null)
-                    {
-                        VideoStreams.Remove(stream);
+                        cameraStream.VideoBitmap = null;
                     }
                 }
             }
 
-            // Handle screen share state change
+            // Handle screen share state change - add/remove the screen share stream
             if (state.IsScreenSharing.HasValue)
             {
                 var wasScreenSharing = info.IsScreenSharing;
@@ -283,7 +314,7 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
                     // Screen share turned on - add stream
                     if (!VideoStreams.Any(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare))
                     {
-                        VideoStreams.Add(new VideoStreamViewModel(userId, username, VideoStreamType.ScreenShare));
+                        VideoStreams.Add(new VideoStreamViewModel(userId, username, VideoStreamType.ScreenShare, _localUserId));
                     }
                 }
                 else if (!state.IsScreenSharing.Value && wasScreenSharing)
@@ -331,6 +362,33 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         // Update local user's video preview for the appropriate stream
         var stream = VideoStreams.FirstOrDefault(s => s.UserId == _localUserId && s.StreamType == streamType);
         stream?.UpdateVideoFrame(rgbData, width, height);
+    }
+
+    /// <summary>
+    /// Start watching a remote user's screen share.
+    /// </summary>
+    public async Task WatchScreenShareAsync(VideoStreamViewModel stream)
+    {
+        if (Channel == null || !stream.IsRemoteScreenShare || stream.IsWatching)
+            return;
+
+        await _signalR.WatchScreenShareAsync(Channel.Id, stream.UserId);
+        stream.IsWatching = true;
+        Console.WriteLine($"VoiceChannelContent: Started watching screen share from {stream.Username}");
+    }
+
+    /// <summary>
+    /// Stop watching a remote user's screen share.
+    /// </summary>
+    public async Task StopWatchingScreenShareAsync(VideoStreamViewModel stream)
+    {
+        if (Channel == null || !stream.IsRemoteScreenShare || !stream.IsWatching)
+            return;
+
+        await _signalR.StopWatchingScreenShareAsync(Channel.Id, stream.UserId);
+        stream.IsWatching = false;
+        stream.VideoBitmap = null; // Clear the video frame
+        Console.WriteLine($"VoiceChannelContent: Stopped watching screen share from {stream.Username}");
     }
 
     public void Dispose()

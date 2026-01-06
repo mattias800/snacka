@@ -4,6 +4,21 @@
              x:Class="Miscord.Client.Views.VoiceChannelContentView"
              x:DataType="vm:VoiceChannelContentViewModel">
 
+    <UserControl.Styles>
+        <!-- Watch button style -->
+        <Style Selector="Button.WatchButton">
+            <Setter Property="Background" Value="#5865f2"/>
+            <Setter Property="Foreground" Value="White"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="FontWeight" Value="SemiBold"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.WatchButton:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#4752c4"/>
+        </Style>
+    </UserControl.Styles>
+
     <!-- Voice Channel Content - Grid of video streams (camera and screen share tiles) -->
     <Grid Background="#36393f">
         <Grid.RowDefinitions>
@@ -21,7 +36,7 @@
                     </ItemsPanelTemplate>
                 </ItemsControl.ItemsPanel>
                 <ItemsControl.ItemTemplate>
-                    <DataTemplate>
+                    <DataTemplate x:DataType="vm:VideoStreamViewModel">
                         <!-- Video Stream Box -->
                         <Border Width="320" Height="240"
                                 Margin="8"
@@ -31,27 +46,64 @@
                                 ClipToBounds="True">
 
                             <Grid>
-                                <!-- Video Feed (shown when we have a frame) -->
-                                <Image Source="{Binding VideoBitmap}"
-                                       Stretch="UniformToFill"
-                                       IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                                <!-- Video content (only shown when watching) -->
+                                <Grid IsVisible="{Binding ShowVideoContent}">
+                                    <!-- Video Feed (shown when we have a frame) -->
+                                    <Image Source="{Binding VideoBitmap}"
+                                           Stretch="UniformToFill"
+                                           IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
 
-                                <!-- Avatar placeholder (shown when no video) -->
+                                    <!-- Avatar placeholder (shown when no video frame yet) -->
+                                    <StackPanel VerticalAlignment="Center"
+                                                HorizontalAlignment="Center"
+                                                IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                                        <!-- Large Avatar Circle -->
+                                        <Border Width="80" Height="80"
+                                                CornerRadius="40"
+                                                Background="#5865f2"
+                                                HorizontalAlignment="Center">
+                                            <TextBlock Text="{Binding Username[0]}"
+                                                       Foreground="White"
+                                                       FontSize="36"
+                                                       FontWeight="Bold"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Border>
+                                    </StackPanel>
+                                </Grid>
+
+                                <!-- Watch button overlay for remote screen shares (only shown when not watching) -->
                                 <StackPanel VerticalAlignment="Center"
                                             HorizontalAlignment="Center"
-                                            IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
-                                    <!-- Large Avatar Circle -->
-                                    <Border Width="80" Height="80"
-                                            CornerRadius="40"
+                                            Spacing="16"
+                                            IsVisible="{Binding ShowWatchButton}">
+                                    <!-- Screen share icon -->
+                                    <Border Width="64" Height="64"
+                                            CornerRadius="32"
                                             Background="#5865f2"
                                             HorizontalAlignment="Center">
-                                        <TextBlock Text="{Binding Username[0]}"
-                                                   Foreground="White"
-                                                   FontSize="36"
-                                                   FontWeight="Bold"
+                                        <TextBlock Text="🖥️"
+                                                   FontSize="28"
                                                    HorizontalAlignment="Center"
                                                    VerticalAlignment="Center"/>
                                     </Border>
+
+                                    <!-- Info text -->
+                                    <TextBlock Text="{Binding Username, StringFormat='{}{0} is sharing screen'}"
+                                               Foreground="#dcddde"
+                                               FontSize="14"
+                                               HorizontalAlignment="Center"/>
+
+                                    <!-- Watch button -->
+                                    <Button Classes="WatchButton"
+                                            HorizontalAlignment="Center"
+                                            Click="OnWatchButtonClick"
+                                            Tag="{Binding}">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="👁️" VerticalAlignment="Center"/>
+                                            <TextBlock Text="Watch Stream" VerticalAlignment="Center"/>
+                                        </StackPanel>
+                                    </Button>
                                 </StackPanel>
 
                                 <!-- Username and stream type overlay at bottom -->

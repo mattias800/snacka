@@ -12,6 +12,10 @@ public class SfuChannelManager : IDisposable
     private readonly ILogger<SfuChannelManager> _logger;
     private readonly ILoggerFactory _loggerFactory;
     private readonly ConcurrentDictionary<Guid, SfuSession> _sessions = new();
+    // Tracks which users are watching each streamer's screen share
+    // Key: streamer userId, Value: set of viewer userIds
+    private readonly ConcurrentDictionary<Guid, HashSet<Guid>> _screenShareViewers = new();
+    private readonly object _viewerLock = new();
     private bool _disposed;
 
     public Guid ChannelId { get; }
@@ -133,6 +137,81 @@ public class SfuChannelManager : IDisposable
     /// </summary>
     public bool IsEmpty => _sessions.IsEmpty;
 
+    /// <summary>
+    /// Adds a viewer to a streamer's screen share.
+    /// </summary>
+    public void AddScreenShareViewer(Guid streamerUserId, Guid viewerUserId)
+    {
+        lock (_viewerLock)
+        {
+            var viewers = _screenShareViewers.GetOrAdd(streamerUserId, _ => new HashSet<Guid>());
+            viewers.Add(viewerUserId);
+            _logger.LogDebug("Added viewer {ViewerId} to screen share from {StreamerId}. Total viewers: {Count}",
+                viewerUserId, streamerUserId, viewers.Count);
+        }
+    }
+
+    /// <summary>
+    /// Removes a viewer from a streamer's screen share.
+    /// </summary>
+    public void RemoveScreenShareViewer(Guid streamerUserId, Guid viewerUserId)
+    {
+        lock (_viewerLock)
+        {
+            if (_screenShareViewers.TryGetValue(streamerUserId, out var viewers))
+            {
+                viewers.Remove(viewerUserId);
+                _logger.LogDebug("Removed viewer {ViewerId} from screen share from {StreamerId}. Remaining viewers: {Count}",
+                    viewerUserId, streamerUserId, viewers.Count);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Clears all viewers for a streamer's screen share.
+    /// </summary>
+    public void ClearScreenShareViewers(Guid streamerUserId)
+    {
+        lock (_viewerLock)
+        {
+            if (_screenShareViewers.TryRemove(streamerUserId, out var viewers))
+            {
+                _logger.LogDebug("Cleared {Count} viewers from screen share from {StreamerId}",
+                    viewers.Count, streamerUserId);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Checks if a user is watching a streamer's screen share.
+    /// </summary>
+    public bool IsWatchingScreenShare(Guid streamerUserId, Guid viewerUserId)
+    {
+        lock (_viewerLock)
+        {
+            if (_screenShareViewers.TryGetValue(streamerUserId, out var viewers))
+            {
+                return viewers.Contains(viewerUserId);
+            }
+            return false;
+        }
+    }
+
+    /// <summary>
+    /// Gets a snapshot of viewers for a streamer's screen share.
+    /// </summary>
+    private HashSet<Guid> GetScreenShareViewers(Guid streamerUserId)
+    {
+        lock (_viewerLock)
+        {
+            if (_screenShareViewers.TryGetValue(streamerUserId, out var viewers))
+            {
+                return new HashSet<Guid>(viewers); // Return a copy to avoid concurrency issues
+            }
+            return new HashSet<Guid>();
+        }
+    }
+
     private int _audioPacketCount;
     private int _cameraVideoPacketCount;
     private int _screenVideoPacketCount;
@@ -193,18 +272,22 @@ public class SfuChannelManager : IDisposable
 
     private void OnScreenVideoRtpReceivedFromSession(SfuSession sender, RTPPacket packet)
     {
+        // Get viewers who have opted in to watch this screen share
+        var viewers = GetScreenShareViewers(sender.UserId);
+
         _screenVideoPacketCount++;
         if (_screenVideoPacketCount <= 5 || _screenVideoPacketCount % 500 == 0)
         {
-            _logger.LogInformation("Screen video RTP {Count} from {UserId}, SSRC={Ssrc}, size={Size}, forwarding to {OtherCount} sessions",
-                _screenVideoPacketCount, sender.UserId, packet.Header.SyncSource, packet.Payload.Length, _sessions.Count - 1);
+            _logger.LogInformation("Screen video RTP {Count} from {UserId}, SSRC={Ssrc}, size={Size}, forwarding to {ViewerCount} viewers",
+                _screenVideoPacketCount, sender.UserId, packet.Header.SyncSource, packet.Payload.Length, viewers.Count);
         }
 
-        // Forward screen video to all OTHER sessions' screen track
+        // Only forward screen video to users who have opted in to watch
         foreach (var session in _sessions.Values)
         {
             if (session.UserId != sender.UserId &&
-                session.ConnectionState == RTCPeerConnectionState.connected)
+                session.ConnectionState == RTCPeerConnectionState.connected &&
+                viewers.Contains(session.UserId))
             {
                 try
                 {

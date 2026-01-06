@@ -766,27 +766,66 @@
                                             ClipToBounds="True">
 
                                         <Grid>
-                                            <!-- Video Feed -->
-                                            <Image Source="{Binding VideoBitmap}"
-                                                   Stretch="UniformToFill"
-                                                   IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+                                            <!-- Video content (only shown when watching) -->
+                                            <Grid IsVisible="{Binding ShowVideoContent}">
+                                                <!-- Video Feed -->
+                                                <Image Source="{Binding VideoBitmap}"
+                                                       Stretch="UniformToFill"
+                                                       IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
 
-                                            <!-- Avatar placeholder (shown when no video) -->
+                                                <!-- Avatar placeholder (shown when no video) -->
+                                                <StackPanel VerticalAlignment="Center"
+                                                            HorizontalAlignment="Center"
+                                                            IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                                                    <!-- Large Avatar Circle -->
+                                                    <Border Width="80" Height="80"
+                                                            CornerRadius="40"
+                                                            Background="#5865f2"
+                                                            HorizontalAlignment="Center">
+                                                        <TextBlock Text="{Binding Username[0]}"
+                                                                   Foreground="White"
+                                                                   FontSize="36"
+                                                                   FontWeight="Bold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                </StackPanel>
+                                            </Grid>
+
+                                            <!-- Watch button overlay for remote screen shares -->
                                             <StackPanel VerticalAlignment="Center"
                                                         HorizontalAlignment="Center"
-                                                        IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
-                                                <!-- Large Avatar Circle -->
-                                                <Border Width="80" Height="80"
-                                                        CornerRadius="40"
+                                                        Spacing="16"
+                                                        IsVisible="{Binding ShowWatchButton}">
+                                                <!-- Screen share icon -->
+                                                <Border Width="64" Height="64"
+                                                        CornerRadius="32"
                                                         Background="#5865f2"
                                                         HorizontalAlignment="Center">
-                                                    <TextBlock Text="{Binding Username[0]}"
-                                                               Foreground="White"
-                                                               FontSize="36"
-                                                               FontWeight="Bold"
+                                                    <TextBlock Text="🖥️"
+                                                               FontSize="28"
                                                                HorizontalAlignment="Center"
                                                                VerticalAlignment="Center"/>
                                                 </Border>
+                                                <!-- Info text -->
+                                                <TextBlock Text="{Binding Username, StringFormat='{}{0} is sharing screen'}"
+                                                           Foreground="#dcddde"
+                                                           FontSize="14"
+                                                           HorizontalAlignment="Center"/>
+                                                <!-- Watch button -->
+                                                <Button Background="#5865f2"
+                                                        Foreground="White"
+                                                        Padding="16,10"
+                                                        CornerRadius="4"
+                                                        HorizontalAlignment="Center"
+                                                        Cursor="Hand"
+                                                        Click="OnWatchScreenShareClick"
+                                                        Tag="{Binding}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                                        <TextBlock Text="👁️" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="Watch Stream" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                                    </StackPanel>
+                                                </Button>
                                             </StackPanel>
 
                                             <!-- Username and stream type overlay at bottom -->

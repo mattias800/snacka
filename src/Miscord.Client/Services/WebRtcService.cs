@@ -217,7 +217,12 @@ public class WebRtcService : IWebRtcService
     // Legacy P2P: per-peer audio sinks
     private readonly ConcurrentDictionary<Guid, SDL2AudioEndPoint> _audioSinks = new();
     // Per-user video decoders (keyed by userId, server tells us which SSRC maps to which user)
-    private readonly ConcurrentDictionary<Guid, FfmpegProcessDecoder> _videoDecoders = new();
+    // Video decoders keyed by (userId, streamType) for camera and screen share
+    private readonly ConcurrentDictionary<(Guid userId, VideoStreamType streamType), FfmpegProcessDecoder> _videoDecoders = new();
+    // Per-stream frame assemblers for camera and screen share video
+    // These accumulate RTP payloads and assemble complete H264 frames
+    private readonly H264FrameAssembler _cameraFrameAssembler = new();
+    private readonly H264FrameAssembler _screenFrameAssembler = new();
     // SSRC to UserId mapping for incoming video
     private readonly ConcurrentDictionary<uint, Guid> _ssrcToUserMap = new();
     // SSRC to payload type mapping for detecting camera vs screen share
@@ -308,8 +313,14 @@ public class WebRtcService : IWebRtcService
         {
             if (_currentChannelId == e.ChannelId && e.Participant.UserId != _localUserId)
             {
-                // In SFU mode, just ensure we have a video decoder ready for this user
-                EnsureVideoDecoderForUser(e.Participant.UserId);
+                // In SFU mode, ensure we have video decoders ready for this user
+                // Always create camera decoder
+                EnsureVideoDecoderForUser(e.Participant.UserId, VideoStreamType.Camera);
+                // Create screen share decoder if they're screen sharing
+                if (e.Participant.IsScreenSharing)
+                {
+                    EnsureVideoDecoderForUser(e.Participant.UserId, VideoStreamType.ScreenShare);
+                }
             }
         };
 
@@ -317,10 +328,30 @@ public class WebRtcService : IWebRtcService
         {
             if (_currentChannelId == e.ChannelId)
             {
-                // Clean up video decoder for this user
-                RemoveVideoDecoderForUser(e.UserId);
+                // Clean up all video decoders for this user
+                RemoveAllVideoDecodersForUser(e.UserId);
                 // Legacy P2P cleanup
                 ClosePeerConnection(e.UserId);
+            }
+        };
+
+        // Handle voice state changes to manage screen share decoders
+        _signalR.VoiceStateChanged += e =>
+        {
+            if (_currentChannelId == e.ChannelId && e.UserId != _localUserId)
+            {
+                // Create/remove screen share decoder based on screen sharing state
+                if (e.State.IsScreenSharing.HasValue)
+                {
+                    if (e.State.IsScreenSharing.Value)
+                    {
+                        EnsureVideoDecoderForUser(e.UserId, VideoStreamType.ScreenShare);
+                    }
+                    else
+                    {
+                        RemoveVideoDecoderForUser(e.UserId, VideoStreamType.ScreenShare);
+                    }
+                }
             }
         };
     }
@@ -477,7 +508,13 @@ public class WebRtcService : IWebRtcService
         {
             if (p.UserId != _localUserId)
             {
-                EnsureVideoDecoderForUser(p.UserId);
+                // Always create camera decoder
+                EnsureVideoDecoderForUser(p.UserId, VideoStreamType.Camera);
+                // Create screen share decoder if they're screen sharing
+                if (p.IsScreenSharing)
+                {
+                    EnsureVideoDecoderForUser(p.UserId, VideoStreamType.ScreenShare);
+                }
             }
         }
 
@@ -558,11 +595,14 @@ public class WebRtcService : IWebRtcService
         }
 
         // Clean up all video decoders
-        foreach (var userId in _videoDecoders.Keys.ToList())
+        foreach (var key in _videoDecoders.Keys.ToList())
         {
-            RemoveVideoDecoderForUser(userId);
+            RemoveVideoDecoderForUser(key.userId, key.streamType);
         }
         _ssrcToUserMap.Clear();
+        _ssrcPayloadTypeMap.Clear();
+        _cameraFrameAssembler.Reset();
+        _screenFrameAssembler.Reset();
         _pendingSfuOffer = null;
 
         // Stop and dispose audio source (microphone)
@@ -619,44 +659,50 @@ public class WebRtcService : IWebRtcService
         }
     }
 
-    private void EnsureVideoDecoderForUser(Guid userId)
+    private void EnsureVideoDecoderForUser(Guid userId, VideoStreamType streamType)
     {
-        if (_videoDecoders.ContainsKey(userId)) return;
+        var key = (userId, streamType);
+        if (_videoDecoders.ContainsKey(key)) return;
 
         try
         {
-            // Use 720p 16:9 for incoming video (will scale with aspect ratio preservation)
-            // Use 1080p to support both camera (upscaled) and screen share (native)
+            // Use 1080p to support both camera and screen share
             var decoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264);
             decoder.OnDecodedFrame += (width, height, rgbData) =>
             {
-                // TODO: Determine stream type from SSRC once dual-track is fully implemented
-                VideoFrameReceived?.Invoke(userId, VideoStreamType.Camera, width, height, rgbData);
+                VideoFrameReceived?.Invoke(userId, streamType, width, height, rgbData);
             };
             decoder.Start();
-            _videoDecoders[userId] = decoder;
-            Console.WriteLine($"WebRTC: Created video decoder for user {userId}");
+            _videoDecoders[key] = decoder;
+            Console.WriteLine($"WebRTC: Created {streamType} video decoder for user {userId}");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"WebRTC: Failed to create video decoder for user {userId}: {ex.Message}");
+            Console.WriteLine($"WebRTC: Failed to create {streamType} video decoder for user {userId}: {ex.Message}");
         }
     }
 
-    private void RemoveVideoDecoderForUser(Guid userId)
+    private void RemoveVideoDecoderForUser(Guid userId, VideoStreamType streamType)
     {
-        if (_videoDecoders.TryRemove(userId, out var decoder))
+        var key = (userId, streamType);
+        if (_videoDecoders.TryRemove(key, out var decoder))
         {
             try
             {
                 decoder.Dispose();
-                Console.WriteLine($"WebRTC: Removed video decoder for user {userId}");
+                Console.WriteLine($"WebRTC: Removed {streamType} video decoder for user {userId}");
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"WebRTC: Error disposing video decoder: {ex.Message}");
             }
         }
+    }
+
+    private void RemoveAllVideoDecodersForUser(Guid userId)
+    {
+        RemoveVideoDecoderForUser(userId, VideoStreamType.Camera);
+        RemoveVideoDecoderForUser(userId, VideoStreamType.ScreenShare);
     }
 
     /// <summary>
@@ -767,44 +813,46 @@ public class WebRtcService : IWebRtcService
             }
             else if (media == SDPMediaTypesEnum.video)
             {
-                // Track SSRC → payload type mapping for stream type detection
+                // Route video RTP directly to our own frame assemblers based on payload type
+                // This bypasses SIPSorcery's internal video processing for reliable stream separation
                 var ssrc = rtpPkt.Header.SyncSource;
                 var payloadType = rtpPkt.Header.PayloadType;
+                var timestamp = rtpPkt.Header.Timestamp;
+                var markerBit = rtpPkt.Header.MarkerBit == 1;
                 _ssrcPayloadTypeMap[ssrc] = payloadType;
-            }
-        };
 
-        // Handle incoming video frames from server
-        // In SFU mode, server forwards video from all participants
-        // TODO: Need SSRC mapping to know which user each video stream is from
-        // For now, we'll use a simple approach: route to first non-local video decoder
-        var receivedFrameCount = 0;
-        _serverConnection.OnVideoFrameReceived += (rep, timestamp, frame, format) =>
-        {
-            receivedFrameCount++;
-            if (receivedFrameCount <= 5 || receivedFrameCount % 100 == 0)
-            {
-                Console.WriteLine($"WebRTC SFU: Received video frame {receivedFrameCount}, size={frame.Length}");
-            }
+                // Select the appropriate frame assembler based on payload type
+                var assembler = payloadType == 97 ? _screenFrameAssembler : _cameraFrameAssembler;
+                var streamType = payloadType == 97 ? VideoStreamType.ScreenShare : VideoStreamType.Camera;
 
-            // Route video to appropriate decoder
-            // For now, route to first available decoder (will improve with SSRC mapping)
-            var decoder = _videoDecoders.Values.FirstOrDefault();
-            if (decoder != null)
-            {
-                try
+                // Process packet and check for complete frame
+                var completeFrame = assembler.ProcessPacket(rtpPkt.Payload, timestamp, markerBit);
+                if (completeFrame != null)
                 {
-                    decoder.DecodeFrame(frame);
-                }
-                catch (Exception ex)
-                {
-                    if (receivedFrameCount <= 5)
+                    // Send complete frame to the appropriate decoder
+                    var decoder = _videoDecoders
+                        .Where(kvp => kvp.Key.streamType == streamType)
+                        .Select(kvp => kvp.Value)
+                        .FirstOrDefault();
+
+                    if (decoder != null)
                     {
-                        Console.WriteLine($"WebRTC SFU: DecodeFrame error: {ex.Message}");
+                        try
+                        {
+                            decoder.DecodeFrame(completeFrame);
+                        }
+                        catch (Exception ex)
+                        {
+                            Console.WriteLine($"WebRTC: Decode error for {streamType}: {ex.Message}");
+                        }
                     }
                 }
             }
         };
+
+        // NOTE: We no longer use SIPSorcery's OnVideoFrameReceived callback for video routing.
+        // Instead, we handle video RTP directly in OnRtpPacketReceived above, routing to our
+        // own H264FrameAssembler instances per stream type for reliable camera/screen separation.
 
         // ICE candidate handling
         _serverConnection.onicecandidate += async candidate =>
@@ -992,11 +1040,11 @@ public class WebRtcService : IWebRtcService
             videoDecoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264);
             videoDecoder.OnDecodedFrame += (width, height, rgbData) =>
             {
-                // TODO: Determine stream type from SSRC once dual-track is fully implemented
+                // Legacy P2P: all video is camera
                 VideoFrameReceived?.Invoke(remoteUserId, VideoStreamType.Camera, width, height, rgbData);
             };
             videoDecoder.Start();
-            _videoDecoders[remoteUserId] = videoDecoder;
+            _videoDecoders[(remoteUserId, VideoStreamType.Camera)] = videoDecoder;
 
             Console.WriteLine($"WebRTC: Video decoder created for {remoteUserId}");
         }
@@ -1211,17 +1259,7 @@ public class WebRtcService : IWebRtcService
             }
         }
 
-        if (_videoDecoders.TryRemove(userId, out var videoDecoder))
-        {
-            try
-            {
-                videoDecoder.Dispose();
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine($"WebRTC: Error disposing video decoder: {ex.Message}");
-            }
-        }
+        RemoveAllVideoDecodersForUser(userId);
     }
 
     public void SetMuted(bool muted)
@@ -2034,5 +2072,138 @@ public class WebRtcService : IWebRtcService
     public async ValueTask DisposeAsync()
     {
         await LeaveVoiceChannelAsync();
+    }
+}
+
+/// <summary>
+/// Assembles H264 frames from RTP packets.
+/// Handles single NAL units and FU-A fragmented NAL units.
+/// </summary>
+public class H264FrameAssembler
+{
+    private readonly List<byte> _frameBuffer = new();
+    private readonly List<byte> _fuaBuffer = new(); // For FU-A reassembly
+    private uint _currentTimestamp;
+    private bool _hasFrame;
+
+    /// <summary>
+    /// Processes an RTP packet payload. Returns a complete frame when marker bit indicates end of frame.
+    /// </summary>
+    public byte[]? ProcessPacket(byte[] payload, uint timestamp, bool markerBit)
+    {
+        if (payload.Length == 0) return null;
+
+        // If timestamp changed, reset for new frame
+        if (timestamp != _currentTimestamp)
+        {
+            _frameBuffer.Clear();
+            _fuaBuffer.Clear();
+            _currentTimestamp = timestamp;
+            _hasFrame = false;
+        }
+
+        // Get NAL unit type from first byte
+        byte firstByte = payload[0];
+        int nalType = firstByte & 0x1F;
+
+        if (nalType >= 1 && nalType <= 23)
+        {
+            // Single NAL unit packet - add with start code
+            AddNalUnit(payload);
+        }
+        else if (nalType == 28) // FU-A
+        {
+            ProcessFuA(payload);
+        }
+        else if (nalType == 24) // STAP-A
+        {
+            ProcessStapA(payload);
+        }
+        // Other types (FU-B, STAP-B, etc.) are rare, skip them
+
+        _hasFrame = true;
+
+        // If marker bit is set, frame is complete
+        if (markerBit && _hasFrame && _frameBuffer.Count > 0)
+        {
+            var frame = _frameBuffer.ToArray();
+            _frameBuffer.Clear();
+            _hasFrame = false;
+            return frame;
+        }
+
+        return null;
+    }
+
+    private void AddNalUnit(byte[] nalUnit)
+    {
+        // Add Annex B start code (0x00 0x00 0x00 0x01)
+        _frameBuffer.Add(0x00);
+        _frameBuffer.Add(0x00);
+        _frameBuffer.Add(0x00);
+        _frameBuffer.Add(0x01);
+        _frameBuffer.AddRange(nalUnit);
+    }
+
+    private void ProcessFuA(byte[] payload)
+    {
+        if (payload.Length < 2) return;
+
+        byte fuIndicator = payload[0];
+        byte fuHeader = payload[1];
+
+        bool startBit = (fuHeader & 0x80) != 0;
+        bool endBit = (fuHeader & 0x40) != 0;
+        int nalType = fuHeader & 0x1F;
+
+        if (startBit)
+        {
+            // Start of fragmented NAL unit - reconstruct NAL header
+            _fuaBuffer.Clear();
+            byte nalHeader = (byte)((fuIndicator & 0xE0) | nalType);
+            _fuaBuffer.Add(nalHeader);
+        }
+
+        // Add fragment payload (skip FU indicator and FU header)
+        for (int i = 2; i < payload.Length; i++)
+        {
+            _fuaBuffer.Add(payload[i]);
+        }
+
+        if (endBit)
+        {
+            // End of fragmented NAL unit - add complete NAL to frame
+            AddNalUnit(_fuaBuffer.ToArray());
+            _fuaBuffer.Clear();
+        }
+    }
+
+    private void ProcessStapA(byte[] payload)
+    {
+        // Skip STAP-A header byte
+        int offset = 1;
+
+        while (offset + 2 < payload.Length)
+        {
+            // Read NAL unit size (2 bytes, big endian)
+            int nalSize = (payload[offset] << 8) | payload[offset + 1];
+            offset += 2;
+
+            if (offset + nalSize > payload.Length) break;
+
+            // Extract NAL unit
+            var nalUnit = new byte[nalSize];
+            Array.Copy(payload, offset, nalUnit, 0, nalSize);
+            AddNalUnit(nalUnit);
+
+            offset += nalSize;
+        }
+    }
+
+    public void Reset()
+    {
+        _frameBuffer.Clear();
+        _fuaBuffer.Clear();
+        _hasFrame = false;
     }
 }

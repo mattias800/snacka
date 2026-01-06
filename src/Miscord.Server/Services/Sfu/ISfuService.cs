@@ -38,6 +38,39 @@ public interface ISfuService
     SfuChannelManager? GetChannelManager(Guid channelId);
 
     /// <summary>
+    /// Adds a viewer to a user's screen share.
+    /// Screen share RTP will only be forwarded to users who have opted in.
+    /// </summary>
+    /// <param name="channelId">The voice channel ID</param>
+    /// <param name="streamerUserId">The user who is sharing their screen</param>
+    /// <param name="viewerUserId">The user who wants to watch the screen share</param>
+    void AddScreenShareViewer(Guid channelId, Guid streamerUserId, Guid viewerUserId);
+
+    /// <summary>
+    /// Removes a viewer from a user's screen share.
+    /// </summary>
+    /// <param name="channelId">The voice channel ID</param>
+    /// <param name="streamerUserId">The user who is sharing their screen</param>
+    /// <param name="viewerUserId">The user who no longer wants to watch</param>
+    void RemoveScreenShareViewer(Guid channelId, Guid streamerUserId, Guid viewerUserId);
+
+    /// <summary>
+    /// Clears all viewers for a user's screen share (e.g., when they stop sharing).
+    /// </summary>
+    /// <param name="channelId">The voice channel ID</param>
+    /// <param name="streamerUserId">The user who stopped sharing their screen</param>
+    void ClearScreenShareViewers(Guid channelId, Guid streamerUserId);
+
+    /// <summary>
+    /// Checks if a user is watching another user's screen share.
+    /// </summary>
+    /// <param name="channelId">The voice channel ID</param>
+    /// <param name="streamerUserId">The user who is sharing their screen</param>
+    /// <param name="viewerUserId">The user to check</param>
+    /// <returns>True if the viewer is watching the screen share</returns>
+    bool IsWatchingScreenShare(Guid channelId, Guid streamerUserId, Guid viewerUserId);
+
+    /// <summary>
     /// Fired when an ICE candidate needs to be sent to a client.
     /// Args: (userId, channelId, candidate)
     /// </summary>
