@@ -108,15 +108,23 @@ public class SfuSession : IDisposable
         var audioTrack = new MediaStreamTrack(audioFormats, MediaStreamStatusEnum.SendRecv);
         _peerConnection.addTrack(audioTrack);
 
-        // Video track - bidirectional (receive from client, send to client)
-        var videoFormats = new List<VideoFormat>
+        // Video track 1: Camera - bidirectional (receive from client, send to client)
+        var cameraVideoFormats = new List<VideoFormat>
         {
             new VideoFormat(VideoCodecsEnum.H264, 96)
         };
-        var videoTrack = new MediaStreamTrack(videoFormats, MediaStreamStatusEnum.SendRecv);
-        _peerConnection.addTrack(videoTrack);
+        var cameraVideoTrack = new MediaStreamTrack(cameraVideoFormats, MediaStreamStatusEnum.SendRecv);
+        _peerConnection.addTrack(cameraVideoTrack);
 
-        _logger.LogDebug("SFU session {UserId}: Added audio and video tracks", UserId);
+        // Video track 2: Screen share - bidirectional (receive from client, send to client)
+        var screenVideoFormats = new List<VideoFormat>
+        {
+            new VideoFormat(VideoCodecsEnum.H264, 97) // Different payload type for screen
+        };
+        var screenVideoTrack = new MediaStreamTrack(screenVideoFormats, MediaStreamStatusEnum.SendRecv);
+        _peerConnection.addTrack(screenVideoTrack);
+
+        _logger.LogDebug("SFU session {UserId}: Added audio and dual video tracks (camera + screen)", UserId);
     }
 
     /// <summary>

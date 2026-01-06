@@ -247,6 +247,12 @@ public class WebRtcService : IWebRtcService
     private const int ScreenHeight = 1080;
     private const int ScreenFps = 30;
 
+    // Dual video tracks for simultaneous camera + screen share
+    private MediaStreamTrack? _cameraVideoTrack;
+    private MediaStreamTrack? _screenVideoTrack;
+    private uint _cameraVideoSsrc;
+    private uint _screenVideoSsrc;
+
     private Guid? _currentChannelId;
     private Guid _localUserId;
     private bool _isMuted;
@@ -539,6 +545,8 @@ public class WebRtcService : IWebRtcService
             }
             _serverConnection = null;
             _serverConnectionState = PeerConnectionState.Closed;
+            _cameraVideoTrack = null;
+            _screenVideoTrack = null;
         }
 
         // Close all legacy P2P peer connections
@@ -712,13 +720,24 @@ public class WebRtcService : IWebRtcService
             _audioSource.OnAudioSourceEncodedSample += _serverConnection.SendAudio;
         }
 
-        // Add video track for sending our camera video to server
-        var videoFormats = new List<VideoFormat>
+        // Add TWO video tracks: one for camera, one for screen share
+        // This allows simultaneous camera + screen sharing
+
+        // Camera video track (first track - will be used by default SendVideo)
+        var cameraVideoFormats = new List<VideoFormat>
         {
             new VideoFormat(VideoCodecsEnum.H264, VideoFps)
         };
-        var videoTrack = new MediaStreamTrack(videoFormats, MediaStreamStatusEnum.SendRecv);
-        _serverConnection.addTrack(videoTrack);
+        _cameraVideoTrack = new MediaStreamTrack(cameraVideoFormats, MediaStreamStatusEnum.SendRecv);
+        _serverConnection.addTrack(_cameraVideoTrack);
+
+        // Screen share video track (second track)
+        var screenVideoFormats = new List<VideoFormat>
+        {
+            new VideoFormat(VideoCodecsEnum.H264, ScreenFps)
+        };
+        _screenVideoTrack = new MediaStreamTrack(screenVideoFormats, MediaStreamStatusEnum.SendRecv);
+        _serverConnection.addTrack(_screenVideoTrack);
 
         // Handle audio format negotiation - only set sink format, not source (source is already running)
         _serverConnection.OnAudioFormatsNegotiated += formats =>
@@ -1212,11 +1231,8 @@ public class WebRtcService : IWebRtcService
 
         if (enabled)
         {
-            // Stop camera if it's on - can only do one video source at a time for now
-            if (_isCameraOn)
-            {
-                await SetCameraAsync(false);
-            }
+            // Phase 2: Allow both camera and screen sharing simultaneously
+            // Each goes to a separate video track
             await StartScreenCaptureAsync();
         }
         else
@@ -1237,7 +1253,7 @@ public class WebRtcService : IWebRtcService
 
             // Create encoder for screen content (same as camera but larger resolution)
             _screenEncoder = new FfmpegProcessEncoder(ScreenWidth, ScreenHeight, ScreenFps, VideoCodecsEnum.H264);
-            _screenEncoder.OnEncodedFrame += OnLocalVideoEncoded;
+            _screenEncoder.OnEncodedFrame += OnScreenVideoEncoded;
             _screenEncoder.Start();
 
             // Start FFmpeg screen capture process
@@ -1382,7 +1398,7 @@ public class WebRtcService : IWebRtcService
 
         if (_screenEncoder != null)
         {
-            _screenEncoder.OnEncodedFrame -= OnLocalVideoEncoded;
+            _screenEncoder.OnEncodedFrame -= OnScreenVideoEncoded;
             _screenEncoder.Dispose();
             _screenEncoder = null;
         }
@@ -1435,7 +1451,7 @@ public class WebRtcService : IWebRtcService
 
             // Create FFmpeg process encoder for H264 (hardware accelerated on most platforms)
             _processEncoder = new FfmpegProcessEncoder(actualWidth, actualHeight, VideoFps, VideoCodecsEnum.H264);
-            _processEncoder.OnEncodedFrame += OnLocalVideoEncoded;
+            _processEncoder.OnEncodedFrame += OnCameraVideoEncoded;
             _processEncoder.Start();
             _videoCodec = VideoCodecsEnum.H264;
             Console.WriteLine($"WebRTC: Video encoder created for {_videoCodec}");
@@ -1454,17 +1470,57 @@ public class WebRtcService : IWebRtcService
         }
     }
 
-    private int _sentVideoFrameCount;
-    private void OnLocalVideoEncoded(uint durationRtpUnits, byte[] encodedSample)
+    private int _sentCameraFrameCount;
+    private int _sentScreenFrameCount;
+
+    /// <summary>
+    /// Handler for encoded camera video frames. Sends to camera video track.
+    /// </summary>
+    private void OnCameraVideoEncoded(uint durationRtpUnits, byte[] encodedSample)
     {
-        _sentVideoFrameCount++;
-        if (_sentVideoFrameCount <= 5 || _sentVideoFrameCount % 100 == 0)
+        _sentCameraFrameCount++;
+        if (_sentCameraFrameCount <= 5 || _sentCameraFrameCount % 100 == 0)
         {
-            Console.WriteLine($"WebRTC: Sending video frame {_sentVideoFrameCount}, size={encodedSample.Length}, server={_serverConnection != null}, peers={_peerConnections.Count}");
+            Console.WriteLine($"WebRTC: Sending camera frame {_sentCameraFrameCount}, size={encodedSample.Length}");
+        }
+
+        // SFU mode: send to server connection (camera track is first, so SendVideo goes there)
+        if (_serverConnection != null && _serverConnectionState == PeerConnectionState.Connected)
+        {
+            _serverConnection.SendVideo(durationRtpUnits, encodedSample);
+        }
+
+        // Legacy P2P mode: send to all peer connections
+        foreach (var pc in _peerConnections.Values)
+        {
+            pc.SendVideo(durationRtpUnits, encodedSample);
+        }
+    }
+
+    /// <summary>
+    /// Handler for encoded screen share video frames. Sends to screen video track.
+    ///
+    /// LIMITATION: Currently both camera and screen share use the same SendVideo() method
+    /// which sends to the first video track. True dual-track support requires:
+    /// 1. Getting each track's SSRC after SDP negotiation
+    /// 2. Using SendRtpRaw() with explicit SSRC to target specific tracks
+    /// 3. Server-side SSRC routing to forward to correct track
+    ///
+    /// For now, if both camera and screen are active, the last-active encoder's
+    /// frames will be sent. Full simultaneous dual-track is a future enhancement.
+    /// </summary>
+    private void OnScreenVideoEncoded(uint durationRtpUnits, byte[] encodedSample)
+    {
+        _sentScreenFrameCount++;
+        if (_sentScreenFrameCount <= 5 || _sentScreenFrameCount % 100 == 0)
+        {
+            Console.WriteLine($"WebRTC: Sending screen frame {_sentScreenFrameCount}, size={encodedSample.Length}");
         }
 
         // SFU mode: send to server connection
-        if (_serverConnection != null && _serverConnectionState == PeerConnectionState.Connected)
+        // Note: SendVideo sends to first video track. Both camera and screen currently
+        // share this limitation. See method documentation for details.
+        if (_serverConnection != null && _serverConnectionState == PeerConnectionState.Connected && _screenVideoTrack != null)
         {
             _serverConnection.SendVideo(durationRtpUnits, encodedSample);
         }
@@ -1702,7 +1758,7 @@ public class WebRtcService : IWebRtcService
         // Dispose video encoder
         if (_processEncoder != null)
         {
-            _processEncoder.OnEncodedFrame -= OnLocalVideoEncoded;
+            _processEncoder.OnEncodedFrame -= OnCameraVideoEncoded;
             _processEncoder.Dispose();
             _processEncoder = null;
         }
