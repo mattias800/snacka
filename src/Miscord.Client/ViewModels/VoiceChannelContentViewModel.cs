@@ -104,14 +104,7 @@ public class VideoStreamViewModel : ReactiveObject
             return;
 
         _frameCount++;
-
-        // For large frames (screen share at 1080p+), skip every other frame to reduce UI load
-        // This gives us ~15fps UI updates which is smooth enough for screen content
         var pixelCount = width * height;
-        var skipFrames = pixelCount > 1000000 ? 2 : 1;
-
-        if (_frameCount % skipFrames != 0)
-            return;
 
         // Convert RGB to BGRA using parallel processing for speed
         var bgraData = new byte[pixelCount * 4];
