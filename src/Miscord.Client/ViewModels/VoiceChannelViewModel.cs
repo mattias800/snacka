@@ -22,6 +22,7 @@ public class VoiceParticipantViewModel : ReactiveObject
     public string Username => Participant.Username;
     public bool IsMuted => Participant.IsMuted;
     public bool IsDeafened => Participant.IsDeafened;
+    public bool IsCameraOn => Participant.IsCameraOn;
 
     public bool IsSpeaking
     {
@@ -40,6 +41,7 @@ public class VoiceParticipantViewModel : ReactiveObject
         };
         this.RaisePropertyChanged(nameof(IsMuted));
         this.RaisePropertyChanged(nameof(IsDeafened));
+        this.RaisePropertyChanged(nameof(IsCameraOn));
     }
 }
 

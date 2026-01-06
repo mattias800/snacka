@@ -1,8 +1,14 @@
 using System.Collections.Concurrent;
+using System.Reflection;
+using System.Runtime.InteropServices;
 using SIPSorcery.Media;
 using SIPSorcery.Net;
 using SIPSorceryMedia.SDL2;
 using SIPSorceryMedia.Abstractions;
+using SIPSorceryMedia.FFmpeg;
+using SIPSorceryMedia.Encoders;
+using Emgu.CV;
+using Emgu.CV.CvEnum;
 
 namespace Miscord.Client.Services;
 
@@ -13,6 +19,7 @@ public interface IWebRtcService : IAsyncDisposable
     int ConnectedPeerCount { get; }
     IReadOnlyDictionary<Guid, PeerConnectionState> PeerStates { get; }
     bool IsSpeaking { get; }
+    bool IsCameraOn { get; }
 
     Task JoinVoiceChannelAsync(Guid channelId, IEnumerable<VoiceParticipantResponse> existingParticipants);
     Task LeaveVoiceChannelAsync();
@@ -23,11 +30,21 @@ public interface IWebRtcService : IAsyncDisposable
 
     void SetMuted(bool muted);
     void SetDeafened(bool deafened);
+    Task SetCameraAsync(bool enabled);
 
     event Action<Guid>? PeerConnected;
     event Action<Guid>? PeerDisconnected;
     event Action<VoiceConnectionStatus>? ConnectionStatusChanged;
     event Action<bool>? SpeakingChanged;
+    event Action<bool>? CameraStateChanged;
+    /// <summary>
+    /// Fired when a video frame is received from a peer. Args: (userId, width, height, rgbData)
+    /// </summary>
+    event Action<Guid, int, int, byte[]>? VideoFrameReceived;
+    /// <summary>
+    /// Fired when a local video frame is captured (for self-preview). Args: (width, height, rgbData)
+    /// </summary>
+    event Action<int, int, byte[]>? LocalVideoFrameCaptured;
 }
 
 public enum VoiceConnectionStatus
@@ -49,6 +66,134 @@ public enum PeerConnectionState
 
 public class WebRtcService : IWebRtcService
 {
+    private static bool _ffmpegInitialized;
+    private static readonly object _ffmpegInitLock = new();
+    private static bool _vpxInitialized;
+    private static readonly object _vpxInitLock = new();
+
+    // VPX library paths for macOS
+    private static readonly string[] VpxPaths =
+    {
+        "/opt/homebrew/lib/libvpx.dylib",      // Apple Silicon Homebrew
+        "/opt/homebrew/opt/libvpx/lib/libvpx.dylib",
+        "/usr/local/lib/libvpx.dylib",         // Intel Homebrew
+        "/usr/lib/libvpx.dylib",               // System
+        "libvpx.dylib",                        // Current directory / PATH
+        "libvpx"                               // Let system find it
+    };
+
+    private static IntPtr ResolveVpx(string libraryName, Assembly assembly, DllImportSearchPath? searchPath)
+    {
+        // Handle vpxmd (Windows name) -> libvpx (macOS/Linux name)
+        if (libraryName == "vpxmd" || libraryName == "libvpx" || libraryName == "vpx")
+        {
+            foreach (var path in VpxPaths)
+            {
+                if (NativeLibrary.TryLoad(path, out var handle))
+                {
+                    Console.WriteLine($"WebRTC: Loaded VPX from {path}");
+                    return handle;
+                }
+            }
+        }
+        return IntPtr.Zero;
+    }
+
+    private static void EnsureVpxInitialized()
+    {
+        if (_vpxInitialized) return;
+
+        lock (_vpxInitLock)
+        {
+            if (_vpxInitialized) return;
+
+            try
+            {
+                if (OperatingSystem.IsMacOS() || OperatingSystem.IsLinux())
+                {
+                    // Register DllImportResolver for the VPX encoder assembly
+                    var encoderAssembly = typeof(VideoEncoderEndPoint).Assembly;
+                    NativeLibrary.SetDllImportResolver(encoderAssembly, ResolveVpx);
+                    Console.WriteLine($"WebRTC: Registered VPX DllImportResolver for {encoderAssembly.GetName().Name}");
+                }
+
+                _vpxInitialized = true;
+                Console.WriteLine("WebRTC: VPX initialized");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Failed to initialize VPX - {ex.Message}");
+                _vpxInitialized = true; // Mark as attempted
+            }
+        }
+    }
+
+    private static void EnsureFfmpegInitialized()
+    {
+        if (_ffmpegInitialized) return;
+
+        lock (_ffmpegInitLock)
+        {
+            if (_ffmpegInitialized) return;
+
+            try
+            {
+                // Set FFmpeg library path for macOS
+                // Use FFmpeg 6.x which is compatible with FFmpeg.AutoGen 8.0.0
+                if (OperatingSystem.IsMacOS())
+                {
+                    // Try versioned FFmpeg 6 first (compatible with FFmpeg.AutoGen 8.0.0)
+                    // Then fall back to default paths
+                    var paths = new[]
+                    {
+                        "/opt/homebrew/opt/ffmpeg@6/lib",  // Apple Silicon Homebrew FFmpeg 6
+                        "/usr/local/opt/ffmpeg@6/lib",     // Intel Homebrew FFmpeg 6
+                        "/opt/homebrew/lib",               // Apple Silicon Homebrew (default)
+                        "/usr/local/lib",                  // Intel Homebrew (default)
+                        "/usr/lib"                         // System
+                    };
+
+                    foreach (var path in paths)
+                    {
+                        if (Directory.Exists(path) && File.Exists(Path.Combine(path, "libavcodec.dylib")))
+                        {
+                            FFmpeg.AutoGen.ffmpeg.RootPath = path;
+                            Console.WriteLine($"WebRTC: FFmpeg path set to {path}");
+                            break;
+                        }
+                    }
+                }
+                else if (OperatingSystem.IsLinux())
+                {
+                    var paths = new[]
+                    {
+                        "/usr/lib/x86_64-linux-gnu",
+                        "/usr/lib",
+                        "/usr/local/lib"
+                    };
+
+                    foreach (var path in paths)
+                    {
+                        if (Directory.Exists(path) && File.Exists(Path.Combine(path, "libavcodec.so")))
+                        {
+                            FFmpeg.AutoGen.ffmpeg.RootPath = path;
+                            Console.WriteLine($"WebRTC: FFmpeg path set to {path}");
+                            break;
+                        }
+                    }
+                }
+
+                _ffmpegInitialized = true;
+                Console.WriteLine("WebRTC: FFmpeg initialized");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Failed to initialize FFmpeg - {ex.Message}");
+                _ffmpegInitialized = true; // Mark as attempted
+            }
+        }
+    }
+
     private readonly ISignalRService _signalR;
     private readonly ISettingsStore? _settingsStore;
     private readonly ConcurrentDictionary<Guid, RTCPeerConnection> _peerConnections = new();
@@ -58,6 +203,19 @@ public class WebRtcService : IWebRtcService
     private SDL2AudioSource? _audioSource;
     // Per-peer audio sinks (speakers) for receiving audio
     private readonly ConcurrentDictionary<Guid, SDL2AudioEndPoint> _audioSinks = new();
+    // Per-peer video decoders for receiving video
+    private readonly ConcurrentDictionary<Guid, FfmpegProcessDecoder> _videoDecoders = new();
+
+    // Video capture and encoding
+    private VideoCapture? _videoCapture;
+    private FfmpegProcessEncoder? _processEncoder;
+    private CancellationTokenSource? _videoCts;
+    private Task? _videoCaptureTask;
+    private bool _isCameraOn;
+    private VideoCodecsEnum _videoCodec = VideoCodecsEnum.H264;
+    private const int VideoWidth = 640;
+    private const int VideoHeight = 480;
+    private const int VideoFps = 15;
 
     private Guid? _currentChannelId;
     private Guid _localUserId;
@@ -77,11 +235,18 @@ public class WebRtcService : IWebRtcService
     public int ConnectedPeerCount => _peerStates.Count(p => p.Value == PeerConnectionState.Connected);
     public IReadOnlyDictionary<Guid, PeerConnectionState> PeerStates => _peerStates;
     public bool IsSpeaking => _isSpeaking;
+    public bool IsCameraOn => _isCameraOn;
 
     public event Action<Guid>? PeerConnected;
     public event Action<Guid>? PeerDisconnected;
     public event Action<VoiceConnectionStatus>? ConnectionStatusChanged;
     public event Action<bool>? SpeakingChanged;
+    public event Action<bool>? CameraStateChanged;
+    public event Action<Guid, int, int, byte[]>? VideoFrameReceived;
+    /// <summary>
+    /// Fired when a local video frame is captured (for self-preview). Args: (width, height, rgbData)
+    /// </summary>
+    public event Action<int, int, byte[]>? LocalVideoFrameCaptured;
 
     public WebRtcService(ISignalRService signalR, ISettingsStore? settingsStore = null)
     {
@@ -255,7 +420,15 @@ public class WebRtcService : IWebRtcService
             SpeakingChanged?.Invoke(false);
         }
 
-        // Close all peer connections and audio sinks
+        // Stop video capture
+        if (_isCameraOn)
+        {
+            await StopVideoCaptureAsync();
+            _isCameraOn = false;
+            CameraStateChanged?.Invoke(false);
+        }
+
+        // Close all peer connections and audio/video sinks
         foreach (var userId in _peerConnections.Keys.ToList())
         {
             ClosePeerConnection(userId);
@@ -334,6 +507,35 @@ public class WebRtcService : IWebRtcService
             _audioSource.OnAudioSourceEncodedSample += pc.SendAudio;
         }
 
+        // Create video decoder for this peer (using FFmpeg subprocess)
+        // We'll create it lazily when we know the video dimensions, or use a default
+        FfmpegProcessDecoder? videoDecoder = null;
+        try
+        {
+            // Use 1280x720 as default, will recreate if needed
+            videoDecoder = new FfmpegProcessDecoder(1280, 720, VideoCodecsEnum.H264);
+            videoDecoder.OnDecodedFrame += (width, height, rgbData) =>
+            {
+                VideoFrameReceived?.Invoke(remoteUserId, width, height, rgbData);
+            };
+            videoDecoder.Start();
+            _videoDecoders[remoteUserId] = videoDecoder;
+
+            Console.WriteLine($"WebRTC: Video decoder created for {remoteUserId}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WebRTC: Failed to create video decoder: {ex.Message}");
+        }
+
+        // Add video track (H264)
+        var videoFormats = new List<VideoFormat>
+        {
+            new VideoFormat(VideoCodecsEnum.H264, VideoFps)
+        };
+        var videoTrack = new MediaStreamTrack(videoFormats, MediaStreamStatusEnum.SendRecv);
+        pc.addTrack(videoTrack);
+
         // Handle audio format negotiation
         pc.OnAudioFormatsNegotiated += (formats) =>
         {
@@ -344,14 +546,47 @@ public class WebRtcService : IWebRtcService
             audioSink?.SetAudioSinkFormat(format);
         };
 
-        // Handle incoming audio
+        // Handle video format negotiation
+        pc.OnVideoFormatsNegotiated += (formats) =>
+        {
+            Console.WriteLine($"WebRTC: Video formats negotiated with {remoteUserId}: {string.Join(", ", formats.Select(f => f.FormatName))}");
+            var format = formats.First();
+            _videoCodec = format.Codec;
+        };
+
+        // Handle incoming audio RTP packets
         pc.OnRtpPacketReceived += (rep, media, rtpPkt) =>
         {
-            if (!_isDeafened && media == SDPMediaTypesEnum.audio && audioSink != null)
+            if (media == SDPMediaTypesEnum.audio)
             {
-                audioSink.GotAudioRtp(rep, rtpPkt.Header.SyncSource, rtpPkt.Header.SequenceNumber,
-                    rtpPkt.Header.Timestamp, rtpPkt.Header.PayloadType,
-                    rtpPkt.Header.MarkerBit == 1, rtpPkt.Payload);
+                if (!_isDeafened && audioSink != null)
+                {
+                    audioSink.GotAudioRtp(rep, rtpPkt.Header.SyncSource, rtpPkt.Header.SequenceNumber,
+                        rtpPkt.Header.Timestamp, rtpPkt.Header.PayloadType,
+                        rtpPkt.Header.MarkerBit == 1, rtpPkt.Payload);
+                }
+            }
+        };
+
+        // Handle incoming video frames - pass to FFmpeg decoder
+        var receivedFrameCount = 0;
+        pc.OnVideoFrameReceived += (rep, timestamp, frame, format) =>
+        {
+            receivedFrameCount++;
+            if (receivedFrameCount <= 5 || receivedFrameCount % 100 == 0)
+            {
+                Console.WriteLine($"WebRTC: Received video frame {receivedFrameCount} from {remoteUserId}, size={frame.Length}, format={format.FormatName}");
+            }
+            try
+            {
+                videoDecoder?.DecodeFrame(frame);
+            }
+            catch (Exception ex)
+            {
+                if (receivedFrameCount <= 5)
+                {
+                    Console.WriteLine($"WebRTC: DecodeFrame error: {ex.Message}");
+                }
             }
         };
 
@@ -470,9 +705,13 @@ public class WebRtcService : IWebRtcService
     private void ClosePeerConnection(Guid userId)
     {
         // Unsubscribe audio source from this peer
-        if (_peerConnections.TryGetValue(userId, out var pc) && _audioSource != null)
+        if (_peerConnections.TryGetValue(userId, out var pc))
         {
-            _audioSource.OnAudioSourceEncodedSample -= pc.SendAudio;
+            if (_audioSource != null)
+            {
+                _audioSource.OnAudioSourceEncodedSample -= pc.SendAudio;
+            }
+            // Note: Video encoder doesn't use events - we call SendVideo directly in the capture loop
         }
 
         if (_peerConnections.TryRemove(userId, out pc))
@@ -492,6 +731,18 @@ public class WebRtcService : IWebRtcService
             catch (Exception ex)
             {
                 Console.WriteLine($"WebRTC: Error closing audio sink: {ex.Message}");
+            }
+        }
+
+        if (_videoDecoders.TryRemove(userId, out var videoDecoder))
+        {
+            try
+            {
+                videoDecoder.Dispose();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Error disposing video decoder: {ex.Message}");
             }
         }
     }
@@ -528,6 +779,342 @@ public class WebRtcService : IWebRtcService
 
         // When deafened, we still receive audio but don't pass it to the sinks
         // This is handled in the OnRtpPacketReceived callback
+    }
+
+    public async Task SetCameraAsync(bool enabled)
+    {
+        if (_isCameraOn == enabled) return;
+
+        _isCameraOn = enabled;
+        Console.WriteLine($"WebRTC: Camera = {enabled}");
+
+        if (enabled)
+        {
+            await StartVideoCaptureAsync();
+        }
+        else
+        {
+            await StopVideoCaptureAsync();
+        }
+
+        CameraStateChanged?.Invoke(enabled);
+    }
+
+    private async Task StartVideoCaptureAsync()
+    {
+        if (_videoCapture != null) return;
+
+        try
+        {
+            // Get video device from settings
+            var deviceIndex = 0;
+            var devicePath = _settingsStore?.Settings.VideoDevice;
+            if (!string.IsNullOrEmpty(devicePath) && int.TryParse(devicePath, out var parsed))
+            {
+                deviceIndex = parsed;
+            }
+
+            // Use AVFoundation on macOS, V4L2 on Linux for correct device mapping
+            var backend = VideoCapture.API.Any;
+            if (OperatingSystem.IsMacOS())
+            {
+                backend = VideoCapture.API.AVFoundation;
+            }
+            else if (OperatingSystem.IsLinux())
+            {
+                backend = VideoCapture.API.V4L2;
+            }
+
+            Console.WriteLine($"WebRTC: Starting video capture on device {deviceIndex} with backend {backend}");
+            _videoCapture = new VideoCapture(deviceIndex, backend);
+
+            if (!_videoCapture.IsOpened)
+            {
+                throw new InvalidOperationException($"Failed to open camera {deviceIndex}");
+            }
+
+            // Set capture properties
+            _videoCapture.Set(CapProp.FrameWidth, VideoWidth);
+            _videoCapture.Set(CapProp.FrameHeight, VideoHeight);
+            _videoCapture.Set(CapProp.Fps, VideoFps);
+
+            var actualWidth = (int)_videoCapture.Get(CapProp.FrameWidth);
+            var actualHeight = (int)_videoCapture.Get(CapProp.FrameHeight);
+
+            Console.WriteLine($"WebRTC: Video capture opened - {actualWidth}x{actualHeight}");
+
+            // Create FFmpeg process encoder for H264 (hardware accelerated on most platforms)
+            _processEncoder = new FfmpegProcessEncoder(actualWidth, actualHeight, VideoFps, VideoCodecsEnum.H264);
+            _processEncoder.OnEncodedFrame += OnLocalVideoEncoded;
+            _processEncoder.Start();
+            _videoCodec = VideoCodecsEnum.H264;
+            Console.WriteLine($"WebRTC: Video encoder created for {_videoCodec}");
+
+            // Start capture loop
+            _videoCts = new CancellationTokenSource();
+            _videoCaptureTask = Task.Run(() => VideoCaptureLoop(actualWidth, actualHeight, _videoCts.Token));
+
+            Console.WriteLine("WebRTC: Video capture started");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"WebRTC: Failed to start video capture - {ex.Message}");
+            await StopVideoCaptureAsync();
+            throw;
+        }
+    }
+
+    private int _sentVideoFrameCount;
+    private void OnLocalVideoEncoded(uint durationRtpUnits, byte[] encodedSample)
+    {
+        _sentVideoFrameCount++;
+        if (_sentVideoFrameCount <= 5 || _sentVideoFrameCount % 100 == 0)
+        {
+            Console.WriteLine($"WebRTC: Sending video frame {_sentVideoFrameCount}, size={encodedSample.Length}, peers={_peerConnections.Count}");
+        }
+
+        // Send encoded video to all peer connections
+        foreach (var pc in _peerConnections.Values)
+        {
+            pc.SendVideo(durationRtpUnits, encodedSample);
+        }
+    }
+
+    private void VideoCaptureLoop(int width, int height, CancellationToken token)
+    {
+        using var frame = new Mat();
+        var frameIntervalMs = 1000 / VideoFps;
+        var frameCount = 0;
+
+        Console.WriteLine($"WebRTC: Video capture loop starting - target {width}x{height} @ {VideoFps}fps");
+
+        while (!token.IsCancellationRequested && _videoCapture != null)
+        {
+            try
+            {
+                if (!_videoCapture.Read(frame) || frame.IsEmpty)
+                {
+                    Thread.Sleep(10);
+                    continue;
+                }
+
+                // Get frame dimensions and raw BGR bytes (OpenCV captures in BGR format)
+                var frameWidth = frame.Width;
+                var frameHeight = frame.Height;
+                var dataSize = frameWidth * frameHeight * 3;
+
+                frameCount++;
+                if (frameCount == 1 || frameCount % 100 == 0)
+                {
+                    Console.WriteLine($"WebRTC: Captured frame {frameCount} - {frameWidth}x{frameHeight}, peers: {_peerConnections.Count}");
+                }
+
+                // Get BGR data from OpenCV frame
+                var bgrData = new byte[dataSize];
+                System.Runtime.InteropServices.Marshal.Copy(frame.DataPointer, bgrData, 0, dataSize);
+
+                // Send frame to encoder (encoding happens asynchronously in FfmpegProcessEncoder)
+                if (_processEncoder != null && _peerConnections.Count > 0)
+                {
+                    try
+                    {
+                        // Send to FFmpeg process for encoding
+                        _processEncoder.EncodeFrame(bgrData);
+                    }
+                    catch (Exception encodeEx)
+                    {
+                        if (frameCount <= 5 || frameCount % 100 == 0)
+                        {
+                            Console.WriteLine($"WebRTC: Encoding error on frame {frameCount}: {encodeEx.Message}");
+                        }
+                    }
+                }
+
+                // Fire local preview event (convert BGR to RGB)
+                if (LocalVideoFrameCaptured != null && frameCount % 2 == 0) // Every other frame for performance
+                {
+                    var rgbData = BgrToRgb(bgrData, frameWidth, frameHeight);
+                    LocalVideoFrameCaptured.Invoke(frameWidth, frameHeight, rgbData);
+                }
+
+                Thread.Sleep(frameIntervalMs);
+            }
+            catch (OperationCanceledException)
+            {
+                break;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Video capture error - {ex.Message}");
+                Console.WriteLine($"WebRTC: Stack trace: {ex.StackTrace}");
+                Thread.Sleep(100);
+            }
+        }
+
+        Console.WriteLine($"WebRTC: Video capture loop ended after {frameCount} frames");
+    }
+
+    private static byte[] RgbToI420(byte[] rgb, int width, int height)
+    {
+        // I420 format: Y plane (width*height), U plane (width/2 * height/2), V plane (width/2 * height/2)
+        var ySize = width * height;
+        var uvSize = (width / 2) * (height / 2);
+        var i420 = new byte[ySize + uvSize * 2];
+
+        var yPlane = i420.AsSpan(0, ySize);
+        var uPlane = i420.AsSpan(ySize, uvSize);
+        var vPlane = i420.AsSpan(ySize + uvSize, uvSize);
+
+        for (int j = 0; j < height; j++)
+        {
+            for (int i = 0; i < width; i++)
+            {
+                var rgbIndex = (j * width + i) * 3;
+                var r = rgb[rgbIndex];
+                var g = rgb[rgbIndex + 1];
+                var b = rgb[rgbIndex + 2];
+
+                // RGB to Y
+                var y = (byte)Math.Clamp((66 * r + 129 * g + 25 * b + 128) / 256 + 16, 0, 255);
+                yPlane[j * width + i] = y;
+
+                // Subsample U and V (every 2x2 block)
+                if (j % 2 == 0 && i % 2 == 0)
+                {
+                    var uvIndex = (j / 2) * (width / 2) + (i / 2);
+                    uPlane[uvIndex] = (byte)Math.Clamp((-38 * r - 74 * g + 112 * b + 128) / 256 + 128, 0, 255);
+                    vPlane[uvIndex] = (byte)Math.Clamp((112 * r - 94 * g - 18 * b + 128) / 256 + 128, 0, 255);
+                }
+            }
+        }
+
+        return i420;
+    }
+
+    private static byte[] BgrToI420(byte[] bgr, int width, int height)
+    {
+        // I420 format: Y plane (width*height), U plane (width/2 * height/2), V plane (width/2 * height/2)
+        var ySize = width * height;
+        var uvSize = (width / 2) * (height / 2);
+        var i420 = new byte[ySize + uvSize * 2];
+
+        var yPlane = i420.AsSpan(0, ySize);
+        var uPlane = i420.AsSpan(ySize, uvSize);
+        var vPlane = i420.AsSpan(ySize + uvSize, uvSize);
+
+        for (int j = 0; j < height; j++)
+        {
+            for (int i = 0; i < width; i++)
+            {
+                var bgrIndex = (j * width + i) * 3;
+                var b = bgr[bgrIndex];
+                var g = bgr[bgrIndex + 1];
+                var r = bgr[bgrIndex + 2];
+
+                // RGB to Y
+                var y = (byte)Math.Clamp((66 * r + 129 * g + 25 * b + 128) / 256 + 16, 0, 255);
+                yPlane[j * width + i] = y;
+
+                // Subsample U and V (every 2x2 block)
+                if (j % 2 == 0 && i % 2 == 0)
+                {
+                    var uvIndex = (j / 2) * (width / 2) + (i / 2);
+                    uPlane[uvIndex] = (byte)Math.Clamp((-38 * r - 74 * g + 112 * b + 128) / 256 + 128, 0, 255);
+                    vPlane[uvIndex] = (byte)Math.Clamp((112 * r - 94 * g - 18 * b + 128) / 256 + 128, 0, 255);
+                }
+            }
+        }
+
+        return i420;
+    }
+
+    private static byte[] I420ToRgb(byte[] i420, int width, int height)
+    {
+        // I420 format: Y plane (width*height), U plane (width/2 * height/2), V plane (width/2 * height/2)
+        var ySize = width * height;
+        var uvSize = (width / 2) * (height / 2);
+        var rgb = new byte[width * height * 3];
+
+        var yPlane = i420.AsSpan(0, ySize);
+        var uPlane = i420.AsSpan(ySize, uvSize);
+        var vPlane = i420.AsSpan(ySize + uvSize, uvSize);
+
+        for (int j = 0; j < height; j++)
+        {
+            for (int i = 0; i < width; i++)
+            {
+                var yIndex = j * width + i;
+                var uvIndex = (j / 2) * (width / 2) + (i / 2);
+
+                var y = yPlane[yIndex] - 16;
+                var u = uPlane[uvIndex] - 128;
+                var v = vPlane[uvIndex] - 128;
+
+                // YUV to RGB conversion
+                var r = (298 * y + 409 * v + 128) >> 8;
+                var g = (298 * y - 100 * u - 208 * v + 128) >> 8;
+                var b = (298 * y + 516 * u + 128) >> 8;
+
+                var rgbIndex = (j * width + i) * 3;
+                rgb[rgbIndex] = (byte)Math.Clamp(r, 0, 255);
+                rgb[rgbIndex + 1] = (byte)Math.Clamp(g, 0, 255);
+                rgb[rgbIndex + 2] = (byte)Math.Clamp(b, 0, 255);
+            }
+        }
+
+        return rgb;
+    }
+
+    private static byte[] BgrToRgb(byte[] bgr, int width, int height)
+    {
+        var rgb = new byte[bgr.Length];
+        for (int i = 0; i < bgr.Length; i += 3)
+        {
+            rgb[i] = bgr[i + 2];     // R = B
+            rgb[i + 1] = bgr[i + 1]; // G = G
+            rgb[i + 2] = bgr[i];     // B = R
+        }
+        return rgb;
+    }
+
+    private async Task StopVideoCaptureAsync()
+    {
+        Console.WriteLine("WebRTC: Stopping video capture...");
+
+        _videoCts?.Cancel();
+
+        if (_videoCaptureTask != null)
+        {
+            try
+            {
+                await _videoCaptureTask.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (TimeoutException)
+            {
+                Console.WriteLine("WebRTC: Video capture task did not stop in time");
+            }
+            catch (OperationCanceledException) { }
+            _videoCaptureTask = null;
+        }
+
+        _videoCts?.Dispose();
+        _videoCts = null;
+
+        // Dispose video encoder
+        if (_processEncoder != null)
+        {
+            _processEncoder.OnEncodedFrame -= OnLocalVideoEncoded;
+            _processEncoder.Dispose();
+            _processEncoder = null;
+        }
+
+        if (_videoCapture != null)
+        {
+            _videoCapture.Dispose();
+            _videoCapture = null;
+        }
+
+        Console.WriteLine("WebRTC: Video capture stopped");
     }
 
     private void UpdateConnectionStatus(VoiceConnectionStatus newStatus)

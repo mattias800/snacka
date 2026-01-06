@@ -1,0 +1,114 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             x:Class="Miscord.Client.Views.VoiceChannelContentView"
+             x:DataType="vm:VoiceChannelContentViewModel">
+
+    <!-- Voice Channel Content - Grid of participants with video -->
+    <Grid Background="#36393f">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
+
+        <!-- Participant Grid -->
+        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+            <ItemsControl ItemsSource="{Binding Participants}">
+                <ItemsControl.ItemsPanel>
+                    <ItemsPanelTemplate>
+                        <WrapPanel Orientation="Horizontal"
+                                   HorizontalAlignment="Center"
+                                   Margin="16"/>
+                    </ItemsPanelTemplate>
+                </ItemsControl.ItemsPanel>
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <!-- Participant Box -->
+                        <Border Width="320" Height="240"
+                                Margin="8"
+                                CornerRadius="8"
+                                Background="#2f3136"
+                                BorderThickness="0"
+                                ClipToBounds="True">
+
+                            <Grid>
+                                <!-- Video Feed (shown when camera is on and we have a frame) -->
+                                <Image Source="{Binding VideoBitmap}"
+                                       Stretch="UniformToFill"
+                                       IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                                <!-- Avatar placeholder (shown when no video) -->
+                                <StackPanel VerticalAlignment="Center"
+                                            HorizontalAlignment="Center"
+                                            IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                                    <!-- Large Avatar Circle -->
+                                    <Border Width="80" Height="80"
+                                            CornerRadius="40"
+                                            Background="#5865f2"
+                                            HorizontalAlignment="Center">
+                                        <TextBlock Text="{Binding Username[0]}"
+                                                   Foreground="White"
+                                                   FontSize="36"
+                                                   FontWeight="Bold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                </StackPanel>
+
+                                <!-- Username overlay at bottom -->
+                                <Border VerticalAlignment="Bottom"
+                                        Background="#80000000"
+                                        Padding="12,6">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <TextBlock Text="{Binding Username}"
+                                                   Foreground="White"
+                                                   FontSize="14"
+                                                   FontWeight="SemiBold"
+                                                   VerticalAlignment="Center"/>
+
+                                        <!-- Status icons -->
+                                        <TextBlock Text="🔇"
+                                                   FontSize="12"
+                                                   Foreground="#ed4245"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsMuted}"/>
+                                        <TextBlock Text="🔕"
+                                                   FontSize="12"
+                                                   Foreground="#ed4245"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsDeafened}"/>
+                                        <TextBlock Text="📹"
+                                                   FontSize="12"
+                                                   Foreground="#3ba55c"
+                                                   VerticalAlignment="Center"
+                                                   IsVisible="{Binding IsCameraOn}"/>
+                                    </StackPanel>
+                                </Border>
+
+                                <!-- Speaking indicator ring -->
+                                <Border CornerRadius="8"
+                                        BorderThickness="3"
+                                        BorderBrush="#3ba55c"
+                                        IsVisible="{Binding IsSpeaking}"/>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+
+        <!-- Empty state when no participants -->
+        <StackPanel VerticalAlignment="Center"
+                    HorizontalAlignment="Center"
+                    IsVisible="{Binding !Participants.Count}">
+            <TextBlock Text="🔊"
+                       FontSize="48"
+                       HorizontalAlignment="Center"
+                       Foreground="#72767d"/>
+            <TextBlock Text="No one is in this voice channel"
+                       FontSize="16"
+                       Foreground="#72767d"
+                       HorizontalAlignment="Center"
+                       Margin="0,8,0,0"/>
+        </StackPanel>
+    </Grid>
+</UserControl>

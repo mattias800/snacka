@@ -38,6 +38,12 @@ public sealed class Program
             }
         }
 
+        // Allow MISCORD_PROFILE env var as fallback
+        if (string.IsNullOrEmpty(Profile))
+        {
+            Profile = Environment.GetEnvironmentVariable("MISCORD_PROFILE");
+        }
+
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
     }
 

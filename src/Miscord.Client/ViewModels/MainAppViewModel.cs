@@ -36,11 +36,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private ChannelResponse? _currentVoiceChannel;
     private bool _isMuted;
     private bool _isDeafened;
+    private bool _isCameraOn;
     private VoiceConnectionStatus _voiceConnectionStatus = VoiceConnectionStatus.Disconnected;
     private ObservableCollection<VoiceParticipantResponse> _voiceParticipants = new();
 
     // Voice channels with participant tracking (robust reactive approach)
     private ObservableCollection<VoiceChannelViewModel> _voiceChannelViewModels = new();
+
+    // Voice channel content view (for displaying video grid)
+    private ChannelResponse? _selectedVoiceChannelForViewing;
+    private VoiceChannelContentViewModel? _voiceChannelContent;
 
     // Permission state
     private UserRole? _currentUserRole;
@@ -63,6 +68,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             webRtcService.SetLocalUserId(auth.UserId);
         }
+
+        // Create voice channel content view model for video grid
+        _voiceChannelContent = new VoiceChannelContentViewModel(_webRtc, auth.UserId);
 
         // Subscribe to WebRTC connection status changes
         _webRtc.ConnectionStatusChanged += status =>
@@ -120,6 +128,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         LeaveVoiceChannelCommand = ReactiveCommand.CreateFromTask(LeaveVoiceChannelAsync);
         ToggleMuteCommand = ReactiveCommand.CreateFromTask(ToggleMuteAsync);
         ToggleDeafenCommand = ReactiveCommand.CreateFromTask(ToggleDeafenAsync);
+        ToggleCameraCommand = ReactiveCommand.CreateFromTask(ToggleCameraAsync);
 
         var canSendMessage = this.WhenAnyValue(
             x => x.MessageInput,
@@ -283,7 +292,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         });
 
-        // Voice channel events - update VoiceChannelViewModels and current VoiceParticipants
+        // Voice channel events - update VoiceChannelViewModels, VoiceParticipants, and VoiceChannelContent
         _signalR.VoiceParticipantJoined += e => Dispatcher.UIThread.Post(() =>
         {
             Console.WriteLine($"EVENT VoiceParticipantJoined: {e.Participant.Username} joined channel {e.ChannelId}");
@@ -304,6 +313,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             {
                 if (!VoiceParticipants.Any(p => p.UserId == e.Participant.UserId))
                     VoiceParticipants.Add(e.Participant);
+
+                // Update video grid
+                _voiceChannelContent?.AddParticipant(e.Participant);
             }
         });
 
@@ -321,6 +333,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 var participant = VoiceParticipants.FirstOrDefault(p => p.UserId == e.UserId);
                 if (participant is not null)
                     VoiceParticipants.Remove(participant);
+
+                // Update video grid
+                _voiceChannelContent?.RemoveParticipant(e.UserId);
             }
         });
 
@@ -347,6 +362,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                         IsCameraOn = e.State.IsCameraOn ?? current.IsCameraOn
                     };
                 }
+
+                // Update video grid
+                _voiceChannelContent?.UpdateParticipantState(e.UserId, e.State);
             }
         });
 
@@ -355,6 +373,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == e.ChannelId);
             voiceChannel?.UpdateSpeakingState(e.UserId, e.IsSpeaking);
+
+            // Update video grid
+            if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
+            {
+                _voiceChannelContent?.UpdateSpeakingState(e.UserId, e.IsSpeaking);
+            }
         });
 
         // Local speaking detection - broadcast to others and update own state
@@ -370,6 +394,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 // Update our own speaking state in the ViewModel
                 var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == currentChannel.Id);
                 voiceChannel?.UpdateSpeakingState(_auth.UserId, isSpeaking);
+
+                // Update video grid
+                _voiceChannelContent?.UpdateSpeakingState(_auth.UserId, isSpeaking);
             }
         });
     }
@@ -486,6 +513,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isDeafened, value);
     }
 
+    public bool IsCameraOn
+    {
+        get => _isCameraOn;
+        set => this.RaiseAndSetIfChanged(ref _isCameraOn, value);
+    }
+
     public VoiceConnectionStatus VoiceConnectionStatus
     {
         get => _voiceConnectionStatus;
@@ -518,6 +551,25 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         get => _voiceChannelViewModels;
         set => this.RaiseAndSetIfChanged(ref _voiceChannelViewModels, value);
     }
+
+    // Voice channel content view for video grid
+    public VoiceChannelContentViewModel? VoiceChannelContent => _voiceChannelContent;
+
+    public ChannelResponse? SelectedVoiceChannelForViewing
+    {
+        get => _selectedVoiceChannelForViewing;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedVoiceChannelForViewing, value);
+            this.RaisePropertyChanged(nameof(IsViewingVoiceChannel));
+            if (_voiceChannelContent != null)
+            {
+                _voiceChannelContent.Channel = value;
+            }
+        }
+    }
+
+    public bool IsViewingVoiceChannel => SelectedVoiceChannelForViewing != null;
 
     /// <summary>
     /// Gets voice participants for a channel. Used by legacy converters.
@@ -580,6 +632,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> LeaveVoiceChannelCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleMuteCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleDeafenCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleCameraCommand { get; }
 
     public bool CanSwitchServer => _onSwitchServer is not null;
 
@@ -1091,6 +1144,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 Console.WriteLine($"JoinVoiceChannelAsync: WARNING - VoiceChannelVM for {channel.Name} not found!");
             }
 
+            // Update VoiceChannelContent for video grid display
+            SelectedVoiceChannelForViewing = channel;
+            _voiceChannelContent?.SetParticipants(participants);
+
             // Start WebRTC connections to all existing participants
             await _webRtc.JoinVoiceChannelAsync(channel.Id, participants);
 
@@ -1122,6 +1179,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         VoiceParticipants.Clear();
         IsMuted = false;
         IsDeafened = false;
+        IsCameraOn = false;
+
+        // Clear voice channel content view
+        SelectedVoiceChannelForViewing = null;
+        _voiceChannelContent?.SetParticipants(Enumerable.Empty<VoiceParticipantResponse>());
 
         Console.WriteLine("Left voice channel");
     }
@@ -1133,6 +1195,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsMuted = !IsMuted;
         _webRtc.SetMuted(IsMuted);
         await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsMuted: IsMuted));
+
+        // Update our own state in the local view models
+        var state = new VoiceStateUpdate(IsMuted: IsMuted);
+        var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
+        voiceChannel?.UpdateParticipantState(_auth.UserId, state);
+        _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
     }
 
     private async Task ToggleDeafenAsync()
@@ -1148,6 +1216,35 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
         _webRtc.SetDeafened(IsDeafened);
         await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsMuted: IsMuted, IsDeafened: IsDeafened));
+
+        // Update our own state in the local view models
+        var state = new VoiceStateUpdate(IsMuted: IsMuted, IsDeafened: IsDeafened);
+        var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
+        voiceChannel?.UpdateParticipantState(_auth.UserId, state);
+        _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
+    }
+
+    private async Task ToggleCameraAsync()
+    {
+        if (CurrentVoiceChannel is null) return;
+
+        try
+        {
+            var newState = !IsCameraOn;
+            await _webRtc.SetCameraAsync(newState);
+            IsCameraOn = newState;
+            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsCameraOn: IsCameraOn));
+
+            // Update our own state in the local view models (we don't receive our own VoiceStateChanged event)
+            var state = new VoiceStateUpdate(IsCameraOn: newState);
+            var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
+            voiceChannel?.UpdateParticipantState(_auth.UserId, state);
+            _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to toggle camera: {ex.Message}");
+        }
     }
 
     public void Dispose()
