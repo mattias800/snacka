@@ -1,0 +1,40 @@
+version: '3.8'
+
+services:
+  miscord-server:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: miscord-server
+    ports:
+      - "5117:5117"
+    environment:
+      # Use SQLite for simple deployment (database stored in volume)
+      - UseSqlite=true
+      # JWT Configuration - CHANGE THIS IN PRODUCTION!
+      - Jwt__SecretKey=${JWT_SECRET_KEY:-ChangeThisToASecureSecretKeyAtLeast32CharactersLong!}
+      - Jwt__Issuer=Miscord
+      - Jwt__Audience=Miscord
+      - Jwt__AccessTokenExpirationMinutes=60
+      - Jwt__RefreshTokenExpirationDays=7
+      # Server Info
+      - ServerInfo__Name=${SERVER_NAME:-Miscord Server}
+      - ServerInfo__Description=${SERVER_DESCRIPTION:-A self-hosted Discord alternative}
+      - ServerInfo__AllowRegistration=${ALLOW_REGISTRATION:-true}
+      # Logging
+      - Logging__LogLevel__Default=Information
+      - Logging__LogLevel__Microsoft.AspNetCore=Warning
+    volumes:
+      # Persist SQLite database
+      - miscord-data:/app/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5117/api/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+volumes:
+  miscord-data:
+    driver: local

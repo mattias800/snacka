@@ -16,12 +16,14 @@ builder.Services.Configure<JwtSettings>(
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
     ?? throw new InvalidOperationException("JWT settings are not configured.");
 
-// Add database context - Use SQLite for local development
+// Add database context - Use SQLite for local development, SQL Server for production
 var useSqlite = builder.Configuration.GetValue<bool>("UseSqlite", true);
 if (useSqlite)
 {
+    var sqliteConnection = builder.Configuration.GetConnectionString("SqliteConnection")
+        ?? "Data Source=miscord.db";
     builder.Services.AddDbContext<MiscordDbContext>(options =>
-        options.UseSqlite("Data Source=miscord.db"));
+        options.UseSqlite(sqliteConnection));
 }
 else
 {

@@ -1,0 +1,33 @@
+# Git
+.git
+.gitignore
+
+# IDE
+.idea
+.vscode
+*.user
+*.suo
+
+# Build outputs
+**/bin
+**/obj
+**/publish
+
+# Documentation
+docs
+*.md
+!README.md
+
+# Development files
+dev-start.sh
+start-clients.sh
+*.db
+
+# Tests
+tests
+
+# Tools
+tools
+
+# Claude/AI
+.claude

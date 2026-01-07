@@ -215,34 +215,55 @@ dotnet publish src/Miscord.Client/Miscord.Client.csproj \
 
 ### Docker Deployment (Server)
 
-Create a `Dockerfile` in the repository root:
+The easiest way to deploy Miscord is using Docker Compose.
 
-```dockerfile
-FROM mcr.microsoft.com/dotnet/aspnet:9.0 AS base
-WORKDIR /app
-EXPOSE 5117
+#### Quick Start with Docker Compose
 
-FROM mcr.microsoft.com/dotnet/sdk:9.0 AS build
-WORKDIR /src
-COPY ["src/Miscord.Server/Miscord.Server.csproj", "Miscord.Server/"]
-COPY ["src/Miscord.Shared/Miscord.Shared.csproj", "Miscord.Shared/"]
-COPY ["src/Miscord.WebRTC/Miscord.WebRTC.csproj", "Miscord.WebRTC/"]
-RUN dotnet restore "Miscord.Server/Miscord.Server.csproj"
-COPY src/ .
-RUN dotnet publish "Miscord.Server/Miscord.Server.csproj" -c Release -o /app/publish
+1. **Configure environment variables:**
+   ```bash
+   cp .env.example .env
+   # Edit .env and set a secure JWT_SECRET_KEY
+   ```
 
-FROM base AS final
-WORKDIR /app
-COPY --from=build /app/publish .
-ENTRYPOINT ["dotnet", "Miscord.Server.dll"]
-```
+2. **Start the server:**
+   ```bash
+   docker-compose up -d
+   ```
 
-Build and run:
+3. **Check status:**
+   ```bash
+   docker-compose ps
+   docker-compose logs -f
+   ```
+
+4. **Stop the server:**
+   ```bash
+   docker-compose down
+   ```
+
+The database is persisted in a Docker volume (`miscord-data`).
+
+#### Environment Variables (.env file)
+
+| Variable | Description | Default |
+|----------|-------------|---------|
+| `JWT_SECRET_KEY` | JWT signing key (min 32 chars) | **Must change!** |
+| `SERVER_NAME` | Server display name | Miscord Server |
+| `SERVER_DESCRIPTION` | Server description | A self-hosted Discord alternative |
+| `ALLOW_REGISTRATION` | Allow new user signups | true |
+
+#### Manual Docker Build
+
+If you prefer not to use docker-compose:
+
 ```bash
+# Build the image
 docker build -t miscord-server .
+
+# Run the container
 docker run -d -p 5117:5117 \
-  -e ASPNETCORE_ENVIRONMENT=Production \
-  -e Jwt__SecretKey=your-secret-key \
+  --name miscord-server \
+  -e Jwt__SecretKey=your-secret-key-at-least-32-characters \
   -v miscord-data:/app/data \
   miscord-server
 ```
