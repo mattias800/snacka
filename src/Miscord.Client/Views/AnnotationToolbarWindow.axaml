@@ -1,0 +1,87 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Miscord.Client.ViewModels"
+        xmlns:conv="using:Miscord.Client.Converters"
+        x:Class="Miscord.Client.Views.AnnotationToolbarWindow"
+        x:DataType="vm:ScreenAnnotationViewModel"
+        Title="Drawing Tools"
+        Width="380"
+        Height="56"
+        SystemDecorations="None"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        CanResize="False">
+
+    <Window.Resources>
+        <conv:ColorToBorderConverter x:Key="ColorToBorderConverter"/>
+    </Window.Resources>
+
+    <!-- Toolbar container with rounded corners and drag support -->
+    <Border Background="#E8202020"
+            CornerRadius="12"
+            Padding="12,8"
+            PointerPressed="OnToolbarPointerPressed">
+        <StackPanel Orientation="Horizontal" Spacing="10">
+            <!-- Draw mode toggle - THIS IS THE KEY BUTTON -->
+            <ToggleButton IsChecked="{Binding IsDrawModeEnabled}"
+                          Padding="14,8"
+                          Background="#40FFFFFF"
+                          Foreground="White"
+                          CornerRadius="6"
+                          FontWeight="SemiBold">
+                <StackPanel Orientation="Horizontal" Spacing="6">
+                    <TextBlock Text="✏️" VerticalAlignment="Center" FontSize="14"/>
+                    <TextBlock Text="Draw" VerticalAlignment="Center"/>
+                </StackPanel>
+            </ToggleButton>
+
+            <!-- Separator -->
+            <Border Width="1" Background="#40FFFFFF" Margin="2,4"/>
+
+            <!-- Color buttons -->
+            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
+                    Background="#FF0000" BorderThickness="2"
+                    BorderBrush="{Binding CurrentColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FF0000}"
+                    Click="OnColorClick" Tag="#FF0000"/>
+            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
+                    Background="#00FF00" BorderThickness="2"
+                    BorderBrush="{Binding CurrentColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#00FF00}"
+                    Click="OnColorClick" Tag="#00FF00"/>
+            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
+                    Background="#0080FF" BorderThickness="2"
+                    BorderBrush="{Binding CurrentColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#0080FF}"
+                    Click="OnColorClick" Tag="#0080FF"/>
+            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
+                    Background="#FFFF00" BorderThickness="2"
+                    BorderBrush="{Binding CurrentColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FFFF00}"
+                    Click="OnColorClick" Tag="#FFFF00"/>
+            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
+                    Background="#FFFFFF" BorderThickness="2"
+                    BorderBrush="{Binding CurrentColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FFFFFF}"
+                    Click="OnColorClick" Tag="#FFFFFF"/>
+
+            <!-- Separator -->
+            <Border Width="1" Background="#40FFFFFF" Margin="2,4"/>
+
+            <!-- Clear button -->
+            <Button Padding="10,8"
+                    Background="#40FFFFFF"
+                    Foreground="White"
+                    CornerRadius="6"
+                    Click="OnClearClick">
+                <TextBlock Text="Clear"/>
+            </Button>
+
+            <!-- Close button -->
+            <Button Padding="8,8"
+                    Background="#60FF4444"
+                    Foreground="White"
+                    CornerRadius="6"
+                    Click="OnCloseClick"
+                    ToolTip.Tip="Close drawing tools">
+                <TextBlock Text="✕" FontSize="12"/>
+            </Button>
+        </StackPanel>
+    </Border>
+</Window>

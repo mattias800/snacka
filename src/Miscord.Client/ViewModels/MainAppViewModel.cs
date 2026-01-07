@@ -73,6 +73,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private string _annotationColor = "#FF0000";
     private List<DrawingStroke> _currentStrokes = new();
 
+    // Sharer annotation overlay state
+    private ScreenShareSettings? _currentScreenShareSettings;
+    private Views.ScreenAnnotationWindow? _screenAnnotationWindow;
+    private Views.AnnotationToolbarWindow? _annotationToolbarWindow;
+
     public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null)
     {
         _apiClient = apiClient;
@@ -1658,6 +1663,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             await _webRtc.SetScreenSharingAsync(true, settings);
             IsScreenSharing = true;
             IsCameraOn = false;
+            _currentScreenShareSettings = settings;
 
             await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: true, IsCameraOn: false));
 
@@ -1666,6 +1672,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
             voiceChannel?.UpdateParticipantState(_auth.UserId, state);
             _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
+
+            // Show annotation overlay for monitor (display) sharing only
+            if (settings.Source.Type == ScreenCaptureSourceType.Display)
+            {
+                ShowSharerAnnotationOverlay(settings);
+            }
 
             Console.WriteLine($"Started screen share: {settings.Source.Name} @ {settings.Resolution.Label} {settings.Framerate.Label}");
         }
@@ -1681,8 +1693,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         try
         {
+            // Close annotation overlay windows first
+            HideSharerAnnotationOverlay();
+
             await _webRtc.SetScreenSharingAsync(false);
             IsScreenSharing = false;
+            _currentScreenShareSettings = null;
 
             await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: false));
 
@@ -1692,6 +1708,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             voiceChannel?.UpdateParticipantState(_auth.UserId, state);
             _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
 
+            // Clear annotations for this screen share
+            _annotationService.OnScreenShareEnded(_auth.UserId);
+
             Console.WriteLine("Stopped screen share");
         }
         catch (Exception ex)
@@ -1700,8 +1719,124 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
     }
 
+    /// <summary>
+    /// Shows the annotation overlay and toolbar on the shared monitor.
+    /// Only called for display (monitor) sharing, not window sharing.
+    /// </summary>
+    private void ShowSharerAnnotationOverlay(ScreenShareSettings settings)
+    {
+        if (CurrentVoiceChannel is null) return;
+
+        try
+        {
+            // Create the view model for the annotation overlay
+            var viewModel = new ScreenAnnotationViewModel(
+                _annotationService,
+                CurrentVoiceChannel.Id,
+                _auth.UserId,
+                _auth.Username);
+
+            // Find the screen that matches the shared display
+            Avalonia.Controls.Screens? screensService = null;
+            Avalonia.Platform.Screen? targetScreen = null;
+
+            if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
+            {
+                screensService = desktop.MainWindow?.Screens;
+                if (screensService != null && int.TryParse(settings.Source.Id, out var displayIndex))
+                {
+                    var allScreens = screensService.All.ToList();
+                    if (displayIndex < allScreens.Count)
+                    {
+                        targetScreen = allScreens[displayIndex];
+                    }
+                }
+            }
+
+            // Create and position the overlay window
+            _screenAnnotationWindow = new Views.ScreenAnnotationWindow
+            {
+                DataContext = viewModel
+            };
+
+            if (targetScreen != null)
+            {
+                // Position on the target screen
+                _screenAnnotationWindow.Position = new Avalonia.PixelPoint(
+                    (int)targetScreen.Bounds.X,
+                    (int)targetScreen.Bounds.Y);
+                _screenAnnotationWindow.Width = targetScreen.Bounds.Width;
+                _screenAnnotationWindow.Height = targetScreen.Bounds.Height;
+            }
+            else
+            {
+                // Fallback: maximize the window
+                _screenAnnotationWindow.WindowState = Avalonia.Controls.WindowState.Maximized;
+            }
+
+            _screenAnnotationWindow.Show();
+
+            // Create and position the toolbar window
+            _annotationToolbarWindow = new Views.AnnotationToolbarWindow
+            {
+                DataContext = viewModel
+            };
+            _annotationToolbarWindow.SetOverlayWindow(_screenAnnotationWindow);
+
+            // Position toolbar at bottom center of the shared screen
+            if (targetScreen != null)
+            {
+                var toolbarX = (int)(targetScreen.Bounds.X + (targetScreen.Bounds.Width - 380) / 2);
+                var toolbarY = (int)(targetScreen.Bounds.Y + targetScreen.Bounds.Height - 80);
+                _annotationToolbarWindow.Position = new Avalonia.PixelPoint(toolbarX, toolbarY);
+            }
+            else
+            {
+                // Fallback position - near bottom center of primary screen
+                _annotationToolbarWindow.Position = new Avalonia.PixelPoint(400, 700);
+            }
+
+            _annotationToolbarWindow.CloseRequested += OnAnnotationToolbarCloseRequested;
+            _annotationToolbarWindow.Show();
+
+            Console.WriteLine($"Showed annotation overlay on display {settings.Source.Name}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to show annotation overlay: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Hides and closes the annotation overlay and toolbar windows.
+    /// </summary>
+    private void HideSharerAnnotationOverlay()
+    {
+        if (_annotationToolbarWindow != null)
+        {
+            _annotationToolbarWindow.CloseRequested -= OnAnnotationToolbarCloseRequested;
+            _annotationToolbarWindow.Close();
+            _annotationToolbarWindow = null;
+        }
+
+        if (_screenAnnotationWindow != null)
+        {
+            _screenAnnotationWindow.Close();
+            _screenAnnotationWindow = null;
+        }
+
+        Console.WriteLine("Closed annotation overlay");
+    }
+
+    private void OnAnnotationToolbarCloseRequested()
+    {
+        // User closed the toolbar - stop screen sharing
+        _ = StopScreenShareAsync();
+    }
+
     public void Dispose()
     {
+        HideSharerAnnotationOverlay();
         _ = _signalR.DisposeAsync();
     }
 }

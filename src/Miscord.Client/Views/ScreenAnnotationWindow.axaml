@@ -1,0 +1,22 @@
+<Window xmlns="https://github.com/avaloniaui"
+        xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+        xmlns:vm="using:Miscord.Client.ViewModels"
+        x:Class="Miscord.Client.Views.ScreenAnnotationWindow"
+        x:DataType="vm:ScreenAnnotationViewModel"
+        Title="Screen Annotation"
+        SystemDecorations="None"
+        TransparencyLevelHint="Transparent"
+        Background="Transparent"
+        Topmost="True"
+        ShowInTaskbar="False"
+        CanResize="False">
+
+    <!-- Transparent canvas that covers the entire screen -->
+    <Canvas x:Name="AnnotationCanvas"
+            Background="Transparent"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch"
+            PointerPressed="OnCanvasPointerPressed"
+            PointerMoved="OnCanvasPointerMoved"
+            PointerReleased="OnCanvasPointerReleased"/>
+</Window>
