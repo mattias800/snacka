@@ -67,6 +67,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isVideoFullscreen;
     private VideoStreamViewModel? _fullscreenStream;
 
+    // Drawing annotation state
+    private readonly AnnotationService _annotationService;
+    private bool _isAnnotationEnabled;
+    private string _annotationColor = "#FF0000";
+    private List<DrawingStroke> _currentStrokes = new();
+
     public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null)
     {
         _apiClient = apiClient;
@@ -89,6 +95,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         // Create voice channel content view model for video grid
         _voiceChannelContent = new VoiceChannelContentViewModel(_webRtc, _signalR, auth.UserId);
+
+        // Create annotation service for drawing on screen shares
+        _annotationService = new AnnotationService(_signalR);
+        _annotationService.StrokeAdded += OnAnnotationStrokeAdded;
+        _annotationService.StrokesCleared += OnAnnotationStrokesCleared;
 
         // Subscribe to WebRTC connection status changes
         _webRtc.ConnectionStatusChanged += status =>
@@ -716,12 +727,85 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         FullscreenStream = stream;
         IsVideoFullscreen = true;
+
+        // Load existing strokes for this screen share
+        _currentStrokes = _annotationService.GetStrokes(stream.UserId).ToList();
+        this.RaisePropertyChanged(nameof(CurrentAnnotationStrokes));
     }
 
     public void CloseFullscreen()
     {
         IsVideoFullscreen = false;
         FullscreenStream = null;
+        IsAnnotationEnabled = false; // Disable drawing when exiting fullscreen
+    }
+
+    // Drawing annotation properties
+    public bool IsAnnotationEnabled
+    {
+        get => _isAnnotationEnabled;
+        set => this.RaiseAndSetIfChanged(ref _isAnnotationEnabled, value);
+    }
+
+    public string AnnotationColor
+    {
+        get => _annotationColor;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _annotationColor, value);
+            _annotationService.CurrentColor = value;
+        }
+    }
+
+    public string[] AvailableAnnotationColors => AnnotationService.AvailableColors;
+
+    public AnnotationService AnnotationService => _annotationService;
+
+    public List<DrawingStroke> CurrentAnnotationStrokes => _currentStrokes;
+
+    private void OnAnnotationStrokeAdded(Guid sharerId, DrawingStroke stroke)
+    {
+        // Only update if we're viewing this sharer's screen in fullscreen
+        if (FullscreenStream?.UserId == sharerId)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _currentStrokes = _annotationService.GetStrokes(sharerId).ToList();
+                this.RaisePropertyChanged(nameof(CurrentAnnotationStrokes));
+            });
+        }
+    }
+
+    private void OnAnnotationStrokesCleared(Guid sharerId)
+    {
+        // Only update if we're viewing this sharer's screen in fullscreen
+        if (FullscreenStream?.UserId == sharerId)
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                _currentStrokes.Clear();
+                this.RaisePropertyChanged(nameof(CurrentAnnotationStrokes));
+            });
+        }
+    }
+
+    public async Task AddAnnotationStrokeAsync(DrawingStroke stroke)
+    {
+        if (CurrentVoiceChannel == null || FullscreenStream == null) return;
+
+        await _annotationService.AddStrokeAsync(
+            CurrentVoiceChannel.Id,
+            FullscreenStream.UserId,
+            stroke);
+    }
+
+    public async Task ClearAnnotationsAsync()
+    {
+        if (CurrentVoiceChannel == null || FullscreenStream == null) return;
+
+        await _annotationService.ClearStrokesAsync(
+            CurrentVoiceChannel.Id,
+            FullscreenStream.UserId);
     }
 
     /// <summary>

@@ -200,3 +200,32 @@ public class SelectedSourceBackgroundConverter : IValueConverter
         throw new NotSupportedException();
     }
 }
+
+/// <summary>
+/// Converts selected annotation color to border brush.
+/// Returns white border if color matches parameter (selected), transparent otherwise.
+/// Used to highlight the currently selected color button.
+/// </summary>
+public class ColorToBorderConverter : IValueConverter
+{
+    public static readonly ColorToBorderConverter Instance = new();
+
+    private static readonly IBrush SelectedBrush = new SolidColorBrush(Color.Parse("#FFFFFF"));
+    private static readonly IBrush UnselectedBrush = Brushes.Transparent;
+
+    public object Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is string selectedColor && parameter is string buttonColor)
+        {
+            return string.Equals(selectedColor, buttonColor, StringComparison.OrdinalIgnoreCase)
+                ? SelectedBrush
+                : UnselectedBrush;
+        }
+        return UnselectedBrush;
+    }
+
+    public object ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotSupportedException();
+    }
+}

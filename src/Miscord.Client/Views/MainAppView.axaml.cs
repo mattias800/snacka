@@ -1,14 +1,23 @@
 using System.Reactive.Linq;
+using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Avalonia.Media;
 using Avalonia.ReactiveUI;
 using Miscord.Client.ViewModels;
+using Miscord.Shared.Models;
 
 namespace Miscord.Client.Views;
 
 public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 {
+    // Drawing state
+    private bool _isDrawing;
+    private List<PointF> _currentStrokePoints = new();
+    private Polyline? _currentPolyline;
+
     public MainAppView()
     {
         InitializeComponent();
@@ -198,6 +207,134 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             {
                 ViewModel?.OpenFullscreen(stream);
             }
+        }
+    }
+
+    // ==================== Drawing Annotation Handlers ====================
+
+    private void OnAnnotationCanvasPointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (ViewModel?.IsAnnotationEnabled != true) return;
+
+        var canvas = AnnotationCanvas;
+        if (canvas == null) return;
+
+        _isDrawing = true;
+        _currentStrokePoints.Clear();
+
+        // Get position and normalize to 0-1 range
+        var pos = e.GetPosition(canvas);
+        var normalizedPoint = new PointF((float)(pos.X / canvas.Bounds.Width), (float)(pos.Y / canvas.Bounds.Height));
+        _currentStrokePoints.Add(normalizedPoint);
+
+        // Create a new polyline for visual feedback
+        _currentPolyline = new Polyline
+        {
+            Stroke = new SolidColorBrush(Color.Parse(ViewModel.AnnotationColor)),
+            StrokeThickness = 3,
+            StrokeLineCap = PenLineCap.Round,
+            StrokeJoin = PenLineJoin.Round
+        };
+        _currentPolyline.Points.Add(pos);
+        canvas.Children.Add(_currentPolyline);
+
+        e.Pointer.Capture(canvas);
+    }
+
+    private void OnAnnotationCanvasPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (!_isDrawing || _currentPolyline == null) return;
+
+        var canvas = AnnotationCanvas;
+        if (canvas == null) return;
+
+        var pos = e.GetPosition(canvas);
+        var normalizedPoint = new PointF((float)(pos.X / canvas.Bounds.Width), (float)(pos.Y / canvas.Bounds.Height));
+        _currentStrokePoints.Add(normalizedPoint);
+        _currentPolyline.Points.Add(pos);
+    }
+
+    private async void OnAnnotationCanvasPointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (!_isDrawing) return;
+        _isDrawing = false;
+
+        var canvas = AnnotationCanvas;
+        if (canvas == null) return;
+
+        e.Pointer.Capture(null);
+
+        // Only save stroke if we have at least 2 points
+        if (_currentStrokePoints.Count >= 2 && ViewModel != null)
+        {
+            var stroke = new DrawingStroke
+            {
+                UserId = ViewModel.UserId,
+                Username = ViewModel.Username,
+                Points = new List<PointF>(_currentStrokePoints),
+                Color = ViewModel.AnnotationColor,
+                Thickness = 3.0f
+            };
+
+            await ViewModel.AddAnnotationStrokeAsync(stroke);
+        }
+
+        _currentStrokePoints.Clear();
+        _currentPolyline = null;
+
+        // Redraw all strokes to ensure consistency
+        RedrawAnnotations();
+    }
+
+    private void OnAnnotationColorClick(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is string color && ViewModel != null)
+        {
+            ViewModel.AnnotationColor = color;
+        }
+    }
+
+    private async void OnClearAnnotationsClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel != null)
+        {
+            await ViewModel.ClearAnnotationsAsync();
+            AnnotationCanvas?.Children.Clear();
+        }
+    }
+
+    /// <summary>
+    /// Redraws all annotation strokes on the canvas.
+    /// Called when strokes are received from other users or after completing a local stroke.
+    /// </summary>
+    private void RedrawAnnotations()
+    {
+        var canvas = AnnotationCanvas;
+        if (canvas == null || ViewModel == null) return;
+
+        canvas.Children.Clear();
+
+        foreach (var stroke in ViewModel.CurrentAnnotationStrokes)
+        {
+            if (stroke.Points.Count < 2) continue;
+
+            var polyline = new Polyline
+            {
+                Stroke = new SolidColorBrush(Color.Parse(stroke.Color)),
+                StrokeThickness = stroke.Thickness,
+                StrokeLineCap = PenLineCap.Round,
+                StrokeJoin = PenLineJoin.Round
+            };
+
+            // Convert normalized coordinates back to screen coordinates
+            foreach (var point in stroke.Points)
+            {
+                var screenX = point.X * canvas.Bounds.Width;
+                var screenY = point.Y * canvas.Bounds.Height;
+                polyline.Points.Add(new Point(screenX, screenY));
+            }
+
+            canvas.Children.Add(polyline);
         }
     }
 }
