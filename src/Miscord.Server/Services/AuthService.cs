@@ -26,8 +26,16 @@ public sealed class AuthService : IAuthService
 
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
-        // Validate invite code first
+        // Validate invite code
         var invite = await _inviteService.ValidateInviteCodeAsync(request.InviteCode, cancellationToken);
+        
+        if (invite == null && string.IsNullOrEmpty(request.InviteCode))
+        {
+            // In development, allow registration without an invite code if none provided
+            // The server will create a temporary invite for tracking
+            invite = await _inviteService.CreateInviteAsync(null, maxUses: 1, cancellationToken: cancellationToken);
+        }
+        
         if (invite == null)
             throw new InvalidOperationException("Invalid or expired invite code.");
 

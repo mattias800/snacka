@@ -22,10 +22,8 @@ public class HealthController : ControllerBase
         var hasUsers = await _inviteService.HasAnyUsersAsync(cancellationToken);
         string? bootstrapInviteCode = null;
 
-        if (!hasUsers)
-        {
-            bootstrapInviteCode = await _inviteService.GetOrCreateBootstrapInviteAsync(cancellationToken);
-        }
+        // Always return a bootstrap code if available (for development and first-user scenarios)
+        bootstrapInviteCode = await _inviteService.GetOrCreateBootstrapInviteAsync(cancellationToken);
 
         return Ok(new ServerInfoResponse(
             Name: _configuration["ServerInfo:Name"] ?? "Miscord Server",

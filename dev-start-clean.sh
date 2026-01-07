@@ -1,7 +1,7 @@
 #!/bin/bash
 
-# Development startup script - starts server and two clients with different test accounts
-# Usage: ./dev-start.sh
+# Development startup script - starts server and two clients with fresh database
+# Usage: ./dev-start-clean.sh
 
 SERVER_URL="http://localhost:5117"
 CLIENT_PROJECT="src/Miscord.Client/Miscord.Client.csproj"
@@ -14,13 +14,19 @@ USER1_PASSWORD="password123"
 USER2_EMAIL="bob@test.com"
 USER2_PASSWORD="password123"
 
-echo "=== Miscord Development Startup ==="
+echo "=== Miscord Development Startup (Clean) ===="
 echo ""
 
 # Kill any existing Miscord processes
 echo "Stopping any existing Miscord processes..."
 pkill -f "dotnet.*Miscord" 2>/dev/null
 sleep 1
+
+# Remove old database file to start fresh
+if [ -f "$DB_FILE" ]; then
+    echo "Removing old database..."
+    rm "$DB_FILE"
+fi
 
 # Build projects first
 echo "Building projects..."
@@ -55,13 +61,18 @@ for i in {1..30}; do
     sleep 0.5
 done
 
-
 # Check if server started successfully
 if ! curl -s "$SERVER_URL/api/health" > /dev/null 2>&1; then
     echo "Server failed to start!"
     kill $SERVER_PID 2>/dev/null
     exit 1
 fi
+
+echo ""
+
+# Seed the database with test data
+echo "Seeding database..."
+bash seed-db.sh "$DB_FILE"
 
 echo ""
 
@@ -90,7 +101,7 @@ CLIENT2_PID=$!
 echo "Client 2 PID: $CLIENT2_PID"
 
 echo ""
-echo "=== All processes started ==="
+echo "=== All processes started ===="
 echo "Server:   PID $SERVER_PID"
 echo "Client 1: PID $CLIENT1_PID (Alice)"
 echo "Client 2: PID $CLIENT2_PID (Bob)"

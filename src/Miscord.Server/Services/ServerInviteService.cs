@@ -109,24 +109,27 @@ public sealed class ServerInviteService : IServerInviteService
 
     public async Task<string?> GetOrCreateBootstrapInviteAsync(CancellationToken cancellationToken = default)
     {
-        // Only return bootstrap invite if no users exist
-        if (await HasAnyUsersAsync(cancellationToken))
-            return null;
-
-        // Check for existing bootstrap invite (created by null user, not revoked, not expired)
-        var existingBootstrap = await _db.ServerInvites
+        // First, check for any unlimited bootstrap invite (created by null user, not revoked, not expired)
+        var unlimitedBootstrap = await _db.ServerInvites
             .FirstOrDefaultAsync(i =>
                 i.CreatedById == null &&
+                i.MaxUses == 0 &&  // Unlimited invites
                 !i.IsRevoked &&
                 (i.ExpiresAt == null || i.ExpiresAt > DateTime.UtcNow),
                 cancellationToken);
 
-        if (existingBootstrap != null)
-            return existingBootstrap.Code;
+        if (unlimitedBootstrap != null)
+            return unlimitedBootstrap.Code;
 
-        // Create new bootstrap invite (single use)
-        var invite = await CreateInviteAsync(null, maxUses: 1, cancellationToken: cancellationToken);
-        return invite.Code;
+        // If no users exist, create a single-use bootstrap invite
+        if (!await HasAnyUsersAsync(cancellationToken))
+        {
+            var invite = await CreateInviteAsync(null, maxUses: 1, cancellationToken: cancellationToken);
+            return invite.Code;
+        }
+
+        // Users exist and no unlimited invite available
+        return null;
     }
 
     public async Task<Guid?> GetInviterIdAsync(string code, CancellationToken cancellationToken = default)
