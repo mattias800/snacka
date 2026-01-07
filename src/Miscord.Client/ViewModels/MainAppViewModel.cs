@@ -657,6 +657,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             this.RaiseAndSetIfChanged(ref _voiceConnectionStatus, value);
             this.RaisePropertyChanged(nameof(VoiceConnectionStatusText));
+            this.RaisePropertyChanged(nameof(IsVoiceConnecting));
+            this.RaisePropertyChanged(nameof(IsVoiceConnected));
         }
     }
 
@@ -666,6 +668,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         VoiceConnectionStatus.Connecting => "Connecting...",
         _ => ""
     };
+
+    public bool IsVoiceConnecting => VoiceConnectionStatus == VoiceConnectionStatus.Connecting;
+    public bool IsVoiceConnected => VoiceConnectionStatus == VoiceConnectionStatus.Connected;
 
     public ObservableCollection<VoiceParticipantResponse> VoiceParticipants
     {
@@ -1570,10 +1575,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             await LeaveVoiceChannelAsync();
         }
 
+        // Show connecting state immediately for better UX
+        CurrentVoiceChannel = channel;
+        VoiceConnectionStatus = VoiceConnectionStatus.Connecting;
+
         var participant = await _signalR.JoinVoiceChannelAsync(channel.Id);
         if (participant is not null)
         {
-            CurrentVoiceChannel = channel;
             IsMuted = participant.IsMuted;
             IsDeafened = participant.IsDeafened;
 
@@ -1608,6 +1616,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             await _webRtc.JoinVoiceChannelAsync(channel.Id, participants);
 
             Console.WriteLine($"Joined voice channel: {channel.Name}");
+        }
+        else
+        {
+            // Join failed - reset state
+            CurrentVoiceChannel = null;
+            VoiceConnectionStatus = VoiceConnectionStatus.Disconnected;
+            Console.WriteLine($"Failed to join voice channel: {channel.Name}");
         }
     }
 

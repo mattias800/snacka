@@ -158,23 +158,40 @@
 
                         <!-- Voice Channel Info -->
                         <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
+                            <!-- Connected icon (green) -->
                             <TextBlock Text="🔊"
                                        Foreground="#3ba55c"
                                        FontSize="14"
-                                       VerticalAlignment="Center"/>
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding IsVoiceConnected}"/>
+                            <!-- Connecting icon (yellow) -->
+                            <TextBlock Text="📡"
+                                       Foreground="#faa61a"
+                                       FontSize="14"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding IsVoiceConnecting}"/>
                             <StackPanel>
+                                <!-- Connected status (green) -->
                                 <TextBlock Text="{Binding VoiceConnectionStatusText}"
                                            Foreground="#3ba55c"
                                            FontSize="12"
-                                           FontWeight="SemiBold"/>
+                                           FontWeight="SemiBold"
+                                           IsVisible="{Binding IsVoiceConnected}"/>
+                                <!-- Connecting status (yellow) -->
+                                <TextBlock Text="{Binding VoiceConnectionStatusText}"
+                                           Foreground="#faa61a"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           IsVisible="{Binding IsVoiceConnecting}"/>
                                 <TextBlock Text="{Binding CurrentVoiceChannel.Name}"
                                            Foreground="#72767d"
                                            FontSize="11"/>
                             </StackPanel>
                         </StackPanel>
 
-                        <!-- Voice Controls -->
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
+                        <!-- Voice Controls (only show when connected) -->
+                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8"
+                                    IsVisible="{Binding IsVoiceConnected}">
                             <!-- Mute Button - red when muted -->
                             <Panel>
                                 <Button Command="{Binding ToggleMuteCommand}"
