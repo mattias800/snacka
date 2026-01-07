@@ -75,6 +75,9 @@ builder.Services.AddAuthorization();
 builder.Services.AddScoped<IAuthService, AuthService>();
 builder.Services.AddScoped<IDirectMessageService, DirectMessageService>();
 builder.Services.AddScoped<ICommunityService, CommunityService>();
+builder.Services.AddScoped<IChannelService, ChannelService>();
+builder.Services.AddScoped<IMessageService, MessageService>();
+builder.Services.AddScoped<ICommunityMemberService, CommunityMemberService>();
 builder.Services.AddScoped<IVoiceService, VoiceService>();
 
 // Add SFU service (Singleton to maintain WebRTC connections across requests)

@@ -14,11 +14,16 @@ namespace Miscord.Server.Controllers;
 public class CommunitiesController : ControllerBase
 {
     private readonly ICommunityService _communityService;
+    private readonly ICommunityMemberService _memberService;
     private readonly IHubContext<MiscordHub> _hubContext;
 
-    public CommunitiesController(ICommunityService communityService, IHubContext<MiscordHub> hubContext)
+    public CommunitiesController(
+        ICommunityService communityService,
+        ICommunityMemberService memberService,
+        IHubContext<MiscordHub> hubContext)
     {
         _communityService = communityService;
+        _memberService = memberService;
         _hubContext = hubContext;
     }
 
@@ -48,7 +53,7 @@ public class CommunitiesController : ControllerBase
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        if (!await _communityService.IsMemberAsync(communityId, userId.Value, cancellationToken))
+        if (!await _memberService.IsMemberAsync(communityId, userId.Value, cancellationToken))
             return Forbid();
 
         try
@@ -138,10 +143,10 @@ public class CommunitiesController : ControllerBase
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        if (!await _communityService.IsMemberAsync(communityId, userId.Value, cancellationToken))
+        if (!await _memberService.IsMemberAsync(communityId, userId.Value, cancellationToken))
             return Forbid();
 
-        var members = await _communityService.GetMembersAsync(communityId, cancellationToken);
+        var members = await _memberService.GetMembersAsync(communityId, cancellationToken);
         return Ok(members);
     }
 
@@ -154,12 +159,12 @@ public class CommunitiesController : ControllerBase
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        if (!await _communityService.IsMemberAsync(communityId, userId.Value, cancellationToken))
+        if (!await _memberService.IsMemberAsync(communityId, userId.Value, cancellationToken))
             return Forbid();
 
         try
         {
-            var member = await _communityService.GetMemberAsync(communityId, memberId, cancellationToken);
+            var member = await _memberService.GetMemberAsync(communityId, memberId, cancellationToken);
             return Ok(member);
         }
         catch (InvalidOperationException ex)
@@ -180,7 +185,7 @@ public class CommunitiesController : ControllerBase
 
         try
         {
-            var member = await _communityService.UpdateMemberRoleAsync(communityId, memberId, userId.Value, request.Role, cancellationToken);
+            var member = await _memberService.UpdateMemberRoleAsync(communityId, memberId, userId.Value, request.Role, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("MemberRoleUpdated", member, cancellationToken);
             return Ok(member);
@@ -203,7 +208,7 @@ public class CommunitiesController : ControllerBase
 
         try
         {
-            await _communityService.JoinCommunityAsync(communityId, userId.Value, cancellationToken);
+            await _memberService.JoinCommunityAsync(communityId, userId.Value, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("CommunityMemberAdded", communityId, userId.Value, cancellationToken);
             return NoContent();
@@ -222,7 +227,7 @@ public class CommunitiesController : ControllerBase
 
         try
         {
-            await _communityService.LeaveCommunityAsync(communityId, userId.Value, cancellationToken);
+            await _memberService.LeaveCommunityAsync(communityId, userId.Value, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("CommunityMemberRemoved", communityId, userId.Value, cancellationToken);
             return NoContent();
@@ -244,7 +249,7 @@ public class CommunitiesController : ControllerBase
 
         try
         {
-            await _communityService.TransferOwnershipAsync(communityId, request.NewOwnerId, userId.Value, cancellationToken);
+            await _memberService.TransferOwnershipAsync(communityId, request.NewOwnerId, userId.Value, cancellationToken);
 
             // Notify all community members about the ownership change
             await _hubContext.Clients.Group($"community:{communityId}")

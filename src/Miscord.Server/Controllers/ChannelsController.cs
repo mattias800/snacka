@@ -13,12 +13,17 @@ namespace Miscord.Server.Controllers;
 [Authorize]
 public class ChannelsController : ControllerBase
 {
-    private readonly ICommunityService _communityService;
+    private readonly IChannelService _channelService;
+    private readonly ICommunityMemberService _memberService;
     private readonly IHubContext<MiscordHub> _hubContext;
 
-    public ChannelsController(ICommunityService communityService, IHubContext<MiscordHub> hubContext)
+    public ChannelsController(
+        IChannelService channelService,
+        ICommunityMemberService memberService,
+        IHubContext<MiscordHub> hubContext)
     {
-        _communityService = communityService;
+        _channelService = channelService;
+        _memberService = memberService;
         _hubContext = hubContext;
     }
 
@@ -30,10 +35,10 @@ public class ChannelsController : ControllerBase
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        if (!await _communityService.IsMemberAsync(communityId, userId.Value, cancellationToken))
+        if (!await _memberService.IsMemberAsync(communityId, userId.Value, cancellationToken))
             return Forbid();
 
-        var channels = await _communityService.GetChannelsAsync(communityId, cancellationToken);
+        var channels = await _channelService.GetChannelsAsync(communityId, cancellationToken);
         return Ok(channels);
     }
 
@@ -46,12 +51,12 @@ public class ChannelsController : ControllerBase
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
 
-        if (!await _communityService.IsMemberAsync(communityId, userId.Value, cancellationToken))
+        if (!await _memberService.IsMemberAsync(communityId, userId.Value, cancellationToken))
             return Forbid();
 
         try
         {
-            var channel = await _communityService.GetChannelAsync(channelId, cancellationToken);
+            var channel = await _channelService.GetChannelAsync(channelId, cancellationToken);
             return Ok(channel);
         }
         catch (InvalidOperationException ex)
@@ -71,7 +76,7 @@ public class ChannelsController : ControllerBase
 
         try
         {
-            var channel = await _communityService.CreateChannelAsync(communityId, userId.Value, request, cancellationToken);
+            var channel = await _channelService.CreateChannelAsync(communityId, userId.Value, request, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("ChannelCreated", channel, cancellationToken);
             return CreatedAtAction(nameof(GetChannel), new { communityId, channelId = channel.Id }, channel);
@@ -98,7 +103,7 @@ public class ChannelsController : ControllerBase
 
         try
         {
-            var channel = await _communityService.UpdateChannelAsync(channelId, userId.Value, request, cancellationToken);
+            var channel = await _channelService.UpdateChannelAsync(channelId, userId.Value, request, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("ChannelUpdated", channel, cancellationToken);
             return Ok(channel);
@@ -124,7 +129,7 @@ public class ChannelsController : ControllerBase
 
         try
         {
-            await _communityService.DeleteChannelAsync(channelId, userId.Value, cancellationToken);
+            await _channelService.DeleteChannelAsync(channelId, userId.Value, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("ChannelDeleted", new ChannelDeletedEvent(channelId), cancellationToken);
             return NoContent();
@@ -151,12 +156,12 @@ public class ChannelsController : ControllerBase
 [Authorize]
 public class MessagesController : ControllerBase
 {
-    private readonly ICommunityService _communityService;
+    private readonly IMessageService _messageService;
     private readonly IHubContext<MiscordHub> _hubContext;
 
-    public MessagesController(ICommunityService communityService, IHubContext<MiscordHub> hubContext)
+    public MessagesController(IMessageService messageService, IHubContext<MiscordHub> hubContext)
     {
-        _communityService = communityService;
+        _messageService = messageService;
         _hubContext = hubContext;
     }
 
@@ -172,7 +177,7 @@ public class MessagesController : ControllerBase
 
         try
         {
-            var messages = await _communityService.GetMessagesAsync(channelId, skip, take, cancellationToken);
+            var messages = await _messageService.GetMessagesAsync(channelId, skip, take, cancellationToken);
             return Ok(messages);
         }
         catch (InvalidOperationException ex)
@@ -192,7 +197,7 @@ public class MessagesController : ControllerBase
 
         try
         {
-            var message = await _communityService.SendMessageAsync(channelId, userId.Value, request.Content, cancellationToken);
+            var message = await _messageService.SendMessageAsync(channelId, userId.Value, request.Content, cancellationToken);
             await _hubContext.Clients.Group($"channel:{channelId}")
                 .SendAsync("ReceiveChannelMessage", message, cancellationToken);
             return Ok(message);
@@ -215,7 +220,7 @@ public class MessagesController : ControllerBase
 
         try
         {
-            var message = await _communityService.UpdateMessageAsync(messageId, userId.Value, request.Content, cancellationToken);
+            var message = await _messageService.UpdateMessageAsync(messageId, userId.Value, request.Content, cancellationToken);
             await _hubContext.Clients.Group($"channel:{channelId}")
                 .SendAsync("ChannelMessageEdited", message, cancellationToken);
             return Ok(message);
@@ -241,7 +246,7 @@ public class MessagesController : ControllerBase
 
         try
         {
-            await _communityService.DeleteMessageAsync(messageId, userId.Value, cancellationToken);
+            await _messageService.DeleteMessageAsync(messageId, userId.Value, cancellationToken);
             await _hubContext.Clients.Group($"channel:{channelId}")
                 .SendAsync("ChannelMessageDeleted", new MessageDeletedEvent(channelId, messageId), cancellationToken);
             return NoContent();

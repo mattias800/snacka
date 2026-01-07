@@ -28,10 +28,11 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
 
         // Act
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test Community", "A test community"));
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test Community", "A test community"));
 
         // Assert
         Assert.IsNotNull(community);
@@ -41,7 +42,7 @@ public class CommunityServiceTests
         Assert.AreEqual(1, community.MemberCount);
 
         // Verify default channel was created
-        var channels = await service.GetChannelsAsync(community.Id);
+        var channels = await channelService.GetChannelsAsync(community.Id);
         Assert.AreEqual(1, channels.Count());
         Assert.AreEqual("general", channels.First().Name);
     }
@@ -120,13 +121,14 @@ public class CommunityServiceTests
         using var db = TestDbContextFactory.Create();
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
-        await service.JoinCommunityAsync(community.Id, member.Id);
+        var communityService = new CommunityService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
+        await memberService.JoinCommunityAsync(community.Id, member.Id);
 
         // Act & Assert
         await Assert.ThrowsExceptionAsync<UnauthorizedAccessException>(
-            () => service.DeleteCommunityAsync(community.Id, member.Id));
+            () => communityService.DeleteCommunityAsync(community.Id, member.Id));
     }
 
     #endregion
@@ -139,11 +141,12 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
 
         // Act
-        var channel = await service.CreateChannelAsync(community.Id, user.Id, new CreateChannelRequest("new-channel", "Topic", ChannelType.Text));
+        var channel = await channelService.CreateChannelAsync(community.Id, user.Id, new CreateChannelRequest("new-channel", "Topic", ChannelType.Text));
 
         // Assert
         Assert.AreEqual("new-channel", channel.Name);
@@ -158,13 +161,15 @@ public class CommunityServiceTests
         using var db = TestDbContextFactory.Create();
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
-        await service.JoinCommunityAsync(community.Id, member.Id);
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
+        await memberService.JoinCommunityAsync(community.Id, member.Id);
 
         // Act & Assert
         await Assert.ThrowsExceptionAsync<UnauthorizedAccessException>(
-            () => service.CreateChannelAsync(community.Id, member.Id, new CreateChannelRequest("hacked", null, ChannelType.Text)));
+            () => channelService.CreateChannelAsync(community.Id, member.Id, new CreateChannelRequest("hacked", null, ChannelType.Text)));
     }
 
     [TestMethod]
@@ -173,12 +178,13 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channel = await service.CreateChannelAsync(community.Id, user.Id, new CreateChannelRequest("original", null, ChannelType.Text));
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
+        var channel = await channelService.CreateChannelAsync(community.Id, user.Id, new CreateChannelRequest("original", null, ChannelType.Text));
 
         // Act
-        var updated = await service.UpdateChannelAsync(channel.Id, user.Id, new UpdateChannelRequest("updated", "New topic", null));
+        var updated = await channelService.UpdateChannelAsync(channel.Id, user.Id, new UpdateChannelRequest("updated", "New topic", null));
 
         // Assert
         Assert.AreEqual("updated", updated.Name);
@@ -191,15 +197,16 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channel = await service.CreateChannelAsync(community.Id, user.Id, new CreateChannelRequest("to-delete", null, ChannelType.Text));
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
+        var channel = await channelService.CreateChannelAsync(community.Id, user.Id, new CreateChannelRequest("to-delete", null, ChannelType.Text));
 
         // Act
-        await service.DeleteChannelAsync(channel.Id, user.Id);
+        await channelService.DeleteChannelAsync(channel.Id, user.Id);
 
         // Assert
-        var channels = await service.GetChannelsAsync(community.Id);
+        var channels = await channelService.GetChannelsAsync(community.Id);
         Assert.IsFalse(channels.Any(c => c.Name == "to-delete"));
     }
 
@@ -213,13 +220,15 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await service.GetChannelsAsync(community.Id)).ToList();
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var messageService = new MessageService(db);
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
+        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
         var channelId = channels[0].Id;
 
         // Act
-        var message = await service.SendMessageAsync(channelId, user.Id, "Hello world!");
+        var message = await messageService.SendMessageAsync(channelId, user.Id, "Hello world!");
 
         // Assert
         Assert.AreEqual("Hello world!", message.Content);
@@ -233,17 +242,19 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await service.GetChannelsAsync(community.Id)).ToList();
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var messageService = new MessageService(db);
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
+        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
         var channelId = channels[0].Id;
 
-        await service.SendMessageAsync(channelId, user.Id, "Message 1");
-        await service.SendMessageAsync(channelId, user.Id, "Message 2");
-        await service.SendMessageAsync(channelId, user.Id, "Message 3");
+        await messageService.SendMessageAsync(channelId, user.Id, "Message 1");
+        await messageService.SendMessageAsync(channelId, user.Id, "Message 2");
+        await messageService.SendMessageAsync(channelId, user.Id, "Message 3");
 
         // Act
-        var messages = (await service.GetMessagesAsync(channelId)).ToList();
+        var messages = (await messageService.GetMessagesAsync(channelId)).ToList();
 
         // Assert
         Assert.AreEqual(3, messages.Count);
@@ -257,13 +268,15 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await service.GetChannelsAsync(community.Id)).ToList();
-        var message = await service.SendMessageAsync(channels[0].Id, user.Id, "Original");
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var messageService = new MessageService(db);
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
+        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var message = await messageService.SendMessageAsync(channels[0].Id, user.Id, "Original");
 
         // Act
-        var updated = await service.UpdateMessageAsync(message.Id, user.Id, "Updated");
+        var updated = await messageService.UpdateMessageAsync(message.Id, user.Id, "Updated");
 
         // Assert
         Assert.AreEqual("Updated", updated.Content);
@@ -277,15 +290,18 @@ public class CommunityServiceTests
         using var db = TestDbContextFactory.Create();
         var author = await CreateTestUserAsync(db, "author");
         var other = await CreateTestUserAsync(db, "other");
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(author.Id, new CreateCommunityRequest("Test", null));
-        await service.JoinCommunityAsync(community.Id, other.Id);
-        var channels = (await service.GetChannelsAsync(community.Id)).ToList();
-        var message = await service.SendMessageAsync(channels[0].Id, author.Id, "Original");
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var messageService = new MessageService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(author.Id, new CreateCommunityRequest("Test", null));
+        await memberService.JoinCommunityAsync(community.Id, other.Id);
+        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var message = await messageService.SendMessageAsync(channels[0].Id, author.Id, "Original");
 
         // Act & Assert
         await Assert.ThrowsExceptionAsync<UnauthorizedAccessException>(
-            () => service.UpdateMessageAsync(message.Id, other.Id, "Hacked"));
+            () => messageService.UpdateMessageAsync(message.Id, other.Id, "Hacked"));
     }
 
     [TestMethod]
@@ -294,16 +310,18 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var user = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await service.GetChannelsAsync(community.Id)).ToList();
-        var message = await service.SendMessageAsync(channels[0].Id, user.Id, "To delete");
+        var communityService = new CommunityService(db);
+        var channelService = new ChannelService(db);
+        var messageService = new MessageService(db);
+        var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
+        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var message = await messageService.SendMessageAsync(channels[0].Id, user.Id, "To delete");
 
         // Act
-        await service.DeleteMessageAsync(message.Id, user.Id);
+        await messageService.DeleteMessageAsync(message.Id, user.Id);
 
         // Assert
-        var messages = await service.GetMessagesAsync(channels[0].Id);
+        var messages = await messageService.GetMessagesAsync(channels[0].Id);
         Assert.AreEqual(0, messages.Count());
     }
 
@@ -318,16 +336,17 @@ public class CommunityServiceTests
         using var db = TestDbContextFactory.Create();
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
+        var communityService = new CommunityService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
 
         // Act
-        await service.JoinCommunityAsync(community.Id, member.Id);
+        await memberService.JoinCommunityAsync(community.Id, member.Id);
 
         // Assert
-        var members = (await service.GetMembersAsync(community.Id)).ToList();
+        var members = (await memberService.GetMembersAsync(community.Id)).ToList();
         Assert.AreEqual(2, members.Count);
-        Assert.IsTrue(await service.IsMemberAsync(community.Id, member.Id));
+        Assert.IsTrue(await memberService.IsMemberAsync(community.Id, member.Id));
     }
 
     [TestMethod]
@@ -337,13 +356,14 @@ public class CommunityServiceTests
         using var db = TestDbContextFactory.Create();
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
-        await service.JoinCommunityAsync(community.Id, member.Id);
+        var communityService = new CommunityService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
+        await memberService.JoinCommunityAsync(community.Id, member.Id);
 
         // Act & Assert
         var exception = await Assert.ThrowsExceptionAsync<InvalidOperationException>(
-            () => service.JoinCommunityAsync(community.Id, member.Id));
+            () => memberService.JoinCommunityAsync(community.Id, member.Id));
         Assert.AreEqual("User is already a member of this community.", exception.Message);
     }
 
@@ -354,15 +374,16 @@ public class CommunityServiceTests
         using var db = TestDbContextFactory.Create();
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
-        await service.JoinCommunityAsync(community.Id, member.Id);
+        var communityService = new CommunityService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
+        await memberService.JoinCommunityAsync(community.Id, member.Id);
 
         // Act
-        await service.LeaveCommunityAsync(community.Id, member.Id);
+        await memberService.LeaveCommunityAsync(community.Id, member.Id);
 
         // Assert
-        Assert.IsFalse(await service.IsMemberAsync(community.Id, member.Id));
+        Assert.IsFalse(await memberService.IsMemberAsync(community.Id, member.Id));
     }
 
     [TestMethod]
@@ -371,12 +392,13 @@ public class CommunityServiceTests
         // Arrange
         using var db = TestDbContextFactory.Create();
         var owner = await CreateTestUserAsync(db);
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
+        var communityService = new CommunityService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
 
         // Act & Assert
         var exception = await Assert.ThrowsExceptionAsync<InvalidOperationException>(
-            () => service.LeaveCommunityAsync(community.Id, owner.Id));
+            () => memberService.LeaveCommunityAsync(community.Id, owner.Id));
         Assert.IsTrue(exception.Message.Contains("owner cannot leave"));
     }
 
@@ -388,13 +410,14 @@ public class CommunityServiceTests
         var owner = await CreateTestUserAsync(db, "owner");
         var member1 = await CreateTestUserAsync(db, "member1");
         var member2 = await CreateTestUserAsync(db, "member2");
-        var service = new CommunityService(db);
-        var community = await service.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
-        await service.JoinCommunityAsync(community.Id, member1.Id);
-        await service.JoinCommunityAsync(community.Id, member2.Id);
+        var communityService = new CommunityService(db);
+        var memberService = new CommunityMemberService(db);
+        var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
+        await memberService.JoinCommunityAsync(community.Id, member1.Id);
+        await memberService.JoinCommunityAsync(community.Id, member2.Id);
 
         // Act
-        var members = (await service.GetMembersAsync(community.Id)).ToList();
+        var members = (await memberService.GetMembersAsync(community.Id)).ToList();
 
         // Assert
         Assert.AreEqual(3, members.Count);
