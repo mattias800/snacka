@@ -646,7 +646,7 @@
                     </Border>
 
                     <!-- DM Messages List -->
-                    <ScrollViewer Margin="0,8">
+                    <ScrollViewer x:Name="DMMessagesScrollViewer" Margin="0,8">
                         <ItemsControl x:Name="DMMessagesList" ItemsSource="{Binding DMMessages}" Margin="16,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
@@ -1109,7 +1109,7 @@
                 </Border>
 
                 <!-- Messages List -->
-                <ScrollViewer Margin="0,8">
+                <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8">
                     <ItemsControl x:Name="MessagesList" ItemsSource="{Binding Messages}" Margin="16,0">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>

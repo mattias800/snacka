@@ -22,6 +22,11 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     private int _lastSentPointCount;
     private const int LiveUpdateThreshold = 30; // Send update every N points
 
+    // Auto-scroll state - track if user is at bottom of message lists
+    private bool _isMessagesAtBottom = true;
+    private bool _isDMMessagesAtBottom = true;
+    private const double ScrollBottomThreshold = 50; // pixels from bottom to consider "at bottom"
+
     public MainAppView()
     {
         InitializeComponent();
@@ -37,6 +42,10 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 
         // Subscribe to ViewModel changes for annotation redraw
         this.DataContextChanged += OnDataContextChanged;
+
+        // Track scroll position for smart auto-scrolling
+        MessagesScrollViewer.ScrollChanged += OnMessagesScrollChanged;
+        DMMessagesScrollViewer.ScrollChanged += OnDMMessagesScrollChanged;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -44,6 +53,70 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         if (ViewModel != null)
         {
             ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+
+            // Subscribe to collection changes for auto-scrolling
+            ViewModel.Messages.CollectionChanged += OnMessagesCollectionChanged;
+            ViewModel.DMMessages.CollectionChanged += OnDMMessagesCollectionChanged;
+        }
+    }
+
+    // Track if user is scrolled to the bottom of messages
+    private void OnMessagesScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        var scrollViewer = MessagesScrollViewer;
+        if (scrollViewer == null) return;
+
+        var distanceFromBottom = scrollViewer.Extent.Height - scrollViewer.Offset.Y - scrollViewer.Viewport.Height;
+        _isMessagesAtBottom = distanceFromBottom <= ScrollBottomThreshold;
+    }
+
+    // Track if user is scrolled to the bottom of DM messages
+    private void OnDMMessagesScrollChanged(object? sender, ScrollChangedEventArgs e)
+    {
+        var scrollViewer = DMMessagesScrollViewer;
+        if (scrollViewer == null) return;
+
+        var distanceFromBottom = scrollViewer.Extent.Height - scrollViewer.Offset.Y - scrollViewer.Viewport.Height;
+        _isDMMessagesAtBottom = distanceFromBottom <= ScrollBottomThreshold;
+    }
+
+    // Auto-scroll to bottom when new messages arrive (if already at bottom)
+    private void OnMessagesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        // Reset scroll state when collection is cleared (channel changed)
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+        {
+            _isMessagesAtBottom = true;
+            return;
+        }
+
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && _isMessagesAtBottom)
+        {
+            // Delay scroll to allow layout to update
+            Dispatcher.UIThread.Post(() =>
+            {
+                MessagesScrollViewer?.ScrollToEnd();
+            }, DispatcherPriority.Background);
+        }
+    }
+
+    // Auto-scroll to bottom when new DM messages arrive (if already at bottom)
+    private void OnDMMessagesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
+    {
+        // Reset scroll state when collection is cleared (conversation changed)
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
+        {
+            _isDMMessagesAtBottom = true;
+            return;
+        }
+
+        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && _isDMMessagesAtBottom)
+        {
+            // Delay scroll to allow layout to update
+            Dispatcher.UIThread.Post(() =>
+            {
+                DMMessagesScrollViewer?.ScrollToEnd();
+            }, DispatcherPriority.Background);
         }
     }
 
