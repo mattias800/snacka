@@ -125,12 +125,12 @@ dotnet publish src/Miscord.Server/Miscord.Server.csproj \
 ```
 The database file `miscord.db` will be created in the working directory.
 
-**SQL Server (Recommended for Production)**
+**PostgreSQL (Recommended for Production)**
 ```json
 {
   "UseSqlite": false,
   "ConnectionStrings": {
-    "DefaultConnection": "Server=localhost;Database=Miscord;User Id=miscord;Password=your-password;"
+    "DefaultConnection": "Host=localhost;Database=miscord;Username=miscord;Password=your-password"
   }
 }
 ```
@@ -243,6 +243,21 @@ The easiest way to deploy Miscord is using Docker Compose.
 
 The database is persisted in a Docker volume (`miscord-data`).
 
+#### Using PostgreSQL (Recommended for Production)
+
+For production deployments, use PostgreSQL instead of SQLite:
+
+```bash
+# Edit .env
+USE_SQLITE=false
+POSTGRES_PASSWORD=your-secure-password
+
+# Start with PostgreSQL profile
+docker-compose --profile postgres up -d
+```
+
+This starts both the Miscord server and a PostgreSQL database container.
+
 #### Environment Variables (.env file)
 
 | Variable | Description | Default |
@@ -251,6 +266,8 @@ The database is persisted in a Docker volume (`miscord-data`).
 | `SERVER_NAME` | Server display name | Miscord Server |
 | `SERVER_DESCRIPTION` | Server description | A self-hosted Discord alternative |
 | `ALLOW_REGISTRATION` | Allow new user signups | true |
+| `USE_SQLITE` | Use SQLite instead of PostgreSQL | true |
+| `POSTGRES_PASSWORD` | PostgreSQL password | miscord |
 
 #### Manual Docker Build
 

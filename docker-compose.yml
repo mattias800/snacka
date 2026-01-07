@@ -9,8 +9,10 @@ services:
     ports:
       - "5117:5117"
     environment:
-      # Use SQLite for simple deployment (database stored in volume)
-      - UseSqlite=true
+      # Database - set to false to use PostgreSQL
+      - UseSqlite=${USE_SQLITE:-true}
+      # PostgreSQL connection (used when UseSqlite=false)
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=miscord;Username=miscord;Password=${POSTGRES_PASSWORD:-miscord}
       # JWT Configuration - CHANGE THIS IN PRODUCTION!
       - Jwt__SecretKey=${JWT_SECRET_KEY:-ChangeThisToASecureSecretKeyAtLeast32CharactersLong!}
       - Jwt__Issuer=Miscord
@@ -25,8 +27,12 @@ services:
       - Logging__LogLevel__Default=Information
       - Logging__LogLevel__Microsoft.AspNetCore=Warning
     volumes:
-      # Persist SQLite database
+      # Persist SQLite database (when using SQLite)
       - miscord-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+        required: false
     restart: unless-stopped
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:5117/api/health"]
@@ -35,6 +41,28 @@ services:
       retries: 3
       start_period: 10s
 
+  # PostgreSQL database (optional - enable by setting USE_SQLITE=false)
+  postgres:
+    image: postgres:16-alpine
+    container_name: miscord-postgres
+    environment:
+      - POSTGRES_USER=miscord
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-miscord}
+      - POSTGRES_DB=miscord
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U miscord -d miscord"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+    profiles:
+      - postgres
+
 volumes:
   miscord-data:
+    driver: local
+  postgres-data:
     driver: local

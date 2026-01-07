@@ -16,7 +16,7 @@ builder.Services.Configure<JwtSettings>(
 var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
     ?? throw new InvalidOperationException("JWT settings are not configured.");
 
-// Add database context - Use SQLite for local development, SQL Server for production
+// Add database context - Use SQLite for local development, PostgreSQL for production
 var useSqlite = builder.Configuration.GetValue<bool>("UseSqlite", true);
 if (useSqlite)
 {
@@ -30,7 +30,7 @@ else
     var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
         ?? throw new InvalidOperationException("DefaultConnection is not configured.");
     builder.Services.AddDbContext<MiscordDbContext>(options =>
-        options.UseSqlServer(connectionString));
+        options.UseNpgsql(connectionString));
 }
 
 // Add authentication

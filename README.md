@@ -20,7 +20,7 @@ A self-hosted Discord alternative built with C# and .NET. Miscord allows users t
 - **Desktop Client**: Avalonia UI 11.1.3 (cross-platform XAML framework)
 - **Real-time Communication**: WebRTC with SipSorcery
 - **Signaling**: SignalR for WebSocket-based signaling
-- **Database**: Entity Framework Core with SQL Server or PostgreSQL
+- **Database**: Entity Framework Core with SQLite or PostgreSQL
 - **Testing**: MSTest
 
 ## Project Structure
