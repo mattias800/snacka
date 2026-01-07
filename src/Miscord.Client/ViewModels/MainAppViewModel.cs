@@ -395,6 +395,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
                 // Update video grid
                 _voiceChannelContent?.RemoveParticipant(e.UserId);
+
+                // Close fullscreen if viewing this user's stream
+                if (IsVideoFullscreen && FullscreenStream?.UserId == e.UserId)
+                {
+                    CloseFullscreen();
+                }
             }
         });
 
@@ -1612,7 +1618,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         var channelId = CurrentVoiceChannel.Id;
         var channelName = CurrentVoiceChannel.Name;
 
-        // Leave WebRTC connections first
+        // Stop screen sharing first (this closes the annotation overlay)
+        if (IsScreenSharing)
+        {
+            HideSharerAnnotationOverlay();
+            await _webRtc.SetScreenSharingAsync(false);
+            _currentScreenShareSettings = null;
+            _annotationService.OnScreenShareEnded(_auth.UserId);
+        }
+
+        // Leave WebRTC connections
         await _webRtc.LeaveVoiceChannelAsync();
 
         await _signalR.LeaveVoiceChannelAsync(channelId);
@@ -1856,14 +1871,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             Log("ShowSharerAnnotationOverlay: Step 4 - Window positioned");
 
             // Step 5: Show the overlay window
-            // On macOS, the window starts hidden and only shows when draw mode is enabled
-            // On other platforms, show immediately (input pass-through handles click behavior)
+            // Window is shown on all platforms - input pass-through handles click behavior
             Log("ShowSharerAnnotationOverlay: Step 5 - Showing overlay window...");
-            if (!System.Runtime.InteropServices.RuntimeInformation.IsOSPlatform(System.Runtime.InteropServices.OSPlatform.OSX))
-            {
-                _screenAnnotationWindow.Show();
-            }
-            Log("ShowSharerAnnotationOverlay: Step 5 - Overlay window configured");
+            _screenAnnotationWindow.Show();
+            Log("ShowSharerAnnotationOverlay: Step 5 - Overlay window shown");
 
             // Step 6: Create toolbar window
             Log("ShowSharerAnnotationOverlay: Step 6 - Creating toolbar window...");

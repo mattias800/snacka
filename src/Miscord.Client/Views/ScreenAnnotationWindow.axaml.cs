@@ -96,22 +96,24 @@ public partial class ScreenAnnotationWindow : Window
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            // macOS: hide/show window based on draw mode
-            // P/Invoke for ignoresMouseEvents crashes on ARM64, so we can't have click-through
-            // Limitation: Guest drawings only visible when host has draw mode enabled
+            // macOS: use ignoresMouseEvents for click-through
+            // Window stays visible so guest drawings are always shown
+            UpdateInputPassThroughMacOS(!drawModeEnabled);
+            AnnotationCanvas.IsHitTestVisible = drawModeEnabled;
+
             if (drawModeEnabled)
             {
-                this.Show();
                 // Set Topmost to false so the toolbar (which has Topmost=true) stays on top
                 this.Topmost = false;
-                // Redraw strokes when showing (may have received strokes while hidden)
-                RedrawStrokes();
             }
             else
             {
-                this.Hide();
+                // When not drawing, stay topmost so drawings remain visible
+                this.Topmost = true;
             }
-            AnnotationCanvas.IsHitTestVisible = drawModeEnabled;
+
+            // Always redraw strokes
+            RedrawStrokes();
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
@@ -161,21 +163,27 @@ public partial class ScreenAnnotationWindow : Window
     }
 
     // macOS - Input pass-through via NSWindow.ignoresMouseEvents
-    // Note: Using ObjCRuntime for safer P/Invoke on both x64 and ARM64
-    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "sel_registerName")]
+    // Using the correct ARM64-compatible P/Invoke signatures
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "sel_registerName")]
     private static extern IntPtr sel_registerName(string selector);
 
-    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
-    private static extern IntPtr objc_msgSend_IntPtr(IntPtr receiver, IntPtr selector);
-
-    [DllImport("/usr/lib/libobjc.dylib", EntryPoint = "objc_msgSend")]
-    private static extern void objc_msgSend_void_byte(IntPtr receiver, IntPtr selector, byte arg);
+    [DllImport("/usr/lib/libobjc.A.dylib", EntryPoint = "objc_msgSend")]
+    private static extern void objc_msgSend_bool(IntPtr receiver, IntPtr selector, bool value);
 
     private void UpdateInputPassThroughMacOS(bool passThrough)
     {
-        // TODO: macOS input pass-through disabled - P/Invoke crashes on ARM64
-        // The window will capture all input when visible. Users must use the toolbar to toggle draw mode.
-        Console.WriteLine($"ScreenAnnotationWindow: macOS input pass-through skipped (requested: {passThrough})");
+        if (_windowHandle == IntPtr.Zero) return;
+
+        try
+        {
+            var selector = sel_registerName("setIgnoresMouseEvents:");
+            objc_msgSend_bool(_windowHandle, selector, passThrough);
+            Console.WriteLine($"ScreenAnnotationWindow: macOS ignoresMouseEvents set to {passThrough}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ScreenAnnotationWindow: Failed to set macOS input pass-through: {ex.Message}");
+        }
     }
 
     // Linux (X11)
