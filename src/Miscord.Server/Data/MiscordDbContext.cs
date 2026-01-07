@@ -16,6 +16,7 @@ public sealed class MiscordDbContext : DbContext
     public DbSet<VoiceParticipant> VoiceParticipants => Set<VoiceParticipant>();
     public DbSet<ServerInvite> ServerInvites => Set<ServerInvite>();
     public DbSet<ChannelReadState> ChannelReadStates => Set<ChannelReadState>();
+    public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -152,6 +153,24 @@ public sealed class MiscordDbContext : DbContext
             .OnDelete(DeleteBehavior.SetNull);
         modelBuilder.Entity<ChannelReadState>()
             .HasIndex(crs => new { crs.UserId, crs.ChannelId })
+            .IsUnique();
+
+        // MessageReaction configuration
+        modelBuilder.Entity<MessageReaction>()
+            .HasKey(mr => mr.Id);
+        modelBuilder.Entity<MessageReaction>()
+            .HasOne(mr => mr.Message)
+            .WithMany(m => m.Reactions)
+            .HasForeignKey(mr => mr.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<MessageReaction>()
+            .HasOne(mr => mr.User)
+            .WithMany(u => u.Reactions)
+            .HasForeignKey(mr => mr.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        // Ensure a user can only react with the same emoji once per message
+        modelBuilder.Entity<MessageReaction>()
+            .HasIndex(mr => new { mr.MessageId, mr.UserId, mr.Emoji })
             .IsUnique();
     }
 }

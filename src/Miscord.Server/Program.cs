@@ -80,6 +80,7 @@ builder.Services.AddScoped<IChannelService, ChannelService>();
 builder.Services.AddScoped<IMessageService, MessageService>();
 builder.Services.AddScoped<ICommunityMemberService, CommunityMemberService>();
 builder.Services.AddScoped<IVoiceService, VoiceService>();
+builder.Services.AddScoped<IReactionService, ReactionService>();
 
 // Add link preview service with HttpClient
 builder.Services.AddHttpClient<ILinkPreviewService, LinkPreviewService>();

@@ -32,3 +32,26 @@ public class MentionSelectedBackgroundConverter : IMultiValueConverter
         return itemIndex == selectedIndex.Value ? SelectedBrush : NormalBrush;
     }
 }
+
+/// <summary>
+/// Converts HasReacted boolean to a background color for reaction buttons.
+/// </summary>
+public class ReactionBackgroundConverter : IValueConverter
+{
+    public static readonly ReactionBackgroundConverter Instance = new();
+
+    private static readonly Color ReactedColor = Color.Parse("#5865f230"); // Discord blue with transparency
+    private static readonly Color NormalColor = Color.Parse("#2f3136");
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is bool hasReacted && hasReacted)
+            return ReactedColor;
+        return NormalColor;
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

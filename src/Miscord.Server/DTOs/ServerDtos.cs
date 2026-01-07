@@ -59,7 +59,8 @@ public record MessageResponse(
     DateTime UpdatedAt,
     bool IsEdited,
     Guid? ReplyToId = null,
-    ReplyPreview? ReplyTo = null
+    ReplyPreview? ReplyTo = null,
+    List<ReactionSummary>? Reactions = null
 );
 
 /// <summary>
@@ -103,3 +104,37 @@ public record UserOfflineEvent(Guid UserId);
 public record TypingEvent(Guid ChannelId, Guid UserId, string Username);
 
 public record DMTypingEvent(Guid UserId, string Username);
+
+// Reaction DTOs
+/// <summary>
+/// Summary of reactions for a specific emoji on a message
+/// </summary>
+public record ReactionSummary(
+    string Emoji,
+    int Count,
+    bool HasReacted,
+    List<ReactionUser> Users
+);
+
+/// <summary>
+/// User who reacted with a specific emoji
+/// </summary>
+public record ReactionUser(Guid UserId, string Username);
+
+/// <summary>
+/// Request to add a reaction to a message
+/// </summary>
+public record AddReactionRequest([Required, StringLength(10, MinimumLength = 1)] string Emoji);
+
+/// <summary>
+/// SignalR event when a reaction is added or removed
+/// </summary>
+public record ReactionUpdatedEvent(
+    Guid MessageId,
+    Guid ChannelId,
+    string Emoji,
+    int Count,
+    Guid UserId,
+    string Username,
+    bool Added
+);

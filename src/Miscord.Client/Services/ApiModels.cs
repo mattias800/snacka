@@ -96,7 +96,8 @@ public record MessageResponse(
     DateTime UpdatedAt,
     bool IsEdited,
     Guid? ReplyToId = null,
-    ReplyPreview? ReplyTo = null
+    ReplyPreview? ReplyTo = null,
+    List<ReactionSummary>? Reactions = null
 );
 
 /// <summary>
@@ -111,6 +112,40 @@ public record ReplyPreview(
 
 public record SendMessageRequest(string Content, Guid? ReplyToId = null);
 public record UpdateMessageRequest(string Content);
+
+// Reaction Models
+/// <summary>
+/// Summary of reactions for a specific emoji on a message
+/// </summary>
+public record ReactionSummary(
+    string Emoji,
+    int Count,
+    bool HasReacted,
+    List<ReactionUser> Users
+);
+
+/// <summary>
+/// User who reacted with a specific emoji
+/// </summary>
+public record ReactionUser(Guid UserId, string Username);
+
+/// <summary>
+/// Request to add a reaction to a message
+/// </summary>
+public record AddReactionRequest(string Emoji);
+
+/// <summary>
+/// Event when a reaction is added or removed
+/// </summary>
+public record ReactionUpdatedEvent(
+    Guid MessageId,
+    Guid ChannelId,
+    string Emoji,
+    int Count,
+    Guid UserId,
+    string Username,
+    bool Added
+);
 
 // Member Models
 public record CommunityMemberResponse(

@@ -35,4 +35,5 @@ public class User
     public ICollection<Message> Messages { get; set; } = new List<Message>();
     public ICollection<VoiceParticipant> VoiceParticipants { get; set; } = new List<VoiceParticipant>();
     public ICollection<ChannelReadState> ChannelReadStates { get; set; } = new List<ChannelReadState>();
+    public ICollection<MessageReaction> Reactions { get; set; } = new List<MessageReaction>();
 }

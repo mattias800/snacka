@@ -1256,6 +1256,66 @@
                                             <controls:MessageContentBlock Content="{Binding Content}"
                                                                     FontSize="15"
                                                                     Margin="0,4,0,0"/>
+
+                                            <!-- Reactions -->
+                                            <StackPanel Orientation="Horizontal" Spacing="4" Margin="0,4,0,0"
+                                                        IsVisible="{Binding Reactions, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                <ItemsControl ItemsSource="{Binding Reactions}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4"/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Button Classes="reaction-button"
+                                                                    Padding="4,2"
+                                                                    CornerRadius="4"
+                                                                    Cursor="Hand"
+                                                                    PointerPressed="Reaction_PointerPressed">
+                                                                <Button.Background>
+                                                                    <SolidColorBrush Color="{Binding HasReacted, Converter={x:Static conv:ReactionBackgroundConverter.Instance}}"/>
+                                                                </Button.Background>
+                                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                    <TextBlock Text="{Binding Emoji}" FontSize="14"/>
+                                                                    <TextBlock Text="{Binding Count}" Foreground="#dcddde" FontSize="12" VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                                <ToolTip.Tip>
+                                                                    <ItemsControl ItemsSource="{Binding Users}">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <TextBlock Text="{Binding Username}" Foreground="White"/>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </ToolTip.Tip>
+                                                            </Button>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <!-- Add Reaction Button -->
+                                                <Button Classes="add-reaction-button"
+                                                        Background="#2f3136"
+                                                        Padding="4,2"
+                                                        CornerRadius="4"
+                                                        Cursor="Hand"
+                                                        PointerPressed="AddReaction_PointerPressed">
+                                                    <TextBlock Text="+" Foreground="#72767d" FontSize="14"/>
+                                                </Button>
+                                            </StackPanel>
+
+                                            <!-- Add Reaction Button (when no reactions) -->
+                                            <Button Classes="add-reaction-button"
+                                                    Background="#2f3136"
+                                                    Padding="4,2"
+                                                    CornerRadius="4"
+                                                    Cursor="Hand"
+                                                    Margin="0,4,0,0"
+                                                    IsVisible="{Binding Reactions, Converter={x:Static ObjectConverters.IsNull}}"
+                                                    PointerPressed="AddReaction_PointerPressed">
+                                                <TextBlock Text="😀+" Foreground="#72767d" FontSize="12"/>
+                                            </Button>
                                         </StackPanel>
 
                                         <!-- Reply/Edit/Delete Buttons -->
@@ -1642,5 +1702,59 @@
                 </Border>
             </Grid>
         </Border>
+
+        <!-- Emoji Picker Popup -->
+        <Popup x:Name="EmojiPickerPopup"
+               IsLightDismissEnabled="True"
+               Placement="Top"
+               PlacementGravity="Top">
+            <Border Background="#2f3136"
+                    CornerRadius="8"
+                    Padding="8"
+                    BorderBrush="#202225"
+                    BorderThickness="1">
+                <StackPanel Spacing="4">
+                    <TextBlock Text="Reactions" Foreground="#72767d" FontSize="11" FontWeight="SemiBold" Margin="4,0,0,4"/>
+                    <WrapPanel>
+                        <Button Tag="👍" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="👍" FontSize="20"/>
+                        </Button>
+                        <Button Tag="❤️" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="❤️" FontSize="20"/>
+                        </Button>
+                        <Button Tag="😂" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="😂" FontSize="20"/>
+                        </Button>
+                        <Button Tag="😮" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="😮" FontSize="20"/>
+                        </Button>
+                        <Button Tag="😢" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="😢" FontSize="20"/>
+                        </Button>
+                        <Button Tag="😡" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="😡" FontSize="20"/>
+                        </Button>
+                        <Button Tag="🎉" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="🎉" FontSize="20"/>
+                        </Button>
+                        <Button Tag="🔥" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="🔥" FontSize="20"/>
+                        </Button>
+                        <Button Tag="👀" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="👀" FontSize="20"/>
+                        </Button>
+                        <Button Tag="✅" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="✅" FontSize="20"/>
+                        </Button>
+                        <Button Tag="❌" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="❌" FontSize="20"/>
+                        </Button>
+                        <Button Tag="💯" Background="Transparent" Padding="6" PointerPressed="EmojiPicker_EmojiSelected" Cursor="Hand">
+                            <TextBlock Text="💯" FontSize="20"/>
+                        </Button>
+                    </WrapPanel>
+                </StackPanel>
+            </Border>
+        </Popup>
     </Grid>
 </UserControl>

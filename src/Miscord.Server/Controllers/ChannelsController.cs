@@ -180,11 +180,13 @@ public class ChannelsController : ControllerBase
 public class MessagesController : ControllerBase
 {
     private readonly IMessageService _messageService;
+    private readonly IReactionService _reactionService;
     private readonly IHubContext<MiscordHub> _hubContext;
 
-    public MessagesController(IMessageService messageService, IHubContext<MiscordHub> hubContext)
+    public MessagesController(IMessageService messageService, IReactionService reactionService, IHubContext<MiscordHub> hubContext)
     {
         _messageService = messageService;
+        _reactionService = reactionService;
         _hubContext = hubContext;
     }
 
@@ -200,7 +202,7 @@ public class MessagesController : ControllerBase
 
         try
         {
-            var messages = await _messageService.GetMessagesAsync(channelId, skip, take, cancellationToken);
+            var messages = await _messageService.GetMessagesAsync(channelId, userId.Value, skip, take, cancellationToken);
             return Ok(messages);
         }
         catch (InvalidOperationException ex)
@@ -281,6 +283,55 @@ public class MessagesController : ControllerBase
         catch (UnauthorizedAccessException ex)
         {
             return Forbid(ex.Message);
+        }
+    }
+
+    [HttpPost("{messageId:guid}/reactions")]
+    public async Task<ActionResult<ReactionUpdatedEvent>> AddReaction(
+        Guid channelId,
+        Guid messageId,
+        [FromBody] AddReactionRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var reactionEvent = await _reactionService.AddReactionAsync(messageId, userId.Value, request.Emoji, cancellationToken);
+            await _hubContext.Clients.Group($"channel:{channelId}")
+                .SendAsync("ReactionUpdated", reactionEvent, cancellationToken);
+            return Ok(reactionEvent);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("{messageId:guid}/reactions/{emoji}")]
+    public async Task<IActionResult> RemoveReaction(
+        Guid channelId,
+        Guid messageId,
+        string emoji,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var reactionEvent = await _reactionService.RemoveReactionAsync(messageId, userId.Value, emoji, cancellationToken);
+            if (reactionEvent is not null)
+            {
+                await _hubContext.Clients.Group($"channel:{channelId}")
+                    .SendAsync("ReactionUpdated", reactionEvent, cancellationToken);
+            }
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
         }
     }
 

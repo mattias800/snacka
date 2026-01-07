@@ -92,12 +92,15 @@ These features significantly improve the core messaging experience:
 
 Polish and enhanced functionality:
 
-#### 3.1 Message Reactions
-- [ ] Add emoji reactions to any message
-- [ ] Show reaction counts below message
-- [ ] Tooltip showing who reacted
-- [ ] Emoji picker UI (common emojis + search)
-- [ ] Database model for reactions
+#### 3.1 Message Reactions ✅
+- [x] Add emoji reactions to any message
+- [x] Show reaction counts below message
+- [x] Tooltip showing who reacted
+- [x] Emoji picker UI (common emojis)
+- [x] Database model for reactions
+- [x] Real-time sync via SignalR
+- [ ] Emoji search in picker
+- [ ] Custom emoji reactions (requires 3.2 File Attachments)
 
 #### 3.2 File Attachments
 - [ ] Upload images and files with messages
@@ -218,6 +221,7 @@ Another agent is currently working on server, community, and user account manage
 
 ### In Progress
 - [ ] Phase 3: Medium Impact Features
+  - [x] Message reactions (emoji picker, counts, tooltips, real-time sync)
 
 ### Not Started
 - [ ] Phase 4: Nice to Have

@@ -47,6 +47,10 @@ public interface IApiClient
     Task<ApiResult<MessageResponse>> UpdateMessageAsync(Guid channelId, Guid messageId, string content);
     Task<ApiResult<bool>> DeleteMessageAsync(Guid channelId, Guid messageId);
 
+    // Reactions
+    Task<ApiResult<ReactionUpdatedEvent>> AddReactionAsync(Guid channelId, Guid messageId, string emoji);
+    Task<ApiResult<bool>> RemoveReactionAsync(Guid channelId, Guid messageId, string emoji);
+
     // Members
     Task<ApiResult<List<CommunityMemberResponse>>> GetMembersAsync(Guid communityId);
     Task<ApiResult<CommunityMemberResponse>> GetMemberAsync(Guid communityId, Guid userId);

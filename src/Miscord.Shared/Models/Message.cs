@@ -17,4 +17,9 @@ public class Message
     /// </summary>
     public Guid? ReplyToId { get; set; }
     public Message? ReplyTo { get; set; }
+
+    /// <summary>
+    /// Reactions on this message
+    /// </summary>
+    public ICollection<MessageReaction> Reactions { get; set; } = new List<MessageReaction>();
 }

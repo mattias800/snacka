@@ -172,6 +172,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         DeleteMessageCommand = ReactiveCommand.CreateFromTask<MessageResponse>(DeleteMessageAsync);
         ReplyToMessageCommand = ReactiveCommand.Create<MessageResponse>(StartReplyToMessage);
         CancelReplyCommand = ReactiveCommand.Create(CancelReply);
+        ToggleReactionCommand = ReactiveCommand.CreateFromTask<(MessageResponse Message, string Emoji)>(ToggleReactionAsync);
+        AddReactionCommand = ReactiveCommand.CreateFromTask<(MessageResponse Message, string Emoji)>(AddReactionAsync);
 
         // Member commands
         StartDMCommand = ReactiveCommand.Create<CommunityMemberResponse>(StartDMWithMember);
@@ -334,6 +336,71 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             var message = Messages.FirstOrDefault(m => m.Id == e.MessageId);
             if (message is not null)
                 Messages.Remove(message);
+        });
+
+        _signalR.ReactionUpdated += e => Dispatcher.UIThread.Post(() =>
+        {
+            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
+            if (index >= 0)
+            {
+                var message = Messages[index];
+                var reactions = message.Reactions?.ToList() ?? new List<ReactionSummary>();
+
+                // Find existing reaction for this emoji
+                var reactionIndex = reactions.FindIndex(r => r.Emoji == e.Emoji);
+
+                if (e.Added)
+                {
+                    if (reactionIndex >= 0)
+                    {
+                        // Update existing reaction
+                        var existing = reactions[reactionIndex];
+                        var users = existing.Users.ToList();
+                        if (!users.Any(u => u.UserId == e.UserId))
+                            users.Add(new ReactionUser(e.UserId, e.Username));
+                        reactions[reactionIndex] = existing with
+                        {
+                            Count = e.Count,
+                            HasReacted = existing.HasReacted || e.UserId == _auth.UserId,
+                            Users = users
+                        };
+                    }
+                    else
+                    {
+                        // Add new reaction
+                        reactions.Add(new ReactionSummary(
+                            e.Emoji,
+                            e.Count,
+                            e.UserId == _auth.UserId,
+                            new List<ReactionUser> { new(e.UserId, e.Username) }
+                        ));
+                    }
+                }
+                else
+                {
+                    // Reaction removed
+                    if (reactionIndex >= 0)
+                    {
+                        if (e.Count == 0)
+                        {
+                            reactions.RemoveAt(reactionIndex);
+                        }
+                        else
+                        {
+                            var existing = reactions[reactionIndex];
+                            var users = existing.Users.Where(u => u.UserId != e.UserId).ToList();
+                            reactions[reactionIndex] = existing with
+                            {
+                                Count = e.Count,
+                                HasReacted = e.UserId == _auth.UserId ? false : existing.HasReacted,
+                                Users = users
+                            };
+                        }
+                    }
+                }
+
+                Messages[index] = message with { Reactions = reactions.Count > 0 ? reactions : null };
+            }
         });
 
         _signalR.UserOnline += e => Dispatcher.UIThread.Post(() =>
@@ -1126,6 +1193,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<MessageResponse, Unit> DeleteMessageCommand { get; }
     public ReactiveCommand<MessageResponse, Unit> ReplyToMessageCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelReplyCommand { get; }
+    public ReactiveCommand<(MessageResponse Message, string Emoji), Unit> ToggleReactionCommand { get; }
+    public ReactiveCommand<(MessageResponse Message, string Emoji), Unit> AddReactionCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> StartDMCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> PromoteToAdminCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> DemoteToMemberCommand { get; }
@@ -2290,6 +2359,32 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         if (MentionSuggestions.Count == 0) return;
         SelectedMentionIndex = (SelectedMentionIndex + 1) % MentionSuggestions.Count;
+    }
+
+    // Reaction methods
+    private async Task ToggleReactionAsync((MessageResponse Message, string Emoji) args)
+    {
+        if (SelectedChannel is null) return;
+
+        var (message, emoji) = args;
+        var hasReacted = message.Reactions?.FirstOrDefault(r => r.Emoji == emoji)?.HasReacted ?? false;
+
+        if (hasReacted)
+        {
+            await _apiClient.RemoveReactionAsync(SelectedChannel.Id, message.Id, emoji);
+        }
+        else
+        {
+            await _apiClient.AddReactionAsync(SelectedChannel.Id, message.Id, emoji);
+        }
+    }
+
+    private async Task AddReactionAsync((MessageResponse Message, string Emoji) args)
+    {
+        if (SelectedChannel is null) return;
+
+        var (message, emoji) = args;
+        await _apiClient.AddReactionAsync(SelectedChannel.Id, message.Id, emoji);
     }
 
     public void Dispose()

@@ -11,19 +11,21 @@ public sealed class MessageService : IMessageService
 
     public MessageService(MiscordDbContext db) => _db = db;
 
-    public async Task<IEnumerable<MessageResponse>> GetMessagesAsync(Guid channelId, int skip = 0, int take = 50, CancellationToken cancellationToken = default)
+    public async Task<IEnumerable<MessageResponse>> GetMessagesAsync(Guid channelId, Guid currentUserId, int skip = 0, int take = 50, CancellationToken cancellationToken = default)
     {
         var messages = await _db.Messages
             .Include(m => m.Author)
             .Include(m => m.ReplyTo)
             .ThenInclude(r => r!.Author)
+            .Include(m => m.Reactions)
+            .ThenInclude(r => r.User)
             .Where(m => m.ChannelId == channelId)
             .OrderByDescending(m => m.CreatedAt)
             .Skip(skip)
             .Take(take)
             .ToListAsync(cancellationToken);
 
-        return messages.Select(ToMessageResponse).Reverse();
+        return messages.Select(m => ToMessageResponse(m, currentUserId)).Reverse();
     }
 
     public async Task<MessageResponse> SendMessageAsync(Guid channelId, Guid authorId, string content, Guid? replyToId = null, CancellationToken cancellationToken = default)
@@ -97,7 +99,7 @@ public sealed class MessageService : IMessageService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private static MessageResponse ToMessageResponse(Message m) => new(
+    private static MessageResponse ToMessageResponse(Message m, Guid? currentUserId = null) => new(
         m.Id,
         m.Content,
         m.AuthorId,
@@ -113,6 +115,15 @@ public sealed class MessageService : IMessageService
             m.ReplyTo.Content.Length > 100 ? m.ReplyTo.Content[..100] + "..." : m.ReplyTo.Content,
             m.ReplyTo.AuthorId,
             m.ReplyTo.Author?.Username ?? "Unknown"
-        ) : null
+        ) : null,
+        m.Reactions.Count > 0 ? m.Reactions
+            .GroupBy(r => r.Emoji)
+            .Select(g => new ReactionSummary(
+                g.Key,
+                g.Count(),
+                currentUserId.HasValue && g.Any(r => r.UserId == currentUserId.Value),
+                g.Select(r => new ReactionUser(r.UserId, r.User?.Username ?? "Unknown")).ToList()
+            ))
+            .ToList() : null
     );
 }

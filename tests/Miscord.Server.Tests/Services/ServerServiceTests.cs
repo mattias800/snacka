@@ -254,7 +254,7 @@ public class CommunityServiceTests
         await messageService.SendMessageAsync(channelId, user.Id, "Message 3");
 
         // Act
-        var messages = (await messageService.GetMessagesAsync(channelId)).ToList();
+        var messages = (await messageService.GetMessagesAsync(channelId, user.Id)).ToList();
 
         // Assert
         Assert.AreEqual(3, messages.Count);
@@ -321,7 +321,7 @@ public class CommunityServiceTests
         await messageService.DeleteMessageAsync(message.Id, user.Id);
 
         // Assert
-        var messages = await messageService.GetMessagesAsync(channels[0].Id);
+        var messages = await messageService.GetMessagesAsync(channels[0].Id, user.Id);
         Assert.AreEqual(0, messages.Count());
     }
 

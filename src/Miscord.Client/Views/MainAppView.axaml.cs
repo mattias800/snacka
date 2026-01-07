@@ -1,6 +1,7 @@
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
+using Avalonia.Controls.Primitives;
 using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
@@ -282,6 +283,76 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
                     MessageInputBox.SelectionStart = cursorPos;
                     MessageInputBox.SelectionEnd = cursorPos;
                 }
+            }
+        }
+    }
+
+    // Called when clicking a reaction to toggle it
+    private void Reaction_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Button button &&
+            button.DataContext is Services.ReactionSummary reaction &&
+            ViewModel != null)
+        {
+            // Find the parent message - need to traverse up the visual tree
+            var parent = button.Parent;
+            while (parent != null && parent is not Border border || (parent as Border)?.DataContext is not Services.MessageResponse)
+            {
+                parent = (parent as Control)?.Parent;
+            }
+
+            if (parent is Border messageBorder && messageBorder.DataContext is Services.MessageResponse message)
+            {
+                ViewModel.ToggleReactionCommand.Execute((message, reaction.Emoji)).Subscribe();
+            }
+        }
+    }
+
+    // Store the current message for the emoji picker
+    private Services.MessageResponse? _emojiPickerMessage;
+
+    // Called when clicking the add reaction button
+    private void AddReaction_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Button button && ViewModel != null)
+        {
+            // Find the parent message
+            var parent = button.Parent;
+            while (parent != null && !(parent is Border border && border.DataContext is Services.MessageResponse))
+            {
+                parent = (parent as Control)?.Parent;
+            }
+
+            if (parent is Border messageBorder && messageBorder.DataContext is Services.MessageResponse message)
+            {
+                _emojiPickerMessage = message;
+                // Show emoji picker popup
+                var popup = this.FindControl<Popup>("EmojiPickerPopup");
+                if (popup != null)
+                {
+                    popup.PlacementTarget = button;
+                    popup.IsOpen = true;
+                }
+            }
+        }
+    }
+
+    // Called when an emoji is selected from the picker
+    private void EmojiPicker_EmojiSelected(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Button button &&
+            button.Tag is string emoji &&
+            _emojiPickerMessage != null &&
+            ViewModel != null)
+        {
+            ViewModel.AddReactionCommand.Execute((_emojiPickerMessage, emoji)).Subscribe();
+            _emojiPickerMessage = null;
+
+            // Close the popup
+            var popup = this.FindControl<Popup>("EmojiPickerPopup");
+            if (popup != null)
+            {
+                popup.IsOpen = false;
             }
         }
     }

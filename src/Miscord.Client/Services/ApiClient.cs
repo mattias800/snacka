@@ -277,6 +277,21 @@ public class ApiClient : IApiClient
         return await DeleteAsync($"/api/channels/{channelId}/messages/{messageId}");
     }
 
+    // Reaction methods
+    public async Task<ApiResult<ReactionUpdatedEvent>> AddReactionAsync(Guid channelId, Guid messageId, string emoji)
+    {
+        return await PostAsync<AddReactionRequest, ReactionUpdatedEvent>(
+            $"/api/channels/{channelId}/messages/{messageId}/reactions",
+            new AddReactionRequest(emoji));
+    }
+
+    public async Task<ApiResult<bool>> RemoveReactionAsync(Guid channelId, Guid messageId, string emoji)
+    {
+        // URL encode the emoji to handle special characters
+        var encodedEmoji = Uri.EscapeDataString(emoji);
+        return await DeleteAsync($"/api/channels/{channelId}/messages/{messageId}/reactions/{encodedEmoji}");
+    }
+
     // Member methods
     public async Task<ApiResult<List<CommunityMemberResponse>>> GetMembersAsync(Guid communityId)
     {
