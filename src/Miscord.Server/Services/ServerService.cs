@@ -146,14 +146,21 @@ public sealed class CommunityService : ICommunityService
             throw new UnauthorizedAccessException("You don't have permission to manage this community.");
     }
 
-    private static CommunityResponse ToCommunityResponse(Community c) => new(
-        c.Id,
-        c.Name,
-        c.Description,
-        c.Icon,
-        c.OwnerId,
-        c.Owner?.Username ?? "Unknown",
-        c.CreatedAt,
-        c.UserCommunities.Count
-    );
+    private static CommunityResponse ToCommunityResponse(Community c)
+    {
+        var ownerUsername = c.Owner?.Username ?? "Unknown";
+        var ownerEffectiveDisplayName = c.Owner?.EffectiveDisplayName ?? ownerUsername;
+
+        return new CommunityResponse(
+            c.Id,
+            c.Name,
+            c.Description,
+            c.Icon,
+            c.OwnerId,
+            ownerUsername,
+            ownerEffectiveDisplayName,
+            c.CreatedAt,
+            c.UserCommunities.Count
+        );
+    }
 }

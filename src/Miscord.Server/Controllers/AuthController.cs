@@ -70,8 +70,13 @@ public class AuthController : ControllerBase
 public class UsersController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IImageProcessingService _imageService;
 
-    public UsersController(IAuthService authService) => _authService = authService;
+    public UsersController(IAuthService authService, IImageProcessingService imageService)
+    {
+        _authService = authService;
+        _imageService = imageService;
+    }
 
     [HttpGet("me")]
     public async Task<ActionResult<UserProfileResponse>> GetProfile(CancellationToken cancellationToken)
@@ -146,6 +151,104 @@ public class UsersController : ControllerBase
         catch (InvalidOperationException ex)
         {
             return NotFound(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("me/avatar")]
+    public async Task<ActionResult<AvatarUploadResponse>> UploadAvatar(
+        IFormFile file,
+        [FromQuery] double? cropX,
+        [FromQuery] double? cropY,
+        [FromQuery] double? cropWidth,
+        [FromQuery] double? cropHeight,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+            return Unauthorized();
+
+        // Validate the file
+        var validation = _imageService.ValidateAvatar(file.FileName, file.Length);
+        if (!validation.IsValid)
+            return BadRequest(new { error = validation.ErrorMessage });
+
+        // Create crop region if all parameters provided
+        CropRegion? cropRegion = null;
+        if (cropX.HasValue && cropY.HasValue && cropWidth.HasValue && cropHeight.HasValue)
+        {
+            cropRegion = new CropRegion(cropX.Value, cropY.Value, cropWidth.Value, cropHeight.Value);
+        }
+
+        // Process and save the avatar
+        await using var stream = file.OpenReadStream();
+        var result = await _imageService.ProcessAvatarAsync(stream, cropRegion, cancellationToken);
+
+        if (!result.Success)
+            return BadRequest(new { error = result.ErrorMessage });
+
+        try
+        {
+            // Update the user's avatar in the database
+            var profile = await _authService.UpdateAvatarAsync(userId.Value, result.FileName, cancellationToken);
+            return Ok(new AvatarUploadResponse(profile.Avatar, true));
+        }
+        catch (InvalidOperationException ex)
+        {
+            // Clean up the saved file if database update fails
+            await _imageService.DeleteAvatarAsync(result.FileName, cancellationToken);
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpDelete("me/avatar")]
+    public async Task<ActionResult> DeleteAvatar(CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null)
+            return Unauthorized();
+
+        try
+        {
+            // Get current avatar filename before deleting
+            var profile = await _authService.GetProfileAsync(userId.Value, cancellationToken);
+            var oldAvatar = profile.Avatar;
+
+            // Clear avatar in database
+            await _authService.UpdateAvatarAsync(userId.Value, null, cancellationToken);
+
+            // Delete the file
+            if (!string.IsNullOrEmpty(oldAvatar))
+            {
+                await _imageService.DeleteAvatarAsync(oldAvatar, cancellationToken);
+            }
+
+            return NoContent();
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpGet("{userId:guid}/avatar")]
+    [AllowAnonymous]
+    public async Task<ActionResult> GetUserAvatar(Guid userId, CancellationToken cancellationToken)
+    {
+        try
+        {
+            var profile = await _authService.GetProfileAsync(userId, cancellationToken);
+            if (string.IsNullOrEmpty(profile.Avatar))
+                return NotFound();
+
+            var result = await _imageService.GetAvatarAsync(profile.Avatar, cancellationToken);
+            if (result == null)
+                return NotFound();
+
+            return File(result.Stream, result.ContentType);
+        }
+        catch (InvalidOperationException)
+        {
+            return NotFound();
         }
     }
 

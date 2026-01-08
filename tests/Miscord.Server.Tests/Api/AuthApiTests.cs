@@ -203,14 +203,13 @@ public class AuthApiTests
 
         // Act
         var response = await test.Client.PutAsJsonAsync("/api/users/me",
-            new UpdateProfileRequest("newname", "avatar.png", "Hello!"));
+            new UpdateProfileRequest("newname", "Test Display 🎮", "Hello!"));
 
         // Assert
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         var profile = await response.Content.ReadFromJsonAsync<UserProfileResponse>();
         Assert.IsNotNull(profile);
         Assert.AreEqual("newname", profile.Username);
-        Assert.AreEqual("avatar.png", profile.Avatar);
         Assert.AreEqual("Hello!", profile.Status);
     }
 

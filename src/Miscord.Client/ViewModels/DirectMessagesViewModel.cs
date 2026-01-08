@@ -95,6 +95,7 @@ public class DirectMessagesViewModel : ViewModelBase, IDisposable
                 var newConv = new ConversationSummary(
                     _initialUserId.Value,
                     _initialUsername,
+                    _initialUsername, // EffectiveDisplayName defaults to username
                     null,
                     true, // Assume online for now
                     null,
@@ -159,9 +160,13 @@ public class DirectMessagesViewModel : ViewModelBase, IDisposable
         {
             // New conversation
             var otherUsername = message.SenderId == _auth.UserId ? message.RecipientUsername : message.SenderUsername;
+            var otherEffectiveDisplayName = message.SenderId == _auth.UserId
+                ? message.RecipientEffectiveDisplayName
+                : message.SenderEffectiveDisplayName;
             var newConv = new ConversationSummary(
                 otherUserId,
                 otherUsername,
+                otherEffectiveDisplayName,
                 null,
                 true,
                 message,

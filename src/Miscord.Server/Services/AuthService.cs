@@ -108,16 +108,7 @@ public sealed class AuthService : IAuthService
         if (user is null)
             throw new InvalidOperationException("User not found.");
 
-        return new UserProfileResponse(
-            user.Id,
-            user.Username,
-            user.Email,
-            user.Avatar,
-            user.Status,
-            user.IsOnline,
-            user.IsServerAdmin,
-            user.CreatedAt
-        );
+        return CreateUserProfileResponse(user);
     }
 
     public async Task<UserProfileResponse> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken cancellationToken = default)
@@ -133,8 +124,8 @@ public sealed class AuthService : IAuthService
             user.Username = request.Username;
         }
 
-        if (request.Avatar is not null)
-            user.Avatar = request.Avatar;
+        if (request.DisplayName is not null)
+            user.DisplayName = request.DisplayName;
 
         if (request.Status is not null)
             user.Status = request.Status;
@@ -142,16 +133,20 @@ public sealed class AuthService : IAuthService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        return new UserProfileResponse(
-            user.Id,
-            user.Username,
-            user.Email,
-            user.Avatar,
-            user.Status,
-            user.IsOnline,
-            user.IsServerAdmin,
-            user.CreatedAt
-        );
+        return CreateUserProfileResponse(user);
+    }
+
+    public async Task<UserProfileResponse> UpdateAvatarAsync(Guid userId, string? avatarFileName, CancellationToken cancellationToken = default)
+    {
+        var user = await _db.Users.FindAsync([userId], cancellationToken);
+        if (user is null)
+            throw new InvalidOperationException("User not found.");
+
+        user.AvatarFileName = avatarFileName;
+        user.UpdatedAt = DateTime.UtcNow;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return CreateUserProfileResponse(user);
     }
 
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default)
@@ -265,5 +260,21 @@ public sealed class AuthService : IAuthService
         }
 
         return principal;
+    }
+
+    private static UserProfileResponse CreateUserProfileResponse(User user)
+    {
+        return new UserProfileResponse(
+            user.Id,
+            user.Username,
+            user.DisplayName,
+            user.EffectiveDisplayName,
+            user.Email,
+            user.AvatarFileName,
+            user.Status,
+            user.IsOnline,
+            user.IsServerAdmin,
+            user.CreatedAt
+        );
     }
 }

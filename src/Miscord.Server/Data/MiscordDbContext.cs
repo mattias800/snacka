@@ -32,6 +32,11 @@ public sealed class MiscordDbContext : DbContext
         modelBuilder.Entity<User>()
             .HasIndex(u => u.Username)
             .IsUnique();
+        modelBuilder.Entity<User>()
+            .Property(u => u.DisplayName)
+            .HasMaxLength(32);
+        modelBuilder.Entity<User>()
+            .Ignore(u => u.EffectiveDisplayName);  // Computed property, not stored
 
         // Community configuration
         modelBuilder.Entity<Community>()
@@ -100,6 +105,9 @@ public sealed class MiscordDbContext : DbContext
         modelBuilder.Entity<UserCommunity>()
             .HasIndex(uc => new { uc.UserId, uc.CommunityId })
             .IsUnique();
+        modelBuilder.Entity<UserCommunity>()
+            .Property(uc => uc.DisplayNameOverride)
+            .HasMaxLength(32);
 
         // VoiceParticipant configuration
         modelBuilder.Entity<VoiceParticipant>()

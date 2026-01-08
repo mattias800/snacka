@@ -18,14 +18,7 @@ public sealed class CommunityMemberService : ICommunityMemberService
             .Where(uc => uc.CommunityId == communityId)
             .ToListAsync(cancellationToken);
 
-        return members.Select(uc => new CommunityMemberResponse(
-            uc.UserId,
-            uc.User?.Username ?? "Unknown",
-            uc.User?.Avatar,
-            uc.User?.IsOnline ?? false,
-            uc.Role,
-            uc.JoinedAt
-        ));
+        return members.Select(uc => CreateMemberResponse(uc));
     }
 
     public async Task<CommunityMemberResponse> GetMemberAsync(Guid communityId, Guid userId, CancellationToken cancellationToken = default)
@@ -35,14 +28,7 @@ public sealed class CommunityMemberService : ICommunityMemberService
             .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CommunityId == communityId, cancellationToken)
             ?? throw new InvalidOperationException("User is not a member of this community.");
 
-        return new CommunityMemberResponse(
-            userCommunity.UserId,
-            userCommunity.User?.Username ?? "Unknown",
-            userCommunity.User?.Avatar,
-            userCommunity.User?.IsOnline ?? false,
-            userCommunity.Role,
-            userCommunity.JoinedAt
-        );
+        return CreateMemberResponse(userCommunity);
     }
 
     public async Task JoinCommunityAsync(Guid communityId, Guid userId, CancellationToken cancellationToken = default)
@@ -114,14 +100,7 @@ public sealed class CommunityMemberService : ICommunityMemberService
         targetMembership.Role = newRole;
         await _db.SaveChangesAsync(cancellationToken);
 
-        return new CommunityMemberResponse(
-            targetMembership.UserId,
-            targetMembership.User?.Username ?? "Unknown",
-            targetMembership.User?.Avatar,
-            targetMembership.User?.IsOnline ?? false,
-            targetMembership.Role,
-            targetMembership.JoinedAt
-        );
+        return CreateMemberResponse(targetMembership);
     }
 
     public async Task TransferOwnershipAsync(Guid communityId, Guid newOwnerId, Guid currentOwnerId, CancellationToken cancellationToken = default)
@@ -157,5 +136,40 @@ public sealed class CommunityMemberService : ICommunityMemberService
         currentOwnerMembership.Role = UserRole.Admin; // Former owner becomes admin
 
         await _db.SaveChangesAsync(cancellationToken);
+    }
+
+    public async Task<CommunityMemberResponse> UpdateNicknameAsync(Guid communityId, Guid userId, string? nickname, CancellationToken cancellationToken = default)
+    {
+        var userCommunity = await _db.UserCommunities
+            .Include(uc => uc.User)
+            .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CommunityId == communityId, cancellationToken)
+            ?? throw new InvalidOperationException("User is not a member of this community.");
+
+        userCommunity.DisplayNameOverride = string.IsNullOrWhiteSpace(nickname) ? null : nickname;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return CreateMemberResponse(userCommunity);
+    }
+
+    private static CommunityMemberResponse CreateMemberResponse(UserCommunity uc)
+    {
+        var user = uc.User;
+        var username = user?.Username ?? "Unknown";
+        var displayName = user?.DisplayName;
+
+        // Compute effective display name: Override > DisplayName > Username
+        var effectiveDisplayName = uc.DisplayNameOverride ?? displayName ?? username;
+
+        return new CommunityMemberResponse(
+            uc.UserId,
+            username,
+            displayName,
+            uc.DisplayNameOverride,
+            effectiveDisplayName,
+            user?.AvatarFileName,
+            user?.IsOnline ?? false,
+            uc.Role,
+            uc.JoinedAt
+        );
     }
 }

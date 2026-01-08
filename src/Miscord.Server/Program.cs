@@ -92,6 +92,7 @@ builder.Services.AddSingleton<ISfuService, SfuService>();
 builder.Services.Configure<FileStorageSettings>(
     builder.Configuration.GetSection(FileStorageSettings.SectionName));
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+builder.Services.AddScoped<IImageProcessingService, ImageProcessingService>();
 
 // Add controllers
 builder.Services.AddControllers();

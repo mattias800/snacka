@@ -267,6 +267,59 @@ public class CommunitiesController : ControllerBase
         }
     }
 
+    [HttpPut("{communityId:guid}/members/me/nickname")]
+    public async Task<ActionResult<CommunityMemberResponse>> UpdateMyNickname(
+        Guid communityId,
+        [FromBody] UpdateNicknameRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var member = await _memberService.UpdateNicknameAsync(communityId, userId.Value, request.Nickname, cancellationToken);
+            await _hubContext.Clients.Group($"community:{communityId}")
+                .SendAsync("MemberNicknameUpdated", member, cancellationToken);
+            return Ok(member);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
+    [HttpPut("{communityId:guid}/members/{memberId:guid}/nickname")]
+    public async Task<ActionResult<CommunityMemberResponse>> UpdateMemberNickname(
+        Guid communityId,
+        Guid memberId,
+        [FromBody] UpdateNicknameRequest request,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        // Check if user is admin/owner to change other member's nickname
+        try
+        {
+            var requestingMember = await _memberService.GetMemberAsync(communityId, userId.Value, cancellationToken);
+            if (requestingMember.Role != Miscord.Shared.Models.UserRole.Owner &&
+                requestingMember.Role != Miscord.Shared.Models.UserRole.Admin)
+            {
+                return Forbid("Only admins and owners can change other members' nicknames.");
+            }
+
+            var member = await _memberService.UpdateNicknameAsync(communityId, memberId, request.Nickname, cancellationToken);
+            await _hubContext.Clients.Group($"community:{communityId}")
+                .SendAsync("MemberNicknameUpdated", member, cancellationToken);
+            return Ok(member);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return BadRequest(new { error = ex.Message });
+        }
+    }
+
     private Guid? GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

@@ -10,6 +10,7 @@ public record CommunityResponse(
     string? Icon,
     Guid OwnerId,
     string OwnerUsername,
+    string OwnerEffectiveDisplayName,  // DisplayName ?? Username
     DateTime CreatedAt,
     int MemberCount
 );
@@ -53,6 +54,7 @@ public record MessageResponse(
     string Content,
     Guid AuthorId,
     string AuthorUsername,
+    string AuthorEffectiveDisplayName,  // DisplayName ?? Username
     string? AuthorAvatar,
     Guid ChannelId,
     DateTime CreatedAt,
@@ -64,6 +66,7 @@ public record MessageResponse(
     bool IsPinned = false,
     DateTime? PinnedAt = null,
     string? PinnedByUsername = null,
+    string? PinnedByEffectiveDisplayName = null,
     List<AttachmentResponse>? Attachments = null
 );
 
@@ -87,7 +90,8 @@ public record ReplyPreview(
     Guid Id,
     string Content,
     Guid AuthorId,
-    string AuthorUsername
+    string AuthorUsername,
+    string AuthorEffectiveDisplayName  // DisplayName ?? Username
 );
 
 public record SendMessageRequest(
@@ -100,6 +104,9 @@ public record UpdateMessageRequest([Required, StringLength(2000, MinimumLength =
 public record CommunityMemberResponse(
     Guid UserId,
     string Username,
+    string? DisplayName,           // User's global display name
+    string? DisplayNameOverride,   // Community-specific nickname
+    string EffectiveDisplayName,   // Override ?? DisplayName ?? Username
     string? Avatar,
     bool IsOnline,
     UserRole Role,
@@ -107,6 +114,8 @@ public record CommunityMemberResponse(
 );
 
 public record UpdateMemberRoleRequest([Required] UserRole Role);
+
+public record UpdateNicknameRequest([StringLength(32)] string? Nickname);
 
 public record TransferOwnershipRequest([Required] Guid NewOwnerId);
 
@@ -118,9 +127,9 @@ public record MessageDeletedEvent(Guid ChannelId, Guid MessageId);
 public record UserOfflineEvent(Guid UserId);
 
 // Typing indicator events
-public record TypingEvent(Guid ChannelId, Guid UserId, string Username);
+public record TypingEvent(Guid ChannelId, Guid UserId, string Username, string EffectiveDisplayName);
 
-public record DMTypingEvent(Guid UserId, string Username);
+public record DMTypingEvent(Guid UserId, string Username, string EffectiveDisplayName);
 
 // Reaction DTOs
 /// <summary>
@@ -136,7 +145,7 @@ public record ReactionSummary(
 /// <summary>
 /// User who reacted with a specific emoji
 /// </summary>
-public record ReactionUser(Guid UserId, string Username);
+public record ReactionUser(Guid UserId, string Username, string EffectiveDisplayName);
 
 /// <summary>
 /// Request to add a reaction to a message
@@ -153,6 +162,7 @@ public record ReactionUpdatedEvent(
     int Count,
     Guid UserId,
     string Username,
+    string EffectiveDisplayName,
     bool Added
 );
 
@@ -165,5 +175,6 @@ public record MessagePinnedEvent(
     bool IsPinned,
     DateTime? PinnedAt,
     Guid? PinnedByUserId,
-    string? PinnedByUsername
+    string? PinnedByUsername,
+    string? PinnedByEffectiveDisplayName
 );

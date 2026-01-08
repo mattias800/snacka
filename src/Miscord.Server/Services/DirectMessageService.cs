@@ -105,10 +105,14 @@ public sealed class DirectMessageService : IDirectMessageService
                 var otherUser = lastMessage.SenderId == userId ? lastMessage.Recipient : lastMessage.Sender;
                 var unreadCount = g.Count(m => m.RecipientId == userId && !m.IsRead);
 
+                var otherUsername = otherUser?.Username ?? "Unknown";
+                var otherEffectiveDisplayName = otherUser?.EffectiveDisplayName ?? otherUsername;
+
                 return new ConversationSummary(
                     otherUserId,
-                    otherUser?.Username ?? "Unknown",
-                    otherUser?.Avatar,
+                    otherUsername,
+                    otherEffectiveDisplayName,
+                    otherUser?.AvatarFileName,
                     otherUser?.IsOnline ?? false,
                     ToResponse(lastMessage),
                     unreadCount
@@ -134,14 +138,24 @@ public sealed class DirectMessageService : IDirectMessageService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private static DirectMessageResponse ToResponse(DirectMessage dm) => new(
-        dm.Id,
-        dm.Content,
-        dm.SenderId,
-        dm.Sender?.Username ?? "Unknown",
-        dm.RecipientId,
-        dm.Recipient?.Username ?? "Unknown",
-        dm.CreatedAt,
-        dm.IsRead
-    );
+    private static DirectMessageResponse ToResponse(DirectMessage dm)
+    {
+        var senderUsername = dm.Sender?.Username ?? "Unknown";
+        var senderEffectiveDisplayName = dm.Sender?.EffectiveDisplayName ?? senderUsername;
+        var recipientUsername = dm.Recipient?.Username ?? "Unknown";
+        var recipientEffectiveDisplayName = dm.Recipient?.EffectiveDisplayName ?? recipientUsername;
+
+        return new DirectMessageResponse(
+            dm.Id,
+            dm.Content,
+            dm.SenderId,
+            senderUsername,
+            senderEffectiveDisplayName,
+            dm.RecipientId,
+            recipientUsername,
+            recipientEffectiveDisplayName,
+            dm.CreatedAt,
+            dm.IsRead
+        );
+    }
 }

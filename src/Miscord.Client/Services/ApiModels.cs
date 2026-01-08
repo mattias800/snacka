@@ -21,6 +21,8 @@ public record AuthResponse(
 public record UserProfileResponse(
     Guid Id,
     string Username,
+    string? DisplayName,
+    string EffectiveDisplayName,
     string Email,
     string? Avatar,
     string? Status,
@@ -28,6 +30,10 @@ public record UserProfileResponse(
     bool IsServerAdmin,
     DateTime CreatedAt
 );
+
+public record UpdateProfileRequest(string? Username, string? DisplayName, string? Status);
+
+public record AvatarUploadResponse(string? Avatar, bool Success);
 
 // Admin Models
 public record CreateInviteRequest(int MaxUses = 0, DateTime? ExpiresAt = null);
@@ -63,6 +69,7 @@ public record CommunityResponse(
     string? Icon,
     Guid OwnerId,
     string OwnerUsername,
+    string OwnerEffectiveDisplayName,
     DateTime CreatedAt,
     int MemberCount
 );
@@ -90,6 +97,7 @@ public record MessageResponse(
     string Content,
     Guid AuthorId,
     string AuthorUsername,
+    string AuthorEffectiveDisplayName,
     string? AuthorAvatar,
     Guid ChannelId,
     DateTime CreatedAt,
@@ -101,6 +109,7 @@ public record MessageResponse(
     bool IsPinned = false,
     DateTime? PinnedAt = null,
     string? PinnedByUsername = null,
+    string? PinnedByEffectiveDisplayName = null,
     List<AttachmentResponse>? Attachments = null
 );
 
@@ -140,7 +149,8 @@ public record ReplyPreview(
     Guid Id,
     string Content,
     Guid AuthorId,
-    string AuthorUsername
+    string AuthorUsername,
+    string AuthorEffectiveDisplayName
 );
 
 public record SendMessageRequest(string Content, Guid? ReplyToId = null);
@@ -160,7 +170,7 @@ public record ReactionSummary(
 /// <summary>
 /// User who reacted with a specific emoji
 /// </summary>
-public record ReactionUser(Guid UserId, string Username);
+public record ReactionUser(Guid UserId, string Username, string EffectiveDisplayName);
 
 /// <summary>
 /// Request to add a reaction to a message
@@ -177,6 +187,7 @@ public record ReactionUpdatedEvent(
     int Count,
     Guid UserId,
     string Username,
+    string EffectiveDisplayName,
     bool Added
 );
 
@@ -189,13 +200,17 @@ public record MessagePinnedEvent(
     bool IsPinned,
     DateTime? PinnedAt,
     Guid? PinnedByUserId,
-    string? PinnedByUsername
+    string? PinnedByUsername,
+    string? PinnedByEffectiveDisplayName
 );
 
 // Member Models
 public record CommunityMemberResponse(
     Guid UserId,
     string Username,
+    string? DisplayName,
+    string? DisplayNameOverride,
+    string EffectiveDisplayName,
     string? Avatar,
     bool IsOnline,
     UserRole Role,
@@ -203,6 +218,7 @@ public record CommunityMemberResponse(
 );
 
 public record UpdateMemberRoleRequest(UserRole Role);
+public record UpdateNicknameRequest(string? Nickname);
 public record TransferOwnershipRequest(Guid NewOwnerId);
 
 // Direct Message Models
@@ -211,8 +227,10 @@ public record DirectMessageResponse(
     string Content,
     Guid SenderId,
     string SenderUsername,
+    string SenderEffectiveDisplayName,
     Guid RecipientId,
     string RecipientUsername,
+    string RecipientEffectiveDisplayName,
     DateTime CreatedAt,
     bool IsRead
 );
@@ -222,6 +240,7 @@ public record SendDirectMessageRequest(string Content);
 public record ConversationSummary(
     Guid UserId,
     string Username,
+    string EffectiveDisplayName,
     string? Avatar,
     bool IsOnline,
     DirectMessageResponse? LastMessage,

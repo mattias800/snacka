@@ -49,6 +49,7 @@ public sealed class ReactionService : IReactionService
             count,
             userId,
             user.Username,
+            user.EffectiveDisplayName,
             Added: true
         );
     }
@@ -82,6 +83,7 @@ public sealed class ReactionService : IReactionService
             count,
             userId,
             user.Username,
+            user.EffectiveDisplayName,
             Added: false
         );
     }
@@ -100,7 +102,11 @@ public sealed class ReactionService : IReactionService
                 g.Key,
                 g.Count(),
                 g.Any(r => r.UserId == currentUserId),
-                g.Select(r => new ReactionUser(r.UserId, r.User?.Username ?? "Unknown")).ToList()
+                g.Select(r => new ReactionUser(
+                    r.UserId,
+                    r.User?.Username ?? "Unknown",
+                    r.User?.EffectiveDisplayName ?? r.User?.Username ?? "Unknown"
+                )).ToList()
             ))
             .ToList();
 

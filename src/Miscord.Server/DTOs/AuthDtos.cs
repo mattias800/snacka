@@ -29,17 +29,24 @@ public record RefreshTokenRequest([Required] string RefreshToken);
 public record UserProfileResponse(
     Guid Id,
     string Username,
+    string? DisplayName,  // Custom display name, UTF-8 with emojis
+    string EffectiveDisplayName,  // DisplayName ?? Username
     string Email,
-    string? Avatar,
+    string? Avatar,  // AvatarFileName from model
     string? Status,
     bool IsOnline,
     bool IsServerAdmin,
     DateTime CreatedAt
 );
 
+public record AvatarUploadResponse(
+    string? Avatar,
+    bool Success
+);
+
 public record UpdateProfileRequest(
     [StringLength(50, MinimumLength = 3)] string? Username,
-    string? Avatar,
+    [StringLength(32)] string? DisplayName,  // Custom display name, UTF-8 with emojis
     string? Status
 );
 

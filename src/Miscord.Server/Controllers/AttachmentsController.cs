@@ -134,7 +134,8 @@ public class AttachmentsController : ControllerBase
             message.Content,
             message.AuthorId,
             author.Username,
-            author.Avatar,
+            author.EffectiveDisplayName,
+            author.AvatarFileName,
             message.ChannelId,
             message.CreatedAt,
             message.UpdatedAt,
@@ -145,6 +146,7 @@ public class AttachmentsController : ControllerBase
             message.IsPinned,
             message.PinnedAt,
             null, // PinnedByUsername
+            null, // PinnedByEffectiveDisplayName
             attachments.Select(a => new AttachmentResponse(
                 a.Id,
                 a.FileName,

@@ -377,7 +377,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                         var existing = reactions[reactionIndex];
                         var users = existing.Users.ToList();
                         if (!users.Any(u => u.UserId == e.UserId))
-                            users.Add(new ReactionUser(e.UserId, e.Username));
+                            users.Add(new ReactionUser(e.UserId, e.Username, e.EffectiveDisplayName));
                         reactions[reactionIndex] = existing with
                         {
                             Count = e.Count,
@@ -392,7 +392,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                             e.Emoji,
                             e.Count,
                             e.UserId == _auth.UserId,
-                            new List<ReactionUser> { new(e.UserId, e.Username) }
+                            new List<ReactionUser> { new(e.UserId, e.Username, e.EffectiveDisplayName) }
                         ));
                     }
                 }

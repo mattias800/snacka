@@ -215,7 +215,7 @@ public class MiscordHub : Hub
 
         // Broadcast typing event to others in the channel
         await Clients.OthersInGroup($"channel:{channelId}")
-            .SendAsync("UserTyping", new TypingEvent(channelId, userId.Value, user.Username));
+            .SendAsync("UserTyping", new TypingEvent(channelId, userId.Value, user.Username, user.EffectiveDisplayName));
     }
 
     /// <summary>
@@ -239,7 +239,7 @@ public class MiscordHub : Hub
         if (targetConnectionId is not null)
         {
             await Clients.Client(targetConnectionId)
-                .SendAsync("DMUserTyping", new DMTypingEvent(userId.Value, user.Username));
+                .SendAsync("DMUserTyping", new DMTypingEvent(userId.Value, user.Username, user.EffectiveDisplayName));
         }
     }
 

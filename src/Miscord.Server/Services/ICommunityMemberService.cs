@@ -12,4 +12,5 @@ public interface ICommunityMemberService
     Task<bool> IsMemberAsync(Guid communityId, Guid userId, CancellationToken cancellationToken = default);
     Task<CommunityMemberResponse> UpdateMemberRoleAsync(Guid communityId, Guid targetUserId, Guid requestingUserId, UserRole newRole, CancellationToken cancellationToken = default);
     Task TransferOwnershipAsync(Guid communityId, Guid newOwnerId, Guid currentOwnerId, CancellationToken cancellationToken = default);
+    Task<CommunityMemberResponse> UpdateNicknameAsync(Guid communityId, Guid userId, string? nickname, CancellationToken cancellationToken = default);
 }

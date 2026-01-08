@@ -7,8 +7,10 @@ public record DirectMessageResponse(
     string Content,
     Guid SenderId,
     string SenderUsername,
+    string SenderEffectiveDisplayName,
     Guid RecipientId,
     string RecipientUsername,
+    string RecipientEffectiveDisplayName,
     DateTime CreatedAt,
     bool IsRead
 );
@@ -18,6 +20,7 @@ public record SendDirectMessageRequest([Required, StringLength(2000, MinimumLeng
 public record ConversationSummary(
     Guid UserId,
     string Username,
+    string EffectiveDisplayName,
     string? Avatar,
     bool IsOnline,
     DirectMessageResponse? LastMessage,

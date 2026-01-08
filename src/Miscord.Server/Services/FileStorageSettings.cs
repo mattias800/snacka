@@ -39,4 +39,25 @@ public class FileStorageSettings
     /// Maximum number of files per message.
     /// </summary>
     public int MaxFilesPerMessage { get; set; } = 10;
+
+    /// <summary>
+    /// Subdirectory for avatar images within BasePath.
+    /// </summary>
+    public string AvatarSubPath { get; set; } = "avatars";
+
+    /// <summary>
+    /// Size in pixels for avatar images (square, e.g., 256 = 256x256).
+    /// </summary>
+    public int AvatarSize { get; set; } = 256;
+
+    /// <summary>
+    /// Maximum file size for avatar uploads in bytes (default: 5MB).
+    /// </summary>
+    public long MaxAvatarSizeBytes { get; set; } = 5 * 1024 * 1024;
+
+    /// <summary>
+    /// Allowed extensions for avatar uploads.
+    /// </summary>
+    public string[] AllowedAvatarExtensions { get; set; } =
+        [".jpg", ".jpeg", ".png", ".webp"];
 }

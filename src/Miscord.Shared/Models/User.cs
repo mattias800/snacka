@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Miscord.Shared.Models;
 
 public class User
@@ -6,7 +8,23 @@ public class User
     public required string Username { get; set; }
     public required string Email { get; set; }
     public required string PasswordHash { get; set; }
-    public string? Avatar { get; set; }
+
+    /// <summary>
+    /// Custom display name shown instead of username. Supports UTF-8 including emojis.
+    /// </summary>
+    [MaxLength(32)]
+    public string? DisplayName { get; set; }
+
+    /// <summary>
+    /// The effective display name to show (DisplayName if set, otherwise Username).
+    /// </summary>
+    public string EffectiveDisplayName => DisplayName ?? Username;
+
+    /// <summary>
+    /// Stored filename (GUID-based) for the user's avatar image.
+    /// </summary>
+    public string? AvatarFileName { get; set; }
+
     public string? Status { get; set; }
     public bool IsOnline { get; set; }
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;

@@ -135,7 +135,8 @@ public sealed class MessageService : IMessageService
             true,
             message.PinnedAt,
             userId,
-            user.Username
+            user.Username,
+            user.EffectiveDisplayName
         );
     }
 
@@ -176,7 +177,8 @@ public sealed class MessageService : IMessageService
             false,
             null,
             userId,
-            user.Username
+            user.Username,
+            user.EffectiveDisplayName
         );
     }
 
@@ -197,45 +199,62 @@ public sealed class MessageService : IMessageService
         return messages.Select(m => ToMessageResponse(m, currentUserId));
     }
 
-    private static MessageResponse ToMessageResponse(Message m, Guid? currentUserId = null) => new(
-        m.Id,
-        m.Content,
-        m.AuthorId,
-        m.Author?.Username ?? "Unknown",
-        m.Author?.Avatar,
-        m.ChannelId,
-        m.CreatedAt,
-        m.UpdatedAt,
-        m.IsEdited,
-        m.ReplyToId,
-        m.ReplyTo is not null ? new ReplyPreview(
-            m.ReplyTo.Id,
-            m.ReplyTo.Content.Length > 100 ? m.ReplyTo.Content[..100] + "..." : m.ReplyTo.Content,
-            m.ReplyTo.AuthorId,
-            m.ReplyTo.Author?.Username ?? "Unknown"
-        ) : null,
-        m.Reactions.Count > 0 ? m.Reactions
-            .GroupBy(r => r.Emoji)
-            .Select(g => new ReactionSummary(
-                g.Key,
-                g.Count(),
-                currentUserId.HasValue && g.Any(r => r.UserId == currentUserId.Value),
-                g.Select(r => new ReactionUser(r.UserId, r.User?.Username ?? "Unknown")).ToList()
-            ))
-            .ToList() : null,
-        m.IsPinned,
-        m.PinnedAt,
-        m.PinnedBy?.Username,
-        m.Attachments.Count > 0 ? m.Attachments
-            .Select(a => new AttachmentResponse(
-                a.Id,
-                a.FileName,
-                a.ContentType,
-                a.FileSize,
-                a.IsImage,
-                a.IsAudio,
-                $"/api/attachments/{a.StoredFileName}"
-            ))
-            .ToList() : null
-    );
+    private static MessageResponse ToMessageResponse(Message m, Guid? currentUserId = null)
+    {
+        var authorUsername = m.Author?.Username ?? "Unknown";
+        var authorEffectiveDisplayName = m.Author?.EffectiveDisplayName ?? authorUsername;
+        var replyAuthorUsername = m.ReplyTo?.Author?.Username ?? "Unknown";
+        var replyAuthorEffectiveDisplayName = m.ReplyTo?.Author?.EffectiveDisplayName ?? replyAuthorUsername;
+        var pinnedByUsername = m.PinnedBy?.Username;
+        var pinnedByEffectiveDisplayName = m.PinnedBy?.EffectiveDisplayName ?? pinnedByUsername;
+
+        return new MessageResponse(
+            m.Id,
+            m.Content,
+            m.AuthorId,
+            authorUsername,
+            authorEffectiveDisplayName,
+            m.Author?.AvatarFileName,
+            m.ChannelId,
+            m.CreatedAt,
+            m.UpdatedAt,
+            m.IsEdited,
+            m.ReplyToId,
+            m.ReplyTo is not null ? new ReplyPreview(
+                m.ReplyTo.Id,
+                m.ReplyTo.Content.Length > 100 ? m.ReplyTo.Content[..100] + "..." : m.ReplyTo.Content,
+                m.ReplyTo.AuthorId,
+                replyAuthorUsername,
+                replyAuthorEffectiveDisplayName
+            ) : null,
+            m.Reactions.Count > 0 ? m.Reactions
+                .GroupBy(r => r.Emoji)
+                .Select(g => new ReactionSummary(
+                    g.Key,
+                    g.Count(),
+                    currentUserId.HasValue && g.Any(r => r.UserId == currentUserId.Value),
+                    g.Select(r => new ReactionUser(
+                        r.UserId,
+                        r.User?.Username ?? "Unknown",
+                        r.User?.EffectiveDisplayName ?? r.User?.Username ?? "Unknown"
+                    )).ToList()
+                ))
+                .ToList() : null,
+            m.IsPinned,
+            m.PinnedAt,
+            pinnedByUsername,
+            pinnedByEffectiveDisplayName,
+            m.Attachments.Count > 0 ? m.Attachments
+                .Select(a => new AttachmentResponse(
+                    a.Id,
+                    a.FileName,
+                    a.ContentType,
+                    a.FileSize,
+                    a.IsImage,
+                    a.IsAudio,
+                    $"/api/attachments/{a.StoredFileName}"
+                ))
+                .ToList() : null
+        );
+    }
 }

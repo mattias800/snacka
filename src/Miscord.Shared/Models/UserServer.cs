@@ -1,3 +1,5 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace Miscord.Shared.Models;
 
 public class UserCommunity
@@ -9,6 +11,13 @@ public class UserCommunity
     public Community? Community { get; set; }
     public required UserRole Role { get; set; } = UserRole.Member;
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
+
+    /// <summary>
+    /// Per-community display name override (nickname). Supports UTF-8 including emojis.
+    /// If set, this is shown instead of the user's default display name in this community.
+    /// </summary>
+    [MaxLength(32)]
+    public string? DisplayNameOverride { get; set; }
 }
 
 public enum UserRole

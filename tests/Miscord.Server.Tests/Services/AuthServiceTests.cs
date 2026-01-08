@@ -211,15 +211,18 @@ public class AuthServiceTests
         using var db = TestDbContextFactory.Create();
         var (service, inviteCode) = await CreateServiceWithInviteAsync(db);
         var authResult = await service.RegisterAsync(new RegisterRequest("testuser", "test@example.com", "Password123!", inviteCode));
-        var updateRequest = new UpdateProfileRequest("newusername", "avatar.png", "Hello!");
+        var updateRequest = new UpdateProfileRequest("newusername", "Cool Display Name 🎮", "Hello!");
 
         // Act
         var profile = await service.UpdateProfileAsync(authResult.UserId, updateRequest);
 
         // Assert
         Assert.AreEqual("newusername", profile.Username);
-        Assert.AreEqual("avatar.png", profile.Avatar);
         Assert.AreEqual("Hello!", profile.Status);
+
+        // Verify display name was saved by checking the database
+        var user = await db.Users.FindAsync(authResult.UserId);
+        Assert.AreEqual("Cool Display Name 🎮", user?.DisplayName);
     }
 
     [TestMethod]
