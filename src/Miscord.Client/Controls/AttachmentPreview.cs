@@ -23,6 +23,8 @@ public class AttachmentPreview : Border
     private static readonly IBrush PlayButtonBrush = new SolidColorBrush(Color.Parse("#3ba55c"));
     private static readonly IBrush ProgressBackgroundBrush = new SolidColorBrush(Color.Parse("#40444b"));
     private static readonly IBrush ProgressFillBrush = new SolidColorBrush(Color.Parse("#5865f2"));
+    private static readonly IBrush ProgressHoverBrush = new SolidColorBrush(Color.Parse("#7289da"));
+    private static readonly IBrush VolumeSliderBrush = new SolidColorBrush(Color.Parse("#5865f2"));
 
     // Audio playback state
     private static LibVLC? _libVLC;
@@ -30,9 +32,14 @@ public class AttachmentPreview : Border
     private Media? _currentMedia;
     private TextBlock? _playButtonText;
     private Border? _progressBar;
-    private TextBlock? _timeText;
+    private Border? _progressHoverIndicator;
+    private Grid? _progressContainer;
+    private TextBlock? _currentTimeText;
+    private TextBlock? _totalTimeText;
+    private Slider? _volumeSlider;
     private DispatcherTimer? _progressTimer;
     private bool _isPlaying;
+    private long _totalDuration;
 
     // Cache for loaded images
     private static readonly Dictionary<string, Bitmap> ImageCache = new();
@@ -234,7 +241,7 @@ public class AttachmentPreview : Border
         // Player controls row
         var controlsRow = new Grid
         {
-            ColumnDefinitions = new ColumnDefinitions("Auto,*,Auto,Auto")
+            ColumnDefinitions = new ColumnDefinitions("Auto,Auto,*,Auto,Auto,Auto")
         };
 
         // Play/Pause button
@@ -253,11 +260,26 @@ public class AttachmentPreview : Border
         Grid.SetColumn(playBtn, 0);
         controlsRow.Children.Add(playBtn);
 
-        // Progress bar container
-        var progressContainer = new Grid
+        // Current time display (left of progress bar)
+        _currentTimeText = new TextBlock
         {
-            Margin = new Thickness(8, 0),
-            VerticalAlignment = VerticalAlignment.Center
+            Text = "0:00",
+            Foreground = SubtextBrush,
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(8, 0, 4, 0),
+            MinWidth = 32
+        };
+        Grid.SetColumn(_currentTimeText, 1);
+        controlsRow.Children.Add(_currentTimeText);
+
+        // Progress bar container (clickable for seek)
+        _progressContainer = new Grid
+        {
+            Margin = new Thickness(4, 0),
+            VerticalAlignment = VerticalAlignment.Center,
+            Cursor = new Cursor(StandardCursorType.Hand),
+            MinHeight = 16 // Larger hit area
         };
 
         // Progress background
@@ -265,9 +287,10 @@ public class AttachmentPreview : Border
         {
             Background = ProgressBackgroundBrush,
             Height = 6,
-            CornerRadius = new CornerRadius(3)
+            CornerRadius = new CornerRadius(3),
+            VerticalAlignment = VerticalAlignment.Center
         };
-        progressContainer.Children.Add(progressBg);
+        _progressContainer.Children.Add(progressBg);
 
         // Progress fill
         _progressBar = new Border
@@ -276,24 +299,80 @@ public class AttachmentPreview : Border
             Height = 6,
             CornerRadius = new CornerRadius(3),
             HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
             Width = 0
         };
-        progressContainer.Children.Add(_progressBar);
+        _progressContainer.Children.Add(_progressBar);
 
-        Grid.SetColumn(progressContainer, 1);
-        controlsRow.Children.Add(progressContainer);
+        // Hover indicator (hidden by default)
+        _progressHoverIndicator = new Border
+        {
+            Background = ProgressHoverBrush,
+            Width = 3,
+            Height = 12,
+            CornerRadius = new CornerRadius(1.5),
+            HorizontalAlignment = HorizontalAlignment.Left,
+            VerticalAlignment = VerticalAlignment.Center,
+            IsVisible = false,
+            Opacity = 0.8
+        };
+        _progressContainer.Children.Add(_progressHoverIndicator);
 
-        // Time display
-        _timeText = new TextBlock
+        // Add event handlers for seek
+        _progressContainer.PointerPressed += OnProgressBarClick;
+        _progressContainer.PointerMoved += OnProgressBarPointerMoved;
+        _progressContainer.PointerEntered += OnProgressBarPointerEntered;
+        _progressContainer.PointerExited += OnProgressBarPointerExited;
+
+        Grid.SetColumn(_progressContainer, 2);
+        controlsRow.Children.Add(_progressContainer);
+
+        // Total time display (right of progress bar)
+        _totalTimeText = new TextBlock
         {
             Text = "0:00",
             Foreground = SubtextBrush,
+            FontSize = 11,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(4, 0, 8, 0),
+            MinWidth = 32
+        };
+        Grid.SetColumn(_totalTimeText, 3);
+        controlsRow.Children.Add(_totalTimeText);
+
+        // Volume control
+        var volumePanel = new StackPanel
+        {
+            Orientation = Orientation.Horizontal,
+            VerticalAlignment = VerticalAlignment.Center,
+            Margin = new Thickness(0, 0, 8, 0)
+        };
+
+        // Volume icon
+        var volumeIcon = new TextBlock
+        {
+            Text = "🔊",
             FontSize = 12,
             VerticalAlignment = VerticalAlignment.Center,
-            Margin = new Thickness(8, 0)
+            Margin = new Thickness(0, 0, 4, 0)
         };
-        Grid.SetColumn(_timeText, 2);
-        controlsRow.Children.Add(_timeText);
+        volumePanel.Children.Add(volumeIcon);
+
+        // Volume slider
+        _volumeSlider = new Slider
+        {
+            Minimum = 0,
+            Maximum = 100,
+            Value = 100,
+            Width = 60,
+            VerticalAlignment = VerticalAlignment.Center
+        };
+        _volumeSlider.ValueChanged += OnVolumeChanged;
+        ToolTip.SetTip(_volumeSlider, "Volume");
+        volumePanel.Children.Add(_volumeSlider);
+
+        Grid.SetColumn(volumePanel, 4);
+        controlsRow.Children.Add(volumePanel);
 
         // Download button
         var downloadBtn = new Button
@@ -308,13 +387,64 @@ public class AttachmentPreview : Border
         };
         ToolTip.SetTip(downloadBtn, "Download");
         downloadBtn.Click += OnDownloadClick;
-        Grid.SetColumn(downloadBtn, 3);
+        Grid.SetColumn(downloadBtn, 5);
         controlsRow.Children.Add(downloadBtn);
 
         mainPanel.Children.Add(controlsRow);
 
         Padding = new Thickness(12);
         Child = mainPanel;
+    }
+
+    private void OnProgressBarClick(object? sender, PointerPressedEventArgs e)
+    {
+        if (_mediaPlayer == null || _progressContainer == null || _totalDuration <= 0) return;
+
+        var position = e.GetPosition(_progressContainer);
+        var containerWidth = _progressContainer.Bounds.Width;
+        if (containerWidth <= 0) return;
+
+        var seekRatio = Math.Clamp(position.X / containerWidth, 0, 1);
+        var seekTime = (long)(seekRatio * _totalDuration);
+
+        _mediaPlayer.Time = seekTime;
+    }
+
+    private void OnProgressBarPointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_progressHoverIndicator == null || _progressContainer == null) return;
+
+        var position = e.GetPosition(_progressContainer);
+        var containerWidth = _progressContainer.Bounds.Width;
+        if (containerWidth <= 0) return;
+
+        // Position the hover indicator
+        var clampedX = Math.Clamp(position.X, 0, containerWidth);
+        _progressHoverIndicator.Margin = new Thickness(clampedX - 1.5, 0, 0, 0);
+    }
+
+    private void OnProgressBarPointerEntered(object? sender, PointerEventArgs e)
+    {
+        if (_progressHoverIndicator != null)
+        {
+            _progressHoverIndicator.IsVisible = true;
+        }
+    }
+
+    private void OnProgressBarPointerExited(object? sender, PointerEventArgs e)
+    {
+        if (_progressHoverIndicator != null)
+        {
+            _progressHoverIndicator.IsVisible = false;
+        }
+    }
+
+    private void OnVolumeChanged(object? sender, Avalonia.Controls.Primitives.RangeBaseValueChangedEventArgs e)
+    {
+        if (_mediaPlayer != null)
+        {
+            _mediaPlayer.Volume = (int)e.NewValue;
+        }
     }
 
     private void OnPlayPauseClick(object? sender, Avalonia.Interactivity.RoutedEventArgs e)
@@ -449,8 +579,8 @@ public class AttachmentPreview : Border
                 _playButtonText.Text = "▶";
             if (_progressBar != null)
                 _progressBar.Width = 0;
-            if (_timeText != null)
-                _timeText.Text = "0:00";
+            if (_currentTimeText != null)
+                _currentTimeText.Text = "0:00";
 
             StopProgressTimer();
 
@@ -463,17 +593,25 @@ public class AttachmentPreview : Border
     {
         Dispatcher.UIThread.Post(() =>
         {
-            if (_timeText != null && _mediaPlayer != null)
+            if (_currentTimeText != null)
             {
                 var time = TimeSpan.FromMilliseconds(e.Time);
-                _timeText.Text = $"{(int)time.TotalMinutes}:{time.Seconds:D2}";
+                _currentTimeText.Text = $"{(int)time.TotalMinutes}:{time.Seconds:D2}";
             }
         });
     }
 
     private void OnLengthChanged(object? sender, MediaPlayerLengthChangedEventArgs e)
     {
-        // Length is now known, can update UI if needed
+        _totalDuration = e.Length;
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_totalTimeText != null && e.Length > 0)
+            {
+                var totalTime = TimeSpan.FromMilliseconds(e.Length);
+                _totalTimeText.Text = $"{(int)totalTime.TotalMinutes}:{totalTime.Seconds:D2}";
+            }
+        });
     }
 
     private void StartProgressTimer()
@@ -494,14 +632,17 @@ public class AttachmentPreview : Border
 
     private void UpdateProgress(object? sender, EventArgs e)
     {
-        if (_mediaPlayer == null || _progressBar == null) return;
+        if (_mediaPlayer == null || _progressBar == null || _progressContainer == null) return;
 
         var length = _mediaPlayer.Length;
         if (length > 0)
         {
             var progress = (double)_mediaPlayer.Time / length;
-            var containerWidth = _progressBar.Parent is Grid grid ? grid.Bounds.Width - 16 : 200;
-            _progressBar.Width = Math.Max(0, progress * containerWidth);
+            var containerWidth = _progressContainer.Bounds.Width;
+            if (containerWidth > 0)
+            {
+                _progressBar.Width = Math.Max(0, progress * containerWidth);
+            }
         }
     }
 
