@@ -192,4 +192,152 @@ public class CommunitiesApiTests
         Assert.AreEqual(1, members.Count);
         Assert.AreEqual("testuser", members[0].Username);
     }
+
+    [TestMethod]
+    public async Task UpdateMyNickname_WithValidData_UpdatesNickname()
+    {
+        // Arrange
+        using var test = new IntegrationTestBase();
+        var auth = await test.RegisterUserAsync("testuser", "test@example.com", "Password123!");
+        test.SetAuthToken(auth.AccessToken);
+        var createResponse = await test.Client.PostAsJsonAsync("/api/communities",
+            new CreateCommunityRequest("Test Community", null));
+        var community = await createResponse.Content.ReadFromJsonAsync<CommunityResponse>();
+
+        // Act
+        var response = await test.Client.PutAsJsonAsync(
+            $"/api/communities/{community!.Id}/members/me/nickname",
+            new UpdateNicknameRequest("My Nickname 🎮"));
+
+        // Assert
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var member = await response.Content.ReadFromJsonAsync<CommunityMemberResponse>();
+        Assert.IsNotNull(member);
+        Assert.AreEqual("My Nickname 🎮", member.DisplayNameOverride);
+        Assert.AreEqual("My Nickname 🎮", member.EffectiveDisplayName);
+    }
+
+    [TestMethod]
+    public async Task UpdateMyNickname_WithNull_ClearsNickname()
+    {
+        // Arrange
+        using var test = new IntegrationTestBase();
+        var auth = await test.RegisterUserAsync("testuser", "test@example.com", "Password123!");
+        test.SetAuthToken(auth.AccessToken);
+        var createResponse = await test.Client.PostAsJsonAsync("/api/communities",
+            new CreateCommunityRequest("Test Community", null));
+        var community = await createResponse.Content.ReadFromJsonAsync<CommunityResponse>();
+
+        // First set a nickname
+        await test.Client.PutAsJsonAsync(
+            $"/api/communities/{community!.Id}/members/me/nickname",
+            new UpdateNicknameRequest("Temporary Nick"));
+
+        // Act - Clear nickname by setting it to null
+        var response = await test.Client.PutAsJsonAsync(
+            $"/api/communities/{community.Id}/members/me/nickname",
+            new UpdateNicknameRequest(null));
+
+        // Assert
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var member = await response.Content.ReadFromJsonAsync<CommunityMemberResponse>();
+        Assert.IsNotNull(member);
+        Assert.IsNull(member.DisplayNameOverride);
+        // EffectiveDisplayName should fall back to user's DisplayName or Username
+        Assert.AreEqual("testuser", member.EffectiveDisplayName);
+    }
+
+    [TestMethod]
+    public async Task UpdateMemberNickname_ByAdmin_UpdatesNickname()
+    {
+        // Arrange
+        using var test = new IntegrationTestBase();
+        var ownerAuth = await test.RegisterUserAsync("owner", "owner@example.com", "Password123!");
+        test.SetAuthToken(ownerAuth.AccessToken);
+        var createResponse = await test.Client.PostAsJsonAsync("/api/communities",
+            new CreateCommunityRequest("Test Community", null));
+        var community = await createResponse.Content.ReadFromJsonAsync<CommunityResponse>();
+
+        // Register second user (RegisterUserAsync handles invite internally)
+        var memberAuth = await test.RegisterUserAsync("member", "member@example.com", "Password123!");
+
+        // Add member to community
+        test.SetAuthToken(memberAuth.AccessToken);
+        await test.Client.PostAsync($"/api/communities/{community!.Id}/join", null);
+
+        // Switch to owner to update member's nickname
+        test.SetAuthToken(ownerAuth.AccessToken);
+
+        // Act
+        var response = await test.Client.PutAsJsonAsync(
+            $"/api/communities/{community.Id}/members/{memberAuth.UserId}/nickname",
+            new UpdateNicknameRequest("Admin-Set Nickname"));
+
+        // Assert
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var member = await response.Content.ReadFromJsonAsync<CommunityMemberResponse>();
+        Assert.IsNotNull(member);
+        Assert.AreEqual("Admin-Set Nickname", member.DisplayNameOverride);
+    }
+
+    [TestMethod]
+    public async Task UpdateMemberNickname_ByNonAdmin_ReturnsForbidden()
+    {
+        // Arrange
+        using var test = new IntegrationTestBase();
+        var ownerAuth = await test.RegisterUserAsync("owner", "owner@example.com", "Password123!");
+        test.SetAuthToken(ownerAuth.AccessToken);
+        var createResponse = await test.Client.PostAsJsonAsync("/api/communities",
+            new CreateCommunityRequest("Test Community", null));
+        var community = await createResponse.Content.ReadFromJsonAsync<CommunityResponse>();
+
+        // Register second user
+        var memberAuth = await test.RegisterUserAsync("member", "member@example.com", "Password123!");
+
+        // Add member to community
+        test.SetAuthToken(memberAuth.AccessToken);
+        await test.Client.PostAsync($"/api/communities/{community!.Id}/join", null);
+
+        // Try to update owner's nickname as regular member
+        var response = await test.Client.PutAsJsonAsync(
+            $"/api/communities/{community.Id}/members/{ownerAuth.UserId}/nickname",
+            new UpdateNicknameRequest("Hacker Nickname"));
+
+        // Assert - should be forbidden
+        Assert.AreEqual(HttpStatusCode.Forbidden, response.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task GetMembers_ReturnsEffectiveDisplayName()
+    {
+        // Arrange
+        using var test = new IntegrationTestBase();
+        var auth = await test.RegisterUserAsync("testuser", "test@example.com", "Password123!");
+        test.SetAuthToken(auth.AccessToken);
+
+        // Set display name
+        await test.Client.PutAsJsonAsync("/api/users/me",
+            new UpdateProfileRequest(null, "Global Display Name", null));
+
+        var createResponse = await test.Client.PostAsJsonAsync("/api/communities",
+            new CreateCommunityRequest("Test Community", null));
+        var community = await createResponse.Content.ReadFromJsonAsync<CommunityResponse>();
+
+        // Set nickname that should override display name
+        await test.Client.PutAsJsonAsync(
+            $"/api/communities/{community!.Id}/members/me/nickname",
+            new UpdateNicknameRequest("Community Nickname"));
+
+        // Act
+        var response = await test.Client.GetAsync($"/api/communities/{community.Id}/members");
+
+        // Assert
+        Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
+        var members = await response.Content.ReadFromJsonAsync<List<CommunityMemberResponse>>();
+        Assert.IsNotNull(members);
+        Assert.AreEqual(1, members.Count);
+        Assert.AreEqual("Global Display Name", members[0].DisplayName);
+        Assert.AreEqual("Community Nickname", members[0].DisplayNameOverride);
+        Assert.AreEqual("Community Nickname", members[0].EffectiveDisplayName);
+    }
 }

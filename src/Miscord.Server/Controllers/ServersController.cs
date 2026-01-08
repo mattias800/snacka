@@ -306,7 +306,7 @@ public class CommunitiesController : ControllerBase
             if (requestingMember.Role != Miscord.Shared.Models.UserRole.Owner &&
                 requestingMember.Role != Miscord.Shared.Models.UserRole.Admin)
             {
-                return Forbid("Only admins and owners can change other members' nicknames.");
+                return StatusCode(403, new { error = "Only admins and owners can change other members' nicknames." });
             }
 
             var member = await _memberService.UpdateNicknameAsync(communityId, memberId, request.Nickname, cancellationToken);

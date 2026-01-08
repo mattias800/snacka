@@ -105,6 +105,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isPinnedPopupOpen;
     private ObservableCollection<MessageResponse> _pinnedMessages = new();
 
+    // Nickname editing state
+    private bool _isEditingNickname;
+    private CommunityMemberResponse? _editingNicknameMember;
+    private string _editingNickname = string.Empty;
+
     public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null)
     {
         _apiClient = apiClient;
@@ -191,6 +196,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         PromoteToAdminCommand = ReactiveCommand.CreateFromTask<CommunityMemberResponse>(PromoteToAdminAsync);
         DemoteToMemberCommand = ReactiveCommand.CreateFromTask<CommunityMemberResponse>(DemoteToMemberAsync);
         TransferOwnershipCommand = ReactiveCommand.CreateFromTask<CommunityMemberResponse>(TransferOwnershipAsync);
+
+        // Nickname commands
+        ChangeMyNicknameCommand = ReactiveCommand.Create(StartEditMyNickname);
+        ChangeMemberNicknameCommand = ReactiveCommand.Create<CommunityMemberResponse>(StartEditMemberNickname);
+        SaveNicknameCommand = ReactiveCommand.CreateFromTask(SaveNicknameAsync);
+        CancelNicknameEditCommand = ReactiveCommand.Create(CancelNicknameEdit);
 
         // Inline DM commands
         var canSendDMMessage = this.WhenAnyValue(
@@ -864,6 +875,27 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     public int PinnedCount => Messages.Count(m => m.IsPinned);
 
+    // Nickname editing properties
+    public bool IsEditingNickname
+    {
+        get => _isEditingNickname;
+        set => this.RaiseAndSetIfChanged(ref _isEditingNickname, value);
+    }
+
+    public CommunityMemberResponse? EditingNicknameMember
+    {
+        get => _editingNicknameMember;
+        set => this.RaiseAndSetIfChanged(ref _editingNicknameMember, value);
+    }
+
+    public string EditingNickname
+    {
+        get => _editingNickname;
+        set => this.RaiseAndSetIfChanged(ref _editingNickname, value);
+    }
+
+    public bool IsEditingMyNickname => IsEditingNickname && EditingNicknameMember?.UserId == _auth.UserId;
+
     public bool IsLoading
     {
         get => _isLoading;
@@ -1332,6 +1364,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<CommunityMemberResponse, Unit> PromoteToAdminCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> DemoteToMemberCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> TransferOwnershipCommand { get; }
+    public ReactiveCommand<Unit, Unit> ChangeMyNicknameCommand { get; }
+    public ReactiveCommand<CommunityMemberResponse, Unit> ChangeMemberNicknameCommand { get; }
+    public ReactiveCommand<Unit, Unit> SaveNicknameCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelNicknameEditCommand { get; }
 
     // Inline DM commands
     public ReactiveCommand<Unit, Unit> SendDMMessageCommand { get; }
@@ -1572,6 +1608,77 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                     var currentMember = membersResult.Data.FirstOrDefault(m => m.UserId == _auth.UserId);
                     CurrentUserRole = currentMember?.Role;
                 }
+            }
+            else
+            {
+                ErrorMessage = result.Error;
+            }
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private void StartEditMyNickname()
+    {
+        if (SelectedCommunity is null) return;
+
+        var myMember = Members.FirstOrDefault(m => m.UserId == _auth.UserId);
+        if (myMember is null) return;
+
+        EditingNicknameMember = myMember;
+        EditingNickname = myMember.DisplayNameOverride ?? string.Empty;
+        IsEditingNickname = true;
+    }
+
+    private void StartEditMemberNickname(CommunityMemberResponse member)
+    {
+        if (SelectedCommunity is null || !CanManageMembers) return;
+
+        EditingNicknameMember = member;
+        EditingNickname = member.DisplayNameOverride ?? string.Empty;
+        IsEditingNickname = true;
+    }
+
+    private void CancelNicknameEdit()
+    {
+        IsEditingNickname = false;
+        EditingNicknameMember = null;
+        EditingNickname = string.Empty;
+    }
+
+    private async Task SaveNicknameAsync()
+    {
+        if (SelectedCommunity is null || EditingNicknameMember is null) return;
+
+        IsLoading = true;
+        try
+        {
+            // Use null if nickname is empty to clear it
+            var nickname = string.IsNullOrWhiteSpace(EditingNickname) ? null : EditingNickname.Trim();
+
+            ApiResult<CommunityMemberResponse> result;
+            if (EditingNicknameMember.UserId == _auth.UserId)
+            {
+                result = await _apiClient.UpdateMyNicknameAsync(SelectedCommunity.Id, nickname);
+            }
+            else
+            {
+                result = await _apiClient.UpdateMemberNicknameAsync(SelectedCommunity.Id, EditingNicknameMember.UserId, nickname);
+            }
+
+            if (result.Success && result.Data is not null)
+            {
+                // Update the member in the list
+                var index = Members.ToList().FindIndex(m => m.UserId == EditingNicknameMember.UserId);
+                if (index >= 0)
+                {
+                    Members[index] = result.Data;
+                    this.RaisePropertyChanged(nameof(SortedMembers));
+                }
+
+                CancelNicknameEdit();
             }
             else
             {

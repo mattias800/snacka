@@ -1,4 +1,5 @@
 using System.Windows.Input;
+using Avalonia.Platform.Storage;
 using Miscord.Client.Services;
 using ReactiveUI;
 
@@ -21,7 +22,8 @@ public class SettingsViewModel : ViewModelBase
         IVideoDeviceService videoDeviceService,
         IApiClient? apiClient = null,
         Action? onAccountDeleted = null,
-        bool isServerAdmin = false)
+        bool isServerAdmin = false,
+        Func<Task<IStorageFile?>>? selectImageFile = null)
     {
         _onClose = onClose;
         _settingsStore = settingsStore;
@@ -38,7 +40,10 @@ public class SettingsViewModel : ViewModelBase
 
         if (apiClient is not null && onAccountDeleted is not null)
         {
-            AccountSettingsViewModel = new AccountSettingsViewModel(apiClient, onAccountDeleted);
+            AccountSettingsViewModel = new AccountSettingsViewModel(
+                apiClient,
+                onAccountDeleted,
+                selectImageFile: selectImageFile);
         }
 
         if (apiClient is not null && isServerAdmin)

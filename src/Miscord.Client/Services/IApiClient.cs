@@ -14,6 +14,10 @@ public interface IApiClient
     Task<ApiResult<AuthResponse>> LoginAsync(string email, string password);
     Task<ApiResult<AuthResponse>> RefreshTokenAsync(string refreshToken);
     Task<ApiResult<UserProfileResponse>> GetProfileAsync();
+    Task<ApiResult<UserProfileResponse>> UpdateProfileAsync(string? username, string? displayName, string? status);
+    Task<ApiResult<AvatarUploadResponse>> UploadAvatarAsync(Stream imageStream, string fileName, double? cropX = null, double? cropY = null, double? cropWidth = null, double? cropHeight = null);
+    Task<ApiResult<bool>> DeleteAvatarAsync();
+    string? GetAvatarUrl(Guid userId);
     Task<ApiResult<bool>> ChangePasswordAsync(string currentPassword, string newPassword);
     Task<ApiResult<bool>> DeleteAccountAsync();
     void SetAuthToken(string token);
@@ -61,6 +65,8 @@ public interface IApiClient
     Task<ApiResult<List<CommunityMemberResponse>>> GetMembersAsync(Guid communityId);
     Task<ApiResult<CommunityMemberResponse>> GetMemberAsync(Guid communityId, Guid userId);
     Task<ApiResult<CommunityMemberResponse>> UpdateMemberRoleAsync(Guid communityId, Guid userId, UserRole newRole);
+    Task<ApiResult<CommunityMemberResponse>> UpdateMyNicknameAsync(Guid communityId, string? nickname);
+    Task<ApiResult<CommunityMemberResponse>> UpdateMemberNicknameAsync(Guid communityId, Guid memberId, string? nickname);
     Task<ApiResult<bool>> TransferOwnershipAsync(Guid communityId, Guid newOwnerId);
 
     // Direct Messages

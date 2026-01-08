@@ -1,3 +1,4 @@
+using Avalonia.Platform.Storage;
 using Miscord.Client.Services;
 using ReactiveUI;
 
@@ -17,6 +18,9 @@ public class MainWindowViewModel : ViewModelBase
     private AuthResponse? _currentUser;
     private ServerConnection? _currentServer;
     private ServerInfoResponse? _currentServerInfo;
+
+    // File picker provider (set from View)
+    public Func<Task<IStorageFile?>>? ImageFilePickerProvider { get; set; }
 
     public MainWindowViewModel(IApiClient apiClient, IServerConnectionStore connectionStore, ISignalRService signalR, IWebRtcService webRtc, Services.ISettingsStore settingsStore, Services.IAudioDeviceService audioDeviceService, Services.IVideoDeviceService videoDeviceService, Services.IScreenCaptureService screenCaptureService, DevLoginConfig? devConfig = null)
     {
@@ -403,7 +407,8 @@ public class MainWindowViewModel : ViewModelBase
             videoDeviceService: _videoDeviceService,
             apiClient: _apiClient,
             onAccountDeleted: OnLogout,
-            isServerAdmin: CurrentUser.IsServerAdmin
+            isServerAdmin: CurrentUser.IsServerAdmin,
+            selectImageFile: ImageFilePickerProvider
         );
     }
 

@@ -153,6 +153,82 @@ public class ApiClient : IApiClient
         return await GetAsync<UserProfileResponse>("/api/users/me");
     }
 
+    public async Task<ApiResult<UserProfileResponse>> UpdateProfileAsync(string? username, string? displayName, string? status)
+    {
+        return await PutAsync<UpdateProfileRequest, UserProfileResponse>(
+            "/api/users/me",
+            new UpdateProfileRequest(username, displayName, status));
+    }
+
+    public async Task<ApiResult<AvatarUploadResponse>> UploadAvatarAsync(
+        Stream imageStream,
+        string fileName,
+        double? cropX = null,
+        double? cropY = null,
+        double? cropWidth = null,
+        double? cropHeight = null)
+    {
+        try
+        {
+            using var formData = new MultipartFormDataContent();
+
+            var streamContent = new StreamContent(imageStream);
+            var contentType = GetContentType(fileName);
+            streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(contentType);
+            formData.Add(streamContent, "file", fileName);
+
+            if (cropX.HasValue)
+                formData.Add(new StringContent(cropX.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)), "cropX");
+            if (cropY.HasValue)
+                formData.Add(new StringContent(cropY.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)), "cropY");
+            if (cropWidth.HasValue)
+                formData.Add(new StringContent(cropWidth.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)), "cropWidth");
+            if (cropHeight.HasValue)
+                formData.Add(new StringContent(cropHeight.Value.ToString(System.Globalization.CultureInfo.InvariantCulture)), "cropHeight");
+
+            var response = await _httpClient.PutAsync(BuildUrl("/api/users/me/avatar"), formData);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadFromJsonAsync<AvatarUploadResponse>(JsonOptions);
+                return data is not null
+                    ? ApiResult<AvatarUploadResponse>.Ok(data)
+                    : ApiResult<AvatarUploadResponse>.Fail("Invalid response");
+            }
+
+            var error = await TryReadError(response);
+            return ApiResult<AvatarUploadResponse>.Fail(error);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<AvatarUploadResponse>.Fail($"Upload failed: {ex.Message}");
+        }
+    }
+
+    public async Task<ApiResult<bool>> DeleteAvatarAsync()
+    {
+        return await DeleteAsync("/api/users/me/avatar");
+    }
+
+    public string? GetAvatarUrl(Guid userId)
+    {
+        if (string.IsNullOrEmpty(_baseUrl))
+            return null;
+        return $"{_baseUrl}/api/users/{userId}/avatar";
+    }
+
+    private static string GetContentType(string fileName)
+    {
+        var extension = Path.GetExtension(fileName).ToLowerInvariant();
+        return extension switch
+        {
+            ".jpg" or ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "application/octet-stream"
+        };
+    }
+
     public async Task<ApiResult<bool>> ChangePasswordAsync(string currentPassword, string newPassword)
     {
         return await PutWithBodyNoResponseAsync("/api/users/me/password",
@@ -369,6 +445,20 @@ public class ApiClient : IApiClient
         return await PutAsync<UpdateMemberRoleRequest, CommunityMemberResponse>(
             $"/api/communities/{communityId}/members/{userId}/role",
             new UpdateMemberRoleRequest(newRole));
+    }
+
+    public async Task<ApiResult<CommunityMemberResponse>> UpdateMyNicknameAsync(Guid communityId, string? nickname)
+    {
+        return await PutAsync<UpdateNicknameRequest, CommunityMemberResponse>(
+            $"/api/communities/{communityId}/members/me/nickname",
+            new UpdateNicknameRequest(nickname));
+    }
+
+    public async Task<ApiResult<CommunityMemberResponse>> UpdateMemberNicknameAsync(Guid communityId, Guid memberId, string? nickname)
+    {
+        return await PutAsync<UpdateNicknameRequest, CommunityMemberResponse>(
+            $"/api/communities/{communityId}/members/{memberId}/nickname",
+            new UpdateNicknameRequest(nickname));
     }
 
     public async Task<ApiResult<bool>> TransferOwnershipAsync(Guid communityId, Guid newOwnerId)

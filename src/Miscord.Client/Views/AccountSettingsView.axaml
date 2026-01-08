@@ -12,6 +12,238 @@
                        FontWeight="Bold"
                        Foreground="White"/>
 
+            <!-- Avatar Section -->
+            <StackPanel Spacing="16">
+                <TextBlock Text="AVATAR"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="#72767d"/>
+
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <!-- Current Avatar -->
+                    <Grid Width="100" Height="100">
+                        <!-- Default avatar placeholder -->
+                        <Border Background="#5865f2"
+                                CornerRadius="50"
+                                IsVisible="{Binding !HasAvatar}">
+                            <TextBlock Text="{Binding Username, FallbackValue=?}"
+                                       FontSize="36"
+                                       FontWeight="Bold"
+                                       Foreground="White"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+
+                        <!-- Actual avatar image -->
+                        <Border CornerRadius="50"
+                                ClipToBounds="True"
+                                IsVisible="{Binding HasAvatar}">
+                            <Image Source="{Binding AvatarUrl}"
+                                   Width="100"
+                                   Height="100"
+                                   Stretch="UniformToFill"/>
+                        </Border>
+                    </Grid>
+
+                    <!-- Avatar actions -->
+                    <StackPanel Spacing="8" VerticalAlignment="Center">
+                        <Button Command="{Binding SelectAvatarCommand}"
+                                Content="Change Avatar"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="16,8"
+                                CornerRadius="4"
+                                FontWeight="SemiBold"/>
+                        <Button Command="{Binding DeleteAvatarCommand}"
+                                Content="Remove Avatar"
+                                Background="#4f545c"
+                                Foreground="White"
+                                Padding="16,8"
+                                CornerRadius="4"
+                                FontWeight="SemiBold"
+                                IsVisible="{Binding HasAvatar}"/>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Selected image preview -->
+                <StackPanel Spacing="8" IsVisible="{Binding HasSelectedImage}">
+                    <TextBlock Text="NEW AVATAR PREVIEW"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#b9bbbe"/>
+                    <StackPanel Orientation="Horizontal" Spacing="16">
+                        <Border CornerRadius="50"
+                                ClipToBounds="True"
+                                Width="100"
+                                Height="100">
+                            <Image Source="{Binding SelectedImage}"
+                                   Width="100"
+                                   Height="100"
+                                   Stretch="UniformToFill"/>
+                        </Border>
+                        <StackPanel Spacing="8" VerticalAlignment="Center">
+                            <Button Command="{Binding UploadAvatarCommand}"
+                                    Content="Upload"
+                                    Background="#43b581"
+                                    Foreground="White"
+                                    Padding="16,8"
+                                    CornerRadius="4"
+                                    FontWeight="SemiBold"
+                                    IsEnabled="{Binding !IsUploadingAvatar}"/>
+                            <Button Command="{Binding CancelAvatarSelectionCommand}"
+                                    Content="Cancel"
+                                    Background="#4f545c"
+                                    Foreground="White"
+                                    Padding="16,8"
+                                    CornerRadius="4"
+                                    FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+
+                <!-- Avatar Message -->
+                <TextBlock Text="{Binding AvatarMessage}"
+                           IsVisible="{Binding AvatarMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                           FontSize="13"
+                           TextWrapping="Wrap"
+                           Classes.error="{Binding AvatarMessageIsError}"
+                           Classes.success="{Binding !AvatarMessageIsError}">
+                    <TextBlock.Styles>
+                        <Style Selector="TextBlock.success">
+                            <Setter Property="Foreground" Value="#43b581"/>
+                        </Style>
+                        <Style Selector="TextBlock.error">
+                            <Setter Property="Foreground" Value="#f04747"/>
+                        </Style>
+                    </TextBlock.Styles>
+                </TextBlock>
+            </StackPanel>
+
+            <!-- Divider -->
+            <Rectangle Height="1" Fill="#42464d"/>
+
+            <!-- Profile Section -->
+            <StackPanel Spacing="16">
+                <TextBlock Text="PROFILE"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="#72767d"/>
+
+                <!-- Loading indicator -->
+                <TextBlock Text="Loading profile..."
+                           FontSize="14"
+                           Foreground="#b9bbbe"
+                           IsVisible="{Binding IsLoadingProfile}"/>
+
+                <StackPanel Spacing="16" IsVisible="{Binding !IsLoadingProfile}">
+                    <!-- Email (read-only) -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="EMAIL"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#b9bbbe"/>
+                        <Border Background="#202225" CornerRadius="4" Padding="12" Width="300" HorizontalAlignment="Left">
+                            <TextBlock Text="{Binding Email}"
+                                       FontSize="14"
+                                       Foreground="#72767d"/>
+                        </Border>
+                    </StackPanel>
+
+                    <!-- Username -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="USERNAME"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#b9bbbe"/>
+                        <TextBox Text="{Binding Username}"
+                                 Background="#202225"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="4"
+                                 Padding="12"
+                                 Width="300"
+                                 HorizontalAlignment="Left"/>
+                    </StackPanel>
+
+                    <!-- Display Name -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="DISPLAY NAME"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#b9bbbe"/>
+                        <TextBox Text="{Binding DisplayName}"
+                                 Watermark="Leave blank to use username"
+                                 Background="#202225"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="4"
+                                 Padding="12"
+                                 Width="300"
+                                 HorizontalAlignment="Left"/>
+                        <TextBlock Text="This is how others will see your name. Supports emoji."
+                                   FontSize="12"
+                                   Foreground="#72767d"/>
+                    </StackPanel>
+
+                    <!-- Status -->
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="STATUS"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#b9bbbe"/>
+                        <TextBox Text="{Binding Status}"
+                                 Watermark="What are you up to?"
+                                 Background="#202225"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="4"
+                                 Padding="12"
+                                 Width="300"
+                                 HorizontalAlignment="Left"/>
+                    </StackPanel>
+
+                    <!-- Profile Message -->
+                    <TextBlock Text="{Binding ProfileMessage}"
+                               IsVisible="{Binding ProfileMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
+                               FontSize="13"
+                               TextWrapping="Wrap"
+                               Classes.error="{Binding ProfileMessageIsError}"
+                               Classes.success="{Binding !ProfileMessageIsError}">
+                        <TextBlock.Styles>
+                            <Style Selector="TextBlock.success">
+                                <Setter Property="Foreground" Value="#43b581"/>
+                            </Style>
+                            <Style Selector="TextBlock.error">
+                                <Setter Property="Foreground" Value="#f04747"/>
+                            </Style>
+                        </TextBlock.Styles>
+                    </TextBlock>
+
+                    <!-- Profile Buttons -->
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Button Command="{Binding SaveProfileCommand}"
+                                Content="Save Changes"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="16,8"
+                                CornerRadius="4"
+                                FontWeight="SemiBold"
+                                IsEnabled="{Binding HasProfileChanges}"/>
+                        <Button Command="{Binding ResetProfileCommand}"
+                                Content="Reset"
+                                Background="#4f545c"
+                                Foreground="White"
+                                Padding="16,8"
+                                CornerRadius="4"
+                                FontWeight="SemiBold"
+                                IsVisible="{Binding HasProfileChanges}"/>
+                    </StackPanel>
+                </StackPanel>
+            </StackPanel>
+
+            <!-- Divider -->
+            <Rectangle Height="1" Fill="#42464d"/>
+
             <!-- Change Password Section -->
             <StackPanel Spacing="16">
                 <TextBlock Text="CHANGE PASSWORD"

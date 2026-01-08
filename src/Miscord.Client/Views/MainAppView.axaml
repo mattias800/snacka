@@ -1523,17 +1523,25 @@
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:CommunityMemberResponse">
                                 <Panel>
-                                <!-- Current user (non-clickable) -->
+                                <!-- Current user (with context menu for nickname) -->
                                 <Border Padding="8,4"
                                         Margin="0,2"
                                         CornerRadius="4"
-                                        Background="Transparent">
+                                        Background="Transparent"
+                                        Cursor="Hand"
+                                        Tag="{Binding}">
                                     <Border.IsVisible>
                                         <MultiBinding Converter="{x:Static conv:GuidEqualsConverter.Instance}">
                                             <Binding Path="UserId"/>
                                             <Binding Path="#MembersList.DataContext.UserId"/>
                                         </MultiBinding>
                                     </Border.IsVisible>
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Change Nickname"
+                                                      Command="{Binding #MembersList.DataContext.ChangeMyNicknameCommand}"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="Auto"/>
@@ -1561,10 +1569,10 @@
                                                      IsVisible="{Binding IsOnline}"/>
                                         </Grid>
 
-                                        <!-- Username (You) and Role -->
+                                        <!-- Display Name (You) and Role -->
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
                                             <StackPanel Orientation="Horizontal" Spacing="4">
-                                                <TextBlock Text="{Binding Username}"
+                                                <TextBlock Text="{Binding EffectiveDisplayName}"
                                                            Foreground="White"
                                                            FontSize="14"/>
                                                 <TextBlock Text="(You)"
@@ -1598,6 +1606,10 @@
                                                       Command="{Binding #MembersList.DataContext.StartDMCommand}"
                                                       CommandParameter="{Binding}"/>
                                             <Separator IsVisible="{Binding #MembersList.DataContext.CanManageMembers}"/>
+                                            <MenuItem Header="Change Nickname"
+                                                      Command="{Binding #MembersList.DataContext.ChangeMemberNicknameCommand}"
+                                                      CommandParameter="{Binding}"
+                                                      IsVisible="{Binding #MembersList.DataContext.CanManageMembers}"/>
                                             <MenuItem Header="Promote to Admin"
                                                       Command="{Binding #MembersList.DataContext.PromoteToAdminCommand}"
                                                       CommandParameter="{Binding}"
@@ -1644,9 +1656,9 @@
                                                      IsVisible="{Binding IsOnline}"/>
                                         </Grid>
 
-                                        <!-- Username and Role -->
+                                        <!-- Display Name and Role -->
                                         <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                            <TextBlock Text="{Binding Username}"
+                                            <TextBlock Text="{Binding EffectiveDisplayName}"
                                                        Foreground="White"
                                                        FontSize="14"/>
                                             <TextBlock Text="{Binding Role}"
@@ -1801,6 +1813,62 @@
                                FontSize="14"/>
                 </Border>
             </Grid>
+        </Border>
+
+        <!-- Nickname Edit Overlay -->
+        <Border Grid.ColumnSpan="4"
+                Background="#80000000"
+                IsVisible="{Binding IsEditingNickname}"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch">
+            <Border Background="#36393f"
+                    CornerRadius="8"
+                    Padding="24"
+                    MinWidth="400"
+                    HorizontalAlignment="Center"
+                    VerticalAlignment="Center">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="{Binding IsEditingMyNickname, Converter={x:Static conv:BoolToStringConverter.Instance}, ConverterParameter='Change Your Nickname|Change Member Nickname'}"
+                               FontSize="18"
+                               FontWeight="Bold"
+                               Foreground="White"/>
+
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="NICKNAME"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#b9bbbe"/>
+                        <TextBox Text="{Binding EditingNickname}"
+                                 Watermark="Leave blank to use display name"
+                                 Background="#202225"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="4"
+                                 Padding="12"/>
+                        <TextBlock Text="This nickname is only visible in this community."
+                                   FontSize="12"
+                                   Foreground="#72767d"/>
+                    </StackPanel>
+
+                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                        <Button Command="{Binding CancelNicknameEditCommand}"
+                                Content="Cancel"
+                                Background="#4f545c"
+                                Foreground="White"
+                                Padding="16,8"
+                                CornerRadius="4"
+                                FontWeight="SemiBold"/>
+                        <Button Command="{Binding SaveNicknameCommand}"
+                                Content="Save"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="16,8"
+                                CornerRadius="4"
+                                FontWeight="SemiBold"
+                                IsEnabled="{Binding !IsLoading}"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
         </Border>
 
         <!-- Emoji Picker Popup -->
