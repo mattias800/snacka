@@ -1190,8 +1190,14 @@
                 </Border>
 
                 <!-- Messages List -->
-                <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8">
+                <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8" HorizontalScrollBarVisibility="Disabled">
                     <ItemsControl x:Name="MessagesList" ItemsSource="{Binding Messages}" Margin="16,0">
+                        <ItemsControl.ItemContainerTheme>
+                            <ControlTheme TargetType="ContentPresenter">
+                                <Setter Property="HorizontalAlignment" Value="Stretch"/>
+                                <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                            </ControlTheme>
+                        </ItemsControl.ItemContainerTheme>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <StackPanel>
