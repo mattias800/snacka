@@ -1190,16 +1190,16 @@
                 </Border>
 
                 <!-- Messages List -->
-                <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8" HorizontalScrollBarVisibility="Disabled">
-                    <ItemsControl x:Name="MessagesList" ItemsSource="{Binding Messages}" Margin="16,0">
-                        <ItemsControl.Styles>
-                            <Style Selector="ItemsControl > ContentPresenter">
-                                <Setter Property="HorizontalAlignment" Value="Stretch"/>
-                            </Style>
-                        </ItemsControl.Styles>
+                <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8" HorizontalScrollBarVisibility="Disabled" HorizontalContentAlignment="Stretch">
+                    <ItemsControl x:Name="MessagesList" ItemsSource="{Binding Messages}" Margin="16,0" HorizontalAlignment="Stretch">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel>
+                                <StackPanel HorizontalAlignment="Stretch">
                                     <!-- Date separator -->
                                     <Border Margin="0,16,0,8" Padding="0">
                                         <Border.IsVisible>
