@@ -102,13 +102,18 @@ Polish and enhanced functionality:
 - [ ] Emoji search in picker
 - [ ] Custom emoji reactions (requires 3.2 File Attachments)
 
-#### 3.2 File Attachments
-- [ ] Upload images and files with messages
-- [ ] Drag-and-drop support
-- [ ] Image previews inline (lightbox on click)
-- [ ] Download links for non-image files
-- [ ] File size limits and validation
-- [ ] Server-side storage (local or cloud)
+#### 3.2 File Attachments ✅
+- [x] Upload images and files with messages
+- [x] Drag-and-drop support
+- [x] Image previews inline (lightbox on click)
+- [x] Download links for non-image files
+- [x] File size limits and validation (25MB max, configurable extensions)
+- [x] Server-side storage (local directory with GUID-based filenames)
+- [x] Audio file playback with inline player
+  - [x] Play/pause, progress bar, seek functionality
+  - [x] Current time and total duration display
+  - [x] Volume control slider
+  - [x] Uses LibVLCSharp (requires VLC on macOS arm64)
 
 #### 3.3 Infinite Scroll / Message History
 - [ ] Implement scroll-to-load-more for older messages
@@ -222,6 +227,7 @@ Another agent is currently working on server, community, and user account manage
 ### In Progress
 - [ ] Phase 3: Medium Impact Features
   - [x] Message reactions (emoji picker, counts, tooltips, real-time sync)
+  - [x] File attachments (upload, drag-drop, image lightbox, audio player with seek/volume)
   - [x] Pinned messages (pin/unpin, pinned button in header, popup panel)
 
 ### Not Started
