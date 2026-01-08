@@ -44,6 +44,21 @@
         <Style Selector="Border.member-item:pressed">
             <Setter Property="Background" Value="#3f4248"/>
         </Style>
+
+        <!-- Message action button style (reply, react, edit, delete) -->
+        <Style Selector="Button.msg-action-btn">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="6"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Button.msg-action-btn:pointerover /template/ ContentPresenter">
+            <Setter Property="Background" Value="#40444b"/>
+        </Style>
+        <Style Selector="Button.msg-action-btn:pressed /template/ ContentPresenter">
+            <Setter Property="Background" Value="#4f545c"/>
+        </Style>
     </UserControl.Styles>
     <UserControl.Resources>
         <conv:ColorToBorderConverter x:Key="ColorToBorderConverter"/>
@@ -718,19 +733,15 @@
 
                                             <!-- Edit/Delete Buttons -->
                                             <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
-                                                <Button Command="{Binding #DMMessagesList.DataContext.StartEditDMMessageCommand}"
+                                                <Button Classes="msg-action-btn"
+                                                        Command="{Binding #DMMessagesList.DataContext.StartEditDMMessageCommand}"
                                                         CommandParameter="{Binding}"
-                                                        Background="Transparent"
-                                                        Padding="4"
-                                                        Cursor="Hand"
                                                         ToolTip.Tip="Edit">
                                                     <TextBlock Text="✎" Foreground="#72767d" FontSize="12"/>
                                                 </Button>
-                                                <Button Command="{Binding #DMMessagesList.DataContext.DeleteDMMessageCommand}"
+                                                <Button Classes="msg-action-btn"
+                                                        Command="{Binding #DMMessagesList.DataContext.DeleteDMMessageCommand}"
                                                         CommandParameter="{Binding}"
-                                                        Background="Transparent"
-                                                        Padding="4"
-                                                        Cursor="Hand"
                                                         ToolTip.Tip="Delete">
                                                     <TextBlock Text="🗑" Foreground="#72767d" FontSize="12"/>
                                                 </Button>
@@ -1298,35 +1309,27 @@
 
                                         <!-- Reply/React/Edit/Delete Buttons -->
                                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
-                                            <Button Background="Transparent"
-                                                    Padding="4"
-                                                    Cursor="Hand"
+                                            <Button Classes="msg-action-btn"
                                                     ToolTip.Tip="Add Reaction"
                                                     Tag="{Binding}"
                                                     Click="AddReactionButton_Click">
                                                 <TextBlock Text="😀" Foreground="#72767d" FontSize="12"/>
                                             </Button>
-                                            <Button Command="{Binding #MessagesList.DataContext.ReplyToMessageCommand}"
+                                            <Button Classes="msg-action-btn"
+                                                    Command="{Binding #MessagesList.DataContext.ReplyToMessageCommand}"
                                                     CommandParameter="{Binding}"
-                                                    Background="Transparent"
-                                                    Padding="4"
-                                                    Cursor="Hand"
                                                     ToolTip.Tip="Reply">
                                                 <TextBlock Text="↩" Foreground="#72767d" FontSize="12"/>
                                             </Button>
-                                            <Button Command="{Binding #MessagesList.DataContext.StartEditMessageCommand}"
+                                            <Button Classes="msg-action-btn"
+                                                    Command="{Binding #MessagesList.DataContext.StartEditMessageCommand}"
                                                     CommandParameter="{Binding}"
-                                                    Background="Transparent"
-                                                    Padding="4"
-                                                    Cursor="Hand"
                                                     ToolTip.Tip="Edit">
                                                 <TextBlock Text="✎" Foreground="#72767d" FontSize="12"/>
                                             </Button>
-                                            <Button Command="{Binding #MessagesList.DataContext.DeleteMessageCommand}"
+                                            <Button Classes="msg-action-btn"
+                                                    Command="{Binding #MessagesList.DataContext.DeleteMessageCommand}"
                                                     CommandParameter="{Binding}"
-                                                    Background="Transparent"
-                                                    Padding="4"
-                                                    Cursor="Hand"
                                                     ToolTip.Tip="Delete">
                                                 <TextBlock Text="🗑" Foreground="#72767d" FontSize="12"/>
                                             </Button>
