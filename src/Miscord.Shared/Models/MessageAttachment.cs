@@ -39,6 +39,11 @@ public class MessageAttachment
     public bool IsImage { get; set; }
 
     /// <summary>
+    /// Whether this attachment is an audio file (for inline player).
+    /// </summary>
+    public bool IsAudio { get; set; }
+
+    /// <summary>
     /// When the file was uploaded.
     /// </summary>
     public DateTime UploadedAt { get; set; } = DateTime.UtcNow;

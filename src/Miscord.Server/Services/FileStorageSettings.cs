@@ -21,13 +21,19 @@ public class FileStorageSettings
     /// Allowed file extensions for upload.
     /// </summary>
     public string[] AllowedExtensions { get; set; } =
-        [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".xls", ".xlsx", ".zip"];
+        [".jpg", ".jpeg", ".png", ".gif", ".webp", ".pdf", ".txt", ".doc", ".docx", ".xls", ".xlsx", ".zip", ".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"];
 
     /// <summary>
     /// Extensions that are considered images (for inline preview).
     /// </summary>
     public string[] AllowedImageExtensions { get; set; } =
         [".jpg", ".jpeg", ".png", ".gif", ".webp"];
+
+    /// <summary>
+    /// Extensions that are considered audio (for inline player).
+    /// </summary>
+    public string[] AllowedAudioExtensions { get; set; } =
+        [".mp3", ".wav", ".ogg", ".m4a", ".flac", ".aac"];
 
     /// <summary>
     /// Maximum number of files per message.

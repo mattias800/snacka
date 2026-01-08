@@ -114,7 +114,8 @@ public class AttachmentsController : ControllerBase
                 StoredFileName = result.StoredFileName,
                 ContentType = file.ContentType,
                 FileSize = file.Length,
-                IsImage = result.IsImage
+                IsImage = result.IsImage,
+                IsAudio = result.IsAudio
             };
 
             attachments.Add(attachment);
@@ -150,6 +151,7 @@ public class AttachmentsController : ControllerBase
                 a.ContentType,
                 a.FileSize,
                 a.IsImage,
+                a.IsAudio,
                 $"{baseUrl}/api/attachments/{a.StoredFileName}"
             )).ToList()
         );

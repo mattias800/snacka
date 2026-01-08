@@ -29,6 +29,11 @@ public interface IFileStorageService
     /// Checks if a file is an image based on content type and extension.
     /// </summary>
     bool IsImageFile(string contentType, string fileName);
+
+    /// <summary>
+    /// Checks if a file is audio based on content type and extension.
+    /// </summary>
+    bool IsAudioFile(string contentType, string fileName);
 }
 
 /// <summary>
@@ -39,7 +44,7 @@ public record FileValidationResult(bool IsValid, string? ErrorMessage);
 /// <summary>
 /// Result of storing a file.
 /// </summary>
-public record StoredFileResult(string StoredFileName, string SanitizedFileName, bool IsImage);
+public record StoredFileResult(string StoredFileName, string SanitizedFileName, bool IsImage, bool IsAudio);
 
 /// <summary>
 /// Result of retrieving a file.

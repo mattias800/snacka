@@ -50,6 +50,10 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         // Track scroll position for smart auto-scrolling
         MessagesScrollViewer.ScrollChanged += OnMessagesScrollChanged;
         DMMessagesScrollViewer.ScrollChanged += OnDMMessagesScrollChanged;
+
+        // Drag-drop handlers for file attachments
+        MessageInputBox.AddHandler(DragDrop.DragOverEvent, OnDragOver);
+        MessageInputBox.AddHandler(DragDrop.DropEvent, OnDrop);
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -706,6 +710,52 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     // ==================== File Attachment Handlers ====================
 
     /// <summary>
+    /// Called when a file is dragged over the message input.
+    /// </summary>
+    private void OnDragOver(object? sender, DragEventArgs e)
+    {
+        // Check if the drag contains files
+#pragma warning disable CS0618 // Type or member is obsolete
+        if (e.Data.Contains(DataFormats.Files))
+#pragma warning restore CS0618
+        {
+            e.DragEffects = DragDropEffects.Copy;
+        }
+        else
+        {
+            e.DragEffects = DragDropEffects.None;
+        }
+        e.Handled = true;
+    }
+
+    /// <summary>
+    /// Called when files are dropped onto the message input.
+    /// </summary>
+    private async void OnDrop(object? sender, DragEventArgs e)
+    {
+        if (ViewModel == null) return;
+
+#pragma warning disable CS0618 // Type or member is obsolete
+        if (e.Data.Contains(DataFormats.Files))
+        {
+            var items = e.Data.GetFiles();
+#pragma warning restore CS0618
+            if (items != null)
+            {
+                foreach (var item in items)
+                {
+                    // Only process files, not folders
+                    if (item is IStorageFile file)
+                    {
+                        await AddFileAsAttachmentAsync(file);
+                    }
+                }
+            }
+        }
+        e.Handled = true;
+    }
+
+    /// <summary>
     /// Called when the attach button is clicked to open file picker.
     /// </summary>
     private async void OnAttachButtonClick(object? sender, RoutedEventArgs e)
@@ -723,12 +773,17 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             {
                 new FilePickerFileType("All supported files")
                 {
-                    Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.pdf", "*.txt", "*.doc", "*.docx", "*.zip" }
+                    Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.pdf", "*.txt", "*.doc", "*.docx", "*.zip", "*.mp3", "*.wav", "*.ogg", "*.m4a", "*.flac", "*.aac" }
                 },
                 new FilePickerFileType("Images")
                 {
                     Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp" },
                     MimeTypes = new[] { "image/*" }
+                },
+                new FilePickerFileType("Audio")
+                {
+                    Patterns = new[] { "*.mp3", "*.wav", "*.ogg", "*.m4a", "*.flac", "*.aac" },
+                    MimeTypes = new[] { "audio/*" }
                 },
                 new FilePickerFileType("Documents")
                 {
@@ -825,6 +880,12 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             ".doc" => "application/msword",
             ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
             ".zip" => "application/zip",
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            ".m4a" => "audio/mp4",
+            ".flac" => "audio/flac",
+            ".aac" => "audio/aac",
             _ => "application/octet-stream"
         };
     }

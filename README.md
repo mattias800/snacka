@@ -62,6 +62,7 @@ See [PLAN.md](PLAN.md) for complete implementation roadmap.
 - .NET 9 SDK or later
 - Visual Studio 2022 (recommended), Rider, or VS Code
 - Git
+- Native dependencies for client (FFmpeg, SDL2, VLC) - see [docs/DEPLOY.md](docs/DEPLOY.md) for platform-specific instructions
 
 ### Building
 

@@ -56,11 +56,12 @@ public class FileStorageService : IFileStorageService
         await fileStream.CopyToAsync(fs, ct);
 
         var isImage = IsImageFile(contentType, fileName);
+        var isAudio = IsAudioFile(contentType, fileName);
 
-        _logger.LogInformation("Stored file '{OriginalName}' as '{StoredName}' ({Size} bytes, IsImage={IsImage})",
-            fileName, storedName, fs.Length, isImage);
+        _logger.LogInformation("Stored file '{OriginalName}' as '{StoredName}' ({Size} bytes, IsImage={IsImage}, IsAudio={IsAudio})",
+            fileName, storedName, fs.Length, isImage, isAudio);
 
-        return new StoredFileResult(storedName, sanitizedName, isImage);
+        return new StoredFileResult(storedName, sanitizedName, isImage, isAudio);
     }
 
     public Task<FileRetrievalResult?> GetFileAsync(string storedFileName, CancellationToken ct = default)
@@ -115,6 +116,13 @@ public class FileStorageService : IFileStorageService
                contentType.StartsWith("image/", StringComparison.OrdinalIgnoreCase);
     }
 
+    public bool IsAudioFile(string contentType, string fileName)
+    {
+        var ext = Path.GetExtension(fileName).ToLowerInvariant();
+        return _settings.AllowedAudioExtensions.Contains(ext) ||
+               contentType.StartsWith("audio/", StringComparison.OrdinalIgnoreCase);
+    }
+
     private static string SanitizeFileName(string fileName)
     {
         var invalid = Path.GetInvalidFileNameChars();
@@ -153,6 +161,12 @@ public class FileStorageService : IFileStorageService
             ".zip" => "application/zip",
             ".tar" => "application/x-tar",
             ".gz" => "application/gzip",
+            ".mp3" => "audio/mpeg",
+            ".wav" => "audio/wav",
+            ".ogg" => "audio/ogg",
+            ".m4a" => "audio/mp4",
+            ".flac" => "audio/flac",
+            ".aac" => "audio/aac",
             _ => "application/octet-stream"
         };
     }

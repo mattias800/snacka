@@ -233,6 +233,7 @@ public sealed class MessageService : IMessageService
                 a.ContentType,
                 a.FileSize,
                 a.IsImage,
+                a.IsAudio,
                 $"/api/attachments/{a.StoredFileName}"
             ))
             .ToList() : null

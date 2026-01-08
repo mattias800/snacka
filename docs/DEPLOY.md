@@ -10,21 +10,27 @@ This guide covers how to deploy Miscord server and client applications.
 
 ### Client Dependencies
 
+The client requires the following native libraries for media playback and capture:
+
 #### macOS
 ```bash
-# Install FFmpeg and SDL2 via Homebrew
+# Install FFmpeg, SDL2, and VLC via Homebrew
 brew install ffmpeg sdl2
+brew install --cask vlc
 ```
 
 #### Windows
 - FFmpeg: Download from https://ffmpeg.org/download.html and add to PATH
 - SDL2: Usually bundled or download from https://www.libsdl.org/
+- VLC: Download and install from https://www.videolan.org/vlc/
 
 #### Linux (Ubuntu/Debian)
 ```bash
 sudo apt update
-sudo apt install ffmpeg libsdl2-dev
+sudo apt install ffmpeg libsdl2-dev vlc libvlc-dev
 ```
+
+**Note:** VLC is required for inline audio playback of audio file attachments. The client uses LibVLCSharp which leverages the system-installed VLC for codec support.
 
 ## Development Setup
 

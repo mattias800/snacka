@@ -113,6 +113,7 @@ public record AttachmentResponse(
     string ContentType,
     long FileSize,
     bool IsImage,
+    bool IsAudio,
     string Url
 );
 
