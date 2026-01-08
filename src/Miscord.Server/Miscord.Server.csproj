@@ -32,4 +32,11 @@
     <ProjectReference Include="..\Miscord.WebRTC\Miscord.WebRTC.csproj" />
   </ItemGroup>
 
+  <!-- Build setup wizard on publish -->
+  <Target Name="BuildSetupWizard" BeforeTargets="PrepareForPublish">
+    <Message Importance="high" Text="Building Setup Wizard..." />
+    <Exec Command="npm install" WorkingDirectory="SetupWizard" />
+    <Exec Command="npm run build" WorkingDirectory="SetupWizard" />
+  </Target>
+
 </Project>
