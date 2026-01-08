@@ -124,11 +124,11 @@ Polish and enhanced functionality:
 - [ ] Jump to message in context
 - [ ] Search results highlighting
 
-#### 3.5 Pinned Messages
-- [ ] Pin important messages to a channel
-- [ ] "Pinned" button in channel header
-- [ ] Pinned messages panel/modal
-- [ ] Unpin option for admins/message author
+#### 3.5 Pinned Messages ✅
+- [x] Pin important messages to a channel
+- [x] "Pinned" button in channel header
+- [x] Pinned messages panel/modal
+- [x] Unpin option for admins/message author
 
 ---
 
@@ -222,6 +222,7 @@ Another agent is currently working on server, community, and user account manage
 ### In Progress
 - [ ] Phase 3: Medium Impact Features
   - [x] Message reactions (emoji picker, counts, tooltips, real-time sync)
+  - [x] Pinned messages (pin/unpin, pinned button in header, popup panel)
 
 ### Not Started
 - [ ] Phase 4: Nice to Have

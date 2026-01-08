@@ -335,6 +335,77 @@ public class MessagesController : ControllerBase
         }
     }
 
+    [HttpPost("{messageId:guid}/pin")]
+    public async Task<ActionResult<MessagePinnedEvent>> PinMessage(
+        Guid channelId,
+        Guid messageId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var pinnedEvent = await _messageService.PinMessageAsync(messageId, userId.Value, cancellationToken);
+            await _hubContext.Clients.Group($"channel:{channelId}")
+                .SendAsync("MessagePinned", pinnedEvent, cancellationToken);
+            return Ok(pinnedEvent);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
+    }
+
+    [HttpDelete("{messageId:guid}/pin")]
+    public async Task<ActionResult<MessagePinnedEvent>> UnpinMessage(
+        Guid channelId,
+        Guid messageId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var unpinnedEvent = await _messageService.UnpinMessageAsync(messageId, userId.Value, cancellationToken);
+            await _hubContext.Clients.Group($"channel:{channelId}")
+                .SendAsync("MessagePinned", unpinnedEvent, cancellationToken);
+            return Ok(unpinnedEvent);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+        catch (UnauthorizedAccessException ex)
+        {
+            return Forbid(ex.Message);
+        }
+    }
+
+    [HttpGet("pinned")]
+    public async Task<ActionResult<IEnumerable<MessageResponse>>> GetPinnedMessages(
+        Guid channelId,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        try
+        {
+            var messages = await _messageService.GetPinnedMessagesAsync(channelId, userId.Value, cancellationToken);
+            return Ok(messages);
+        }
+        catch (InvalidOperationException ex)
+        {
+            return NotFound(new { error = ex.Message });
+        }
+    }
+
     private Guid? GetCurrentUserId()
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;

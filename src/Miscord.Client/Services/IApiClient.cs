@@ -51,6 +51,11 @@ public interface IApiClient
     Task<ApiResult<ReactionUpdatedEvent>> AddReactionAsync(Guid channelId, Guid messageId, string emoji);
     Task<ApiResult<bool>> RemoveReactionAsync(Guid channelId, Guid messageId, string emoji);
 
+    // Pinned Messages
+    Task<ApiResult<MessagePinnedEvent>> PinMessageAsync(Guid channelId, Guid messageId);
+    Task<ApiResult<MessagePinnedEvent>> UnpinMessageAsync(Guid channelId, Guid messageId);
+    Task<ApiResult<List<MessageResponse>>> GetPinnedMessagesAsync(Guid channelId);
+
     // Members
     Task<ApiResult<List<CommunityMemberResponse>>> GetMembersAsync(Guid communityId);
     Task<ApiResult<CommunityMemberResponse>> GetMemberAsync(Guid communityId, Guid userId);

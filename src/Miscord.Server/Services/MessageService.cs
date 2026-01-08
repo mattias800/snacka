@@ -19,6 +19,7 @@ public sealed class MessageService : IMessageService
             .ThenInclude(r => r!.Author)
             .Include(m => m.Reactions)
             .ThenInclude(r => r.User)
+            .Include(m => m.PinnedBy)
             .Where(m => m.ChannelId == channelId)
             .OrderByDescending(m => m.CreatedAt)
             .Skip(skip)
@@ -99,6 +100,101 @@ public sealed class MessageService : IMessageService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    public async Task<MessagePinnedEvent> PinMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var message = await _db.Messages
+            .Include(m => m.Channel)
+            .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
+            ?? throw new InvalidOperationException("Message not found.");
+
+        // Check if user can pin (author or admin/owner)
+        var canPin = message.AuthorId == userId;
+        if (!canPin)
+        {
+            var userCommunity = await _db.UserCommunities
+                .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CommunityId == message.Channel!.CommunityId, cancellationToken);
+
+            canPin = userCommunity is not null && userCommunity.Role != UserRole.Member;
+        }
+
+        if (!canPin)
+            throw new UnauthorizedAccessException("You cannot pin this message.");
+
+        var user = await _db.Users.FindAsync([userId], cancellationToken)
+            ?? throw new InvalidOperationException("User not found.");
+
+        message.IsPinned = true;
+        message.PinnedAt = DateTime.UtcNow;
+        message.PinnedByUserId = userId;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new MessagePinnedEvent(
+            message.Id,
+            message.ChannelId,
+            true,
+            message.PinnedAt,
+            userId,
+            user.Username
+        );
+    }
+
+    public async Task<MessagePinnedEvent> UnpinMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
+    {
+        var message = await _db.Messages
+            .Include(m => m.Channel)
+            .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
+            ?? throw new InvalidOperationException("Message not found.");
+
+        if (!message.IsPinned)
+            throw new InvalidOperationException("Message is not pinned.");
+
+        // Check if user can unpin (author, pinner, or admin/owner)
+        var canUnpin = message.AuthorId == userId || message.PinnedByUserId == userId;
+        if (!canUnpin)
+        {
+            var userCommunity = await _db.UserCommunities
+                .FirstOrDefaultAsync(uc => uc.UserId == userId && uc.CommunityId == message.Channel!.CommunityId, cancellationToken);
+
+            canUnpin = userCommunity is not null && userCommunity.Role != UserRole.Member;
+        }
+
+        if (!canUnpin)
+            throw new UnauthorizedAccessException("You cannot unpin this message.");
+
+        var user = await _db.Users.FindAsync([userId], cancellationToken)
+            ?? throw new InvalidOperationException("User not found.");
+
+        message.IsPinned = false;
+        message.PinnedAt = null;
+        message.PinnedByUserId = null;
+        await _db.SaveChangesAsync(cancellationToken);
+
+        return new MessagePinnedEvent(
+            message.Id,
+            message.ChannelId,
+            false,
+            null,
+            userId,
+            user.Username
+        );
+    }
+
+    public async Task<IEnumerable<MessageResponse>> GetPinnedMessagesAsync(Guid channelId, Guid currentUserId, CancellationToken cancellationToken = default)
+    {
+        var messages = await _db.Messages
+            .Include(m => m.Author)
+            .Include(m => m.ReplyTo)
+            .ThenInclude(r => r!.Author)
+            .Include(m => m.Reactions)
+            .ThenInclude(r => r.User)
+            .Include(m => m.PinnedBy)
+            .Where(m => m.ChannelId == channelId && m.IsPinned)
+            .OrderByDescending(m => m.PinnedAt)
+            .ToListAsync(cancellationToken);
+
+        return messages.Select(m => ToMessageResponse(m, currentUserId));
+    }
+
     private static MessageResponse ToMessageResponse(Message m, Guid? currentUserId = null) => new(
         m.Id,
         m.Content,
@@ -124,6 +220,9 @@ public sealed class MessageService : IMessageService
                 currentUserId.HasValue && g.Any(r => r.UserId == currentUserId.Value),
                 g.Select(r => new ReactionUser(r.UserId, r.User?.Username ?? "Unknown")).ToList()
             ))
-            .ToList() : null
+            .ToList() : null,
+        m.IsPinned,
+        m.PinnedAt,
+        m.PinnedBy?.Username
     );
 }

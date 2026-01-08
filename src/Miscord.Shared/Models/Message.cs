@@ -22,4 +22,20 @@ public class Message
     /// Reactions on this message
     /// </summary>
     public ICollection<MessageReaction> Reactions { get; set; } = new List<MessageReaction>();
+
+    /// <summary>
+    /// Whether this message is pinned to the channel
+    /// </summary>
+    public bool IsPinned { get; set; }
+
+    /// <summary>
+    /// When this message was pinned (null if not pinned)
+    /// </summary>
+    public DateTime? PinnedAt { get; set; }
+
+    /// <summary>
+    /// User who pinned this message
+    /// </summary>
+    public Guid? PinnedByUserId { get; set; }
+    public User? PinnedBy { get; set; }
 }

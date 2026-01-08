@@ -97,7 +97,10 @@ public record MessageResponse(
     bool IsEdited,
     Guid? ReplyToId = null,
     ReplyPreview? ReplyTo = null,
-    List<ReactionSummary>? Reactions = null
+    List<ReactionSummary>? Reactions = null,
+    bool IsPinned = false,
+    DateTime? PinnedAt = null,
+    string? PinnedByUsername = null
 );
 
 /// <summary>
@@ -145,6 +148,18 @@ public record ReactionUpdatedEvent(
     Guid UserId,
     string Username,
     bool Added
+);
+
+/// <summary>
+/// Event when a message is pinned or unpinned
+/// </summary>
+public record MessagePinnedEvent(
+    Guid MessageId,
+    Guid ChannelId,
+    bool IsPinned,
+    DateTime? PinnedAt,
+    Guid? PinnedByUserId,
+    string? PinnedByUsername
 );
 
 // Member Models

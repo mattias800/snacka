@@ -292,6 +292,24 @@ public class ApiClient : IApiClient
         return await DeleteAsync($"/api/channels/{channelId}/messages/{messageId}/reactions/{encodedEmoji}");
     }
 
+    // Pinned message methods
+    public async Task<ApiResult<MessagePinnedEvent>> PinMessageAsync(Guid channelId, Guid messageId)
+    {
+        return await PostAsync<object, MessagePinnedEvent>(
+            $"/api/channels/{channelId}/messages/{messageId}/pin",
+            new { });
+    }
+
+    public async Task<ApiResult<MessagePinnedEvent>> UnpinMessageAsync(Guid channelId, Guid messageId)
+    {
+        return await DeleteAsync<MessagePinnedEvent>($"/api/channels/{channelId}/messages/{messageId}/pin");
+    }
+
+    public async Task<ApiResult<List<MessageResponse>>> GetPinnedMessagesAsync(Guid channelId)
+    {
+        return await GetAsync<List<MessageResponse>>($"/api/channels/{channelId}/messages/pinned");
+    }
+
     // Member methods
     public async Task<ApiResult<List<CommunityMemberResponse>>> GetMembersAsync(Guid communityId)
     {
@@ -461,6 +479,32 @@ public class ApiClient : IApiClient
         catch (Exception ex)
         {
             return ApiResult<bool>.Fail($"Unexpected error: {ex.Message}");
+        }
+    }
+
+    private async Task<ApiResult<T>> DeleteAsync<T>(string path)
+    {
+        try
+        {
+            var response = await _httpClient.DeleteAsync(BuildUrl(path));
+
+            if (response.IsSuccessStatusCode)
+            {
+                var content = await response.Content.ReadAsStringAsync();
+                var data = JsonSerializer.Deserialize<T>(content, JsonOptions);
+                return data is not null ? ApiResult<T>.Ok(data) : ApiResult<T>.Fail("Empty response");
+            }
+
+            var error = await TryReadError(response);
+            return ApiResult<T>.Fail(error);
+        }
+        catch (HttpRequestException ex)
+        {
+            return ApiResult<T>.Fail($"Connection error: {ex.Message}");
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<T>.Fail($"Unexpected error: {ex.Message}");
         }
     }
 

@@ -55,3 +55,56 @@ public class ReactionBackgroundConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+/// <summary>
+/// Converts boolean to one of two strings based on parameter.
+/// Parameter format: "TrueString|FalseString"
+/// </summary>
+public class BoolToStringConverter : IValueConverter
+{
+    public static readonly BoolToStringConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not bool boolValue || parameter is not string paramStr)
+            return null;
+
+        var parts = paramStr.Split('|');
+        if (parts.Length != 2)
+            return null;
+
+        return boolValue ? parts[0] : parts[1];
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+/// <summary>
+/// Converts boolean to one of two colors based on parameter.
+/// Parameter format: "TrueColor|FalseColor"
+/// </summary>
+public class BoolToColorConverter : IValueConverter
+{
+    public static readonly BoolToColorConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (value is not bool boolValue || parameter is not string paramStr)
+            return null;
+
+        var parts = paramStr.Split('|');
+        if (parts.Length != 2)
+            return null;
+
+        var colorStr = boolValue ? parts[0] : parts[1];
+        return new SolidColorBrush(Color.Parse(colorStr));
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

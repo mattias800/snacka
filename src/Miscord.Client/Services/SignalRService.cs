@@ -49,6 +49,7 @@ public interface ISignalRService : IAsyncDisposable
     event Action<MessageResponse>? MessageEdited;
     event Action<MessageDeletedEvent>? MessageDeleted;
     event Action<ReactionUpdatedEvent>? ReactionUpdated;
+    event Action<MessagePinnedEvent>? MessagePinned;
 
     // Direct message events
     event Action<DirectMessageResponse>? DirectMessageReceived;
@@ -108,6 +109,7 @@ public class SignalRService : ISignalRService
     public event Action<MessageResponse>? MessageEdited;
     public event Action<MessageDeletedEvent>? MessageDeleted;
     public event Action<ReactionUpdatedEvent>? ReactionUpdated;
+    public event Action<MessagePinnedEvent>? MessagePinned;
 
     // Direct message events
     public event Action<DirectMessageResponse>? DirectMessageReceived;
@@ -407,6 +409,12 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: ReactionUpdated - {e.MessageId} {e.Emoji} {(e.Added ? "added" : "removed")}");
             ReactionUpdated?.Invoke(e);
+        });
+
+        _hubConnection.On<MessagePinnedEvent>("MessagePinned", e =>
+        {
+            Console.WriteLine($"SignalR: MessagePinned - {e.MessageId} {(e.IsPinned ? "pinned" : "unpinned")}");
+            MessagePinned?.Invoke(e);
         });
 
         // Direct message events

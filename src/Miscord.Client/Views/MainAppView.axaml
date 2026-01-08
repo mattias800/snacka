@@ -1002,6 +1002,21 @@
                                        VerticalAlignment="Center"
                                        Margin="8,0,0,0"
                                        IsVisible="{Binding SelectedChannel.Topic, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                            <!-- Pinned Messages Button -->
+                            <Button Classes="msg-action-btn"
+                                    Command="{Binding ShowPinnedMessagesCommand}"
+                                    ToolTip.Tip="Pinned Messages"
+                                    Margin="8,0,0,0"
+                                    VerticalAlignment="Center">
+                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <TextBlock Text="📌" FontSize="14"/>
+                                    <TextBlock Text="{Binding PinnedCount}"
+                                               Foreground="#72767d"
+                                               FontSize="12"
+                                               VerticalAlignment="Center"
+                                               IsVisible="{Binding PinnedCount, Converter={x:Static conv:IntGreaterThanZeroConverter.Instance}}"/>
+                                </StackPanel>
+                            </Button>
                         </StackPanel>
                     </Border>
 
@@ -1307,13 +1322,21 @@
                                             </ItemsControl>
                                         </StackPanel>
 
-                                        <!-- Reply/React/Edit/Delete Buttons -->
+                                        <!-- Reply/React/Pin/Edit/Delete Buttons -->
                                         <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
                                             <Button Classes="msg-action-btn"
                                                     ToolTip.Tip="Add Reaction"
                                                     Tag="{Binding}"
                                                     Click="AddReactionButton_Click">
                                                 <TextBlock Text="😀" Foreground="#72767d" FontSize="12"/>
+                                            </Button>
+                                            <Button Classes="msg-action-btn"
+                                                    Command="{Binding #MessagesList.DataContext.TogglePinCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip.Tip="{Binding IsPinned, Converter={x:Static conv:BoolToStringConverter.Instance}, ConverterParameter='Unpin|Pin'}">
+                                                <TextBlock Text="📌"
+                                                           Foreground="{Binding IsPinned, Converter={x:Static conv:BoolToColorConverter.Instance}, ConverterParameter='#faa61a|#72767d'}"
+                                                           FontSize="12"/>
                                             </Button>
                                             <Button Classes="msg-action-btn"
                                                     Command="{Binding #MessagesList.DataContext.ReplyToMessageCommand}"
@@ -1743,6 +1766,93 @@
                         </Button>
                     </WrapPanel>
                 </StackPanel>
+            </Border>
+        </Popup>
+
+        <!-- Pinned Messages Popup -->
+        <Popup IsOpen="{Binding IsPinnedPopupOpen}"
+               IsLightDismissEnabled="True"
+               Placement="Center"
+               PlacementTarget="{Binding $parent[Grid]}">
+            <Border Background="#36393f"
+                    CornerRadius="8"
+                    Padding="16"
+                    BorderBrush="#202225"
+                    BorderThickness="1"
+                    MaxWidth="500"
+                    MaxHeight="600">
+                <DockPanel>
+                    <!-- Header -->
+                    <Border DockPanel.Dock="Top" Margin="0,0,0,12">
+                        <Grid>
+                            <TextBlock Text="📌 Pinned Messages"
+                                       Foreground="White"
+                                       FontWeight="SemiBold"
+                                       FontSize="16"
+                                       VerticalAlignment="Center"/>
+                            <Button HorizontalAlignment="Right"
+                                    Background="Transparent"
+                                    Padding="4"
+                                    Command="{Binding ClosePinnedPopupCommand}"
+                                    ToolTip.Tip="Close">
+                                <TextBlock Text="✕" Foreground="#72767d" FontSize="14"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Pinned Messages List -->
+                    <ScrollViewer>
+                        <ItemsControl ItemsSource="{Binding PinnedMessages}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Background="#2f3136"
+                                            CornerRadius="4"
+                                            Padding="12"
+                                            Margin="0,0,0,8">
+                                        <StackPanel>
+                                            <!-- Author and Time -->
+                                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                                                <TextBlock Text="{Binding AuthorUsername}"
+                                                           Foreground="#5865f2"
+                                                           FontWeight="SemiBold"
+                                                           FontSize="13"/>
+                                                <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:MMM d, yyyy h:mm tt}'}"
+                                                           Foreground="#72767d"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+
+                                            <!-- Message Content -->
+                                            <TextBlock Text="{Binding Content}"
+                                                       Foreground="#dcddde"
+                                                       FontSize="14"
+                                                       TextWrapping="Wrap"/>
+
+                                            <!-- Unpin Button -->
+                                            <Button HorizontalAlignment="Right"
+                                                    Margin="0,8,0,0"
+                                                    Background="Transparent"
+                                                    Padding="8,4"
+                                                    Command="{Binding $parent[ItemsControl].DataContext.TogglePinCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    ToolTip.Tip="Unpin">
+                                                <TextBlock Text="Unpin" Foreground="#72767d" FontSize="12"/>
+                                            </Button>
+                                        </StackPanel>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+
+                    <!-- Empty State -->
+                    <TextBlock Text="No pinned messages"
+                               Foreground="#72767d"
+                               FontSize="14"
+                               HorizontalAlignment="Center"
+                               Margin="0,20"
+                               IsVisible="{Binding !PinnedMessages.Count}"/>
+                </DockPanel>
             </Border>
         </Popup>
     </Grid>

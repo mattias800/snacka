@@ -97,6 +97,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private int _selectedMentionIndex;
     private ObservableCollection<CommunityMemberResponse> _mentionSuggestions = new();
 
+    // Pinned messages state
+    private bool _isPinnedPopupOpen;
+    private ObservableCollection<MessageResponse> _pinnedMessages = new();
+
     public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null)
     {
         _apiClient = apiClient;
@@ -174,6 +178,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         CancelReplyCommand = ReactiveCommand.Create(CancelReply);
         ToggleReactionCommand = ReactiveCommand.CreateFromTask<(MessageResponse Message, string Emoji)>(ToggleReactionAsync);
         AddReactionCommand = ReactiveCommand.CreateFromTask<(MessageResponse Message, string Emoji)>(AddReactionAsync);
+        TogglePinCommand = ReactiveCommand.CreateFromTask<MessageResponse>(TogglePinAsync);
+        ShowPinnedMessagesCommand = ReactiveCommand.CreateFromTask(ShowPinnedMessagesAsync);
+        ClosePinnedPopupCommand = ReactiveCommand.Create(() => { IsPinnedPopupOpen = false; });
 
         // Member commands
         StartDMCommand = ReactiveCommand.Create<CommunityMemberResponse>(StartDMWithMember);
@@ -400,6 +407,39 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 }
 
                 Messages[index] = message with { Reactions = reactions.Count > 0 ? reactions : null };
+            }
+        });
+
+        _signalR.MessagePinned += e => Dispatcher.UIThread.Post(() =>
+        {
+            // Update message in the main list
+            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
+            if (index >= 0)
+            {
+                var message = Messages[index];
+                Messages[index] = message with
+                {
+                    IsPinned = e.IsPinned,
+                    PinnedAt = e.PinnedAt,
+                    PinnedByUsername = e.PinnedByUsername
+                };
+            }
+
+            // Update pinned messages list if popup is open
+            if (IsPinnedPopupOpen)
+            {
+                if (e.IsPinned)
+                {
+                    // Message was pinned - reload to get full message data
+                    _ = LoadPinnedMessagesAsync();
+                }
+                else
+                {
+                    // Message was unpinned - remove from list
+                    var pinnedIndex = PinnedMessages.ToList().FindIndex(m => m.Id == e.MessageId);
+                    if (pinnedIndex >= 0)
+                        PinnedMessages.RemoveAt(pinnedIndex);
+                }
             }
         });
 
@@ -786,6 +826,20 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         get => _selectedMentionIndex;
         set => this.RaiseAndSetIfChanged(ref _selectedMentionIndex, value);
     }
+
+    public bool IsPinnedPopupOpen
+    {
+        get => _isPinnedPopupOpen;
+        set => this.RaiseAndSetIfChanged(ref _isPinnedPopupOpen, value);
+    }
+
+    public ObservableCollection<MessageResponse> PinnedMessages
+    {
+        get => _pinnedMessages;
+        set => this.RaiseAndSetIfChanged(ref _pinnedMessages, value);
+    }
+
+    public int PinnedCount => Messages.Count(m => m.IsPinned);
 
     public bool IsLoading
     {
@@ -1195,6 +1249,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> CancelReplyCommand { get; }
     public ReactiveCommand<(MessageResponse Message, string Emoji), Unit> ToggleReactionCommand { get; }
     public ReactiveCommand<(MessageResponse Message, string Emoji), Unit> AddReactionCommand { get; }
+    public ReactiveCommand<MessageResponse, Unit> TogglePinCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShowPinnedMessagesCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClosePinnedPopupCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> StartDMCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> PromoteToAdminCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> DemoteToMemberCommand { get; }
@@ -2385,6 +2442,41 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         var (message, emoji) = args;
         await _apiClient.AddReactionAsync(SelectedChannel.Id, message.Id, emoji);
+    }
+
+    private async Task TogglePinAsync(MessageResponse message)
+    {
+        if (SelectedChannel is null) return;
+
+        if (message.IsPinned)
+        {
+            await _apiClient.UnpinMessageAsync(SelectedChannel.Id, message.Id);
+        }
+        else
+        {
+            await _apiClient.PinMessageAsync(SelectedChannel.Id, message.Id);
+        }
+    }
+
+    private async Task ShowPinnedMessagesAsync()
+    {
+        if (SelectedChannel is null) return;
+
+        await LoadPinnedMessagesAsync();
+        IsPinnedPopupOpen = true;
+    }
+
+    private async Task LoadPinnedMessagesAsync()
+    {
+        if (SelectedChannel is null) return;
+
+        var result = await _apiClient.GetPinnedMessagesAsync(SelectedChannel.Id);
+        if (result.Success && result.Data is not null)
+        {
+            PinnedMessages.Clear();
+            foreach (var message in result.Data)
+                PinnedMessages.Add(message);
+        }
     }
 
     public void Dispose()
