@@ -1190,11 +1190,16 @@
                 </Border>
 
                 <!-- Messages List -->
-                <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8">
-                    <ItemsControl x:Name="MessagesList" ItemsSource="{Binding Messages}" Margin="16,0">
+                <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8" HorizontalScrollBarVisibility="Disabled">
+                    <ItemsControl x:Name="MessagesList" ItemsSource="{Binding Messages}" Margin="16,0" HorizontalAlignment="Stretch">
+                        <ItemsControl.ItemsPanel>
+                            <ItemsPanelTemplate>
+                                <StackPanel HorizontalAlignment="Stretch"/>
+                            </ItemsPanelTemplate>
+                        </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <StackPanel>
+                                <StackPanel HorizontalAlignment="Stretch">
                                     <!-- Date separator -->
                                     <Border Margin="0,16,0,8" Padding="0">
                                         <Border.IsVisible>
