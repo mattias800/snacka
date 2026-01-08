@@ -32,6 +32,52 @@ sudo apt install ffmpeg libsdl2-dev vlc libvlc-dev
 
 **Note:** VLC is required for inline audio playback of audio file attachments. The client uses LibVLCSharp which leverages the system-installed VLC for codec support.
 
+### LibVLC Audio Playback (macOS arm64)
+
+The `VideoLAN.LibVLC.Mac` NuGet package only provides x86_64 libraries. On Apple Silicon Macs (M1/M2/M3), you must use the system-installed VLC.app which is arm64 native.
+
+**Important:** The `VLC_PLUGIN_PATH` environment variable must be set **before** the .NET process starts. Setting it via `Environment.SetEnvironmentVariable()` after startup doesn't work because the dynamic linker has already processed the libraries.
+
+#### Running the Client with Audio Support
+
+```bash
+# Option 1: Use the wrapper script (recommended)
+./run-client.sh
+
+# Option 2: Use dev-start.sh (sets VLC env vars automatically)
+./dev-start.sh
+
+# Option 3: Set environment variables manually
+VLC_PLUGIN_PATH=/Applications/VLC.app/Contents/MacOS/plugins \
+DYLD_LIBRARY_PATH=/Applications/VLC.app/Contents/MacOS/lib \
+dotnet run --project src/Miscord.Client/Miscord.Client.csproj
+```
+
+#### Testing Audio Playback
+
+Place an MP3 file in `~/Downloads` and run:
+```bash
+./run-client.sh --audio-test
+```
+
+#### Production Distribution
+
+For distributed applications, the launcher (shell script, .app bundle, or installer) must set `VLC_PLUGIN_PATH` before starting the .NET runtime:
+
+**macOS (.app bundle Info.plist or launcher script):**
+```bash
+export VLC_PLUGIN_PATH="/Applications/VLC.app/Contents/MacOS/plugins"
+export DYLD_LIBRARY_PATH="/Applications/VLC.app/Contents/MacOS/lib"
+```
+
+**Windows (batch file or installer):**
+```batch
+set VLC_PLUGIN_PATH=%ProgramFiles%\VideoLAN\VLC\plugins
+```
+
+**Linux:**
+VLC plugins are typically in standard system locations (`/usr/lib/vlc/plugins`) and are found automatically.
+
 ## Development Setup
 
 ### Quick Start
