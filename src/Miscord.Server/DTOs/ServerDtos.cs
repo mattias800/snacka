@@ -63,7 +63,20 @@ public record MessageResponse(
     List<ReactionSummary>? Reactions = null,
     bool IsPinned = false,
     DateTime? PinnedAt = null,
-    string? PinnedByUsername = null
+    string? PinnedByUsername = null,
+    List<AttachmentResponse>? Attachments = null
+);
+
+/// <summary>
+/// Response containing file attachment metadata
+/// </summary>
+public record AttachmentResponse(
+    Guid Id,
+    string FileName,
+    string ContentType,
+    long FileSize,
+    bool IsImage,
+    string Url
 );
 
 /// <summary>

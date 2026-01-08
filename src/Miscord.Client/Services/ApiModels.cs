@@ -100,8 +100,37 @@ public record MessageResponse(
     List<ReactionSummary>? Reactions = null,
     bool IsPinned = false,
     DateTime? PinnedAt = null,
-    string? PinnedByUsername = null
+    string? PinnedByUsername = null,
+    List<AttachmentResponse>? Attachments = null
 );
+
+/// <summary>
+/// File attachment metadata
+/// </summary>
+public record AttachmentResponse(
+    Guid Id,
+    string FileName,
+    string ContentType,
+    long FileSize,
+    bool IsImage,
+    string Url
+);
+
+/// <summary>
+/// File to be uploaded with a message
+/// </summary>
+public class FileAttachment : IDisposable
+{
+    public required string FileName { get; init; }
+    public required Stream Stream { get; init; }
+    public required string ContentType { get; init; }
+
+    public void Dispose()
+    {
+        Stream.Dispose();
+        GC.SuppressFinalize(this);
+    }
+}
 
 /// <summary>
 /// Preview of the message being replied to

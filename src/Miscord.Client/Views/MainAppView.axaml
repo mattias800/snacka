@@ -1099,6 +1099,58 @@
                                    FontStyle="Italic"
                                    Margin="0,0,0,4"/>
 
+                        <!-- Pending Attachments Preview -->
+                        <Border Background="#2f3136"
+                                CornerRadius="4"
+                                Padding="8"
+                                Margin="0,0,0,8"
+                                IsVisible="{Binding HasPendingAttachments}">
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Top"
+                                           Text="Attachments"
+                                           Foreground="#72767d"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"
+                                           Margin="0,0,0,4"/>
+                                <ItemsControl x:Name="PendingAttachmentsList" ItemsSource="{Binding PendingAttachments}">
+                                    <ItemsControl.ItemsPanel>
+                                        <ItemsPanelTemplate>
+                                            <WrapPanel Orientation="Horizontal"/>
+                                        </ItemsPanelTemplate>
+                                    </ItemsControl.ItemsPanel>
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate>
+                                            <Border Background="#40444b"
+                                                    CornerRadius="4"
+                                                    Padding="8,4"
+                                                    Margin="0,0,8,4">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding FileName}"
+                                                               Foreground="#dcddde"
+                                                               FontSize="12"
+                                                               MaxWidth="200"
+                                                               TextTrimming="CharacterEllipsis"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="{Binding FormattedSize}"
+                                                               Foreground="#72767d"
+                                                               FontSize="11"
+                                                               VerticalAlignment="Center"/>
+                                                    <Button Background="Transparent"
+                                                            Padding="4,2"
+                                                            Cursor="Hand"
+                                                            ToolTip.Tip="Remove"
+                                                            Click="OnRemovePendingAttachment"
+                                                            Tag="{Binding}">
+                                                        <TextBlock Text="✕" Foreground="#72767d" FontSize="10"/>
+                                                    </Button>
+                                                </StackPanel>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </DockPanel>
+                        </Border>
+
                         <!-- Mention Autocomplete Popup -->
                         <Border Background="#2f3136"
                                 CornerRadius="4"
@@ -1156,12 +1208,25 @@
 
                         <Grid>
                             <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto"/>
                                 <ColumnDefinition Width="*"/>
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
 
+                            <!-- Attach Button -->
+                            <Button Grid.Column="0"
+                                    Background="Transparent"
+                                    Padding="12,10"
+                                    Margin="0,0,4,0"
+                                    CornerRadius="4"
+                                    Cursor="Hand"
+                                    ToolTip.Tip="Attach files"
+                                    Click="OnAttachButtonClick">
+                                <TextBlock Text="📎" FontSize="18" Foreground="#b9bbbe"/>
+                            </Button>
+
                             <TextBox x:Name="MessageInputBox"
-                                     Grid.Column="0"
+                                     Grid.Column="1"
                                      Text="{Binding MessageInput}"
                                      Watermark="{Binding SelectedChannel.Name, StringFormat='Message #{0}'}"
                                      Background="#40444b"
@@ -1171,9 +1236,10 @@
                                      Padding="16,12"
                                      AcceptsReturn="True"
                                      TextWrapping="Wrap"
-                                     MaxHeight="200"/>
+                                     MaxHeight="200"
+                                     DragDrop.AllowDrop="True"/>
 
-                            <Button Grid.Column="1"
+                            <Button Grid.Column="2"
                                     Command="{Binding SendMessageCommand}"
                                     Background="#5865f2"
                                     Foreground="White"
@@ -1291,6 +1357,19 @@
                                             <controls:MessageContentBlock Content="{Binding Content}"
                                                                     FontSize="15"
                                                                     Margin="0,4,0,0"/>
+
+                                            <!-- Attachments Display -->
+                                            <ItemsControl ItemsSource="{Binding Attachments}"
+                                                          Margin="0,4,0,0"
+                                                          IsVisible="{Binding Attachments, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                <ItemsControl.ItemTemplate>
+                                                    <DataTemplate>
+                                                        <controls:AttachmentPreview Attachment="{Binding}"
+                                                                                     BaseUrl="{Binding #MessagesList.DataContext.BaseUrl}"
+                                                                                     ImageClicked="OnAttachmentImageClicked"/>
+                                                    </DataTemplate>
+                                                </ItemsControl.ItemTemplate>
+                                            </ItemsControl>
 
                                             <!-- Reactions Display (only when there are reactions) -->
                                             <ItemsControl ItemsSource="{Binding Reactions}"
@@ -1864,5 +1943,13 @@
                 </DockPanel>
             </Border>
         </Popup>
+
+        <!-- Image Lightbox Overlay -->
+        <controls:ImageLightbox Grid.ColumnSpan="4"
+                                Attachment="{Binding LightboxImage}"
+                                BaseUrl="{Binding BaseUrl}"
+                                CloseRequested="OnLightboxCloseRequested"
+                                HorizontalAlignment="Stretch"
+                                VerticalAlignment="Stretch"/>
     </Grid>
 </UserControl>

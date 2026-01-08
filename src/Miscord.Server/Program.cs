@@ -88,6 +88,11 @@ builder.Services.AddHttpClient<ILinkPreviewService, LinkPreviewService>();
 // Add SFU service (Singleton to maintain WebRTC connections across requests)
 builder.Services.AddSingleton<ISfuService, SfuService>();
 
+// Add file storage service
+builder.Services.Configure<FileStorageSettings>(
+    builder.Configuration.GetSection(FileStorageSettings.SectionName));
+builder.Services.AddScoped<IFileStorageService, FileStorageService>();
+
 // Add controllers
 builder.Services.AddControllers();
 

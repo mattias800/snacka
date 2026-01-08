@@ -92,6 +92,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     // Mention autocomplete state
     private bool _isMentionPopupOpen;
+
+    // File attachment state
+    private ObservableCollection<PendingAttachment> _pendingAttachments = new();
+    private AttachmentResponse? _lightboxImage;
     private string _mentionFilterText = string.Empty;
     private int _mentionStartIndex = -1;
     private int _selectedMentionIndex;
@@ -752,6 +756,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public string Username => _auth.Username;
     public string Email => _auth.Email;
     public Guid UserId => _auth.UserId;
+    public string BaseUrl => _baseUrl;
 
     public ObservableCollection<CommunityResponse> Communities { get; }
     public ObservableCollection<ChannelResponse> Channels { get; }
@@ -902,6 +907,59 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     public bool IsReplying => ReplyingToMessage is not null;
+
+    // File attachment properties
+    public ObservableCollection<PendingAttachment> PendingAttachments => _pendingAttachments;
+    public bool HasPendingAttachments => _pendingAttachments.Count > 0;
+
+    public AttachmentResponse? LightboxImage
+    {
+        get => _lightboxImage;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _lightboxImage, value);
+            this.RaisePropertyChanged(nameof(IsLightboxOpen));
+        }
+    }
+
+    public bool IsLightboxOpen => LightboxImage is not null;
+
+    public void AddPendingAttachment(string fileName, Stream stream, long size, string contentType)
+    {
+        _pendingAttachments.Add(new PendingAttachment
+        {
+            FileName = fileName,
+            Stream = stream,
+            Size = size,
+            ContentType = contentType
+        });
+        this.RaisePropertyChanged(nameof(HasPendingAttachments));
+    }
+
+    public void RemovePendingAttachment(PendingAttachment attachment)
+    {
+        attachment.Dispose();
+        _pendingAttachments.Remove(attachment);
+        this.RaisePropertyChanged(nameof(HasPendingAttachments));
+    }
+
+    public void ClearPendingAttachments()
+    {
+        foreach (var attachment in _pendingAttachments)
+            attachment.Dispose();
+        _pendingAttachments.Clear();
+        this.RaisePropertyChanged(nameof(HasPendingAttachments));
+    }
+
+    public void OpenLightbox(AttachmentResponse attachment)
+    {
+        LightboxImage = attachment;
+    }
+
+    public void CloseLightbox()
+    {
+        LightboxImage = null;
+    }
 
     // Voice channel properties
     public ChannelResponse? CurrentVoiceChannel
@@ -1641,7 +1699,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     private async Task SendMessageAsync()
     {
-        if (SelectedChannel is null || string.IsNullOrWhiteSpace(MessageInput)) return;
+        if (SelectedChannel is null) return;
+
+        // Allow empty content if there are attachments
+        if (string.IsNullOrWhiteSpace(MessageInput) && !HasPendingAttachments) return;
 
         var content = MessageInput;
         var replyToId = ReplyingToMessage?.Id;
@@ -1649,7 +1710,30 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         ReplyingToMessage = null;
         this.RaisePropertyChanged(nameof(IsReplying));
 
-        var result = await _apiClient.SendMessageAsync(SelectedChannel.Id, content, replyToId);
+        ApiResult<MessageResponse> result;
+
+        if (HasPendingAttachments)
+        {
+            // Send with attachments
+            var files = _pendingAttachments.Select(a => new FileAttachment
+            {
+                FileName = a.FileName,
+                Stream = a.Stream,
+                ContentType = a.ContentType
+            }).ToList();
+
+            result = await _apiClient.SendMessageWithAttachmentsAsync(SelectedChannel.Id, content, replyToId, files);
+
+            // Clear pending attachments (streams are now consumed)
+            _pendingAttachments.Clear();
+            this.RaisePropertyChanged(nameof(HasPendingAttachments));
+        }
+        else
+        {
+            // Send text-only message
+            result = await _apiClient.SendMessageAsync(SelectedChannel.Id, content, replyToId);
+        }
+
         if (result.Success && result.Data is not null)
         {
             Messages.Add(result.Data);
@@ -2509,3 +2593,27 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 /// Represents a user who is currently typing.
 /// </summary>
 public record TypingUser(Guid UserId, string Username, DateTime LastTypingAt);
+
+/// <summary>
+/// Represents a file pending upload with a message.
+/// </summary>
+public class PendingAttachment : IDisposable
+{
+    public required string FileName { get; init; }
+    public required Stream Stream { get; init; }
+    public required long Size { get; init; }
+    public required string ContentType { get; init; }
+
+    public string FormattedSize => Size switch
+    {
+        < 1024 => $"{Size} B",
+        < 1024 * 1024 => $"{Size / 1024.0:F1} KB",
+        _ => $"{Size / (1024.0 * 1024.0):F1} MB"
+    };
+
+    public void Dispose()
+    {
+        Stream.Dispose();
+        GC.SuppressFinalize(this);
+    }
+}

@@ -38,4 +38,9 @@ public class Message
     /// </summary>
     public Guid? PinnedByUserId { get; set; }
     public User? PinnedBy { get; set; }
+
+    /// <summary>
+    /// File attachments on this message
+    /// </summary>
+    public ICollection<MessageAttachment> Attachments { get; set; } = new List<MessageAttachment>();
 }

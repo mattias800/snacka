@@ -44,6 +44,7 @@ public interface IApiClient
     // Messages
     Task<ApiResult<List<MessageResponse>>> GetMessagesAsync(Guid channelId, int skip = 0, int take = 50);
     Task<ApiResult<MessageResponse>> SendMessageAsync(Guid channelId, string content, Guid? replyToId = null);
+    Task<ApiResult<MessageResponse>> SendMessageWithAttachmentsAsync(Guid channelId, string? content, Guid? replyToId, IEnumerable<FileAttachment> files);
     Task<ApiResult<MessageResponse>> UpdateMessageAsync(Guid channelId, Guid messageId, string content);
     Task<ApiResult<bool>> DeleteMessageAsync(Guid channelId, Guid messageId);
 

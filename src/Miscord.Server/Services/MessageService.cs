@@ -20,6 +20,7 @@ public sealed class MessageService : IMessageService
             .Include(m => m.Reactions)
             .ThenInclude(r => r.User)
             .Include(m => m.PinnedBy)
+            .Include(m => m.Attachments)
             .Where(m => m.ChannelId == channelId)
             .OrderByDescending(m => m.CreatedAt)
             .Skip(skip)
@@ -188,6 +189,7 @@ public sealed class MessageService : IMessageService
             .Include(m => m.Reactions)
             .ThenInclude(r => r.User)
             .Include(m => m.PinnedBy)
+            .Include(m => m.Attachments)
             .Where(m => m.ChannelId == channelId && m.IsPinned)
             .OrderByDescending(m => m.PinnedAt)
             .ToListAsync(cancellationToken);
@@ -223,6 +225,16 @@ public sealed class MessageService : IMessageService
             .ToList() : null,
         m.IsPinned,
         m.PinnedAt,
-        m.PinnedBy?.Username
+        m.PinnedBy?.Username,
+        m.Attachments.Count > 0 ? m.Attachments
+            .Select(a => new AttachmentResponse(
+                a.Id,
+                a.FileName,
+                a.ContentType,
+                a.FileSize,
+                a.IsImage,
+                $"/api/attachments/{a.StoredFileName}"
+            ))
+            .ToList() : null
     );
 }

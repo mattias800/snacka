@@ -6,8 +6,11 @@ using Avalonia.Controls.Shapes;
 using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Media;
+using Avalonia.Platform.Storage;
 using Avalonia.ReactiveUI;
 using Avalonia.Threading;
+using Miscord.Client.Controls;
+using Miscord.Client.Services;
 using Miscord.Client.ViewModels;
 using Miscord.Shared.Models;
 
@@ -698,5 +701,131 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             Console.WriteLine($"MainAppView: ERROR in RedrawAnnotations: {ex.Message}");
             Console.WriteLine($"MainAppView: Stack trace: {ex.StackTrace}");
         }
+    }
+
+    // ==================== File Attachment Handlers ====================
+
+    /// <summary>
+    /// Called when the attach button is clicked to open file picker.
+    /// </summary>
+    private async void OnAttachButtonClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel == null) return;
+
+        var topLevel = TopLevel.GetTopLevel(this);
+        if (topLevel == null) return;
+
+        var files = await topLevel.StorageProvider.OpenFilePickerAsync(new FilePickerOpenOptions
+        {
+            Title = "Select files to attach",
+            AllowMultiple = true,
+            FileTypeFilter = new[]
+            {
+                new FilePickerFileType("All supported files")
+                {
+                    Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp", "*.pdf", "*.txt", "*.doc", "*.docx", "*.zip" }
+                },
+                new FilePickerFileType("Images")
+                {
+                    Patterns = new[] { "*.jpg", "*.jpeg", "*.png", "*.gif", "*.webp" },
+                    MimeTypes = new[] { "image/*" }
+                },
+                new FilePickerFileType("Documents")
+                {
+                    Patterns = new[] { "*.pdf", "*.txt", "*.doc", "*.docx" }
+                },
+                FilePickerFileTypes.All
+            }
+        });
+
+        foreach (var file in files)
+        {
+            await AddFileAsAttachmentAsync(file);
+        }
+    }
+
+    /// <summary>
+    /// Called when the remove button is clicked on a pending attachment.
+    /// </summary>
+    private void OnRemovePendingAttachment(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button && button.Tag is PendingAttachment attachment && ViewModel != null)
+        {
+            ViewModel.RemovePendingAttachment(attachment);
+        }
+    }
+
+    /// <summary>
+    /// Called when an image attachment is clicked to open the lightbox.
+    /// </summary>
+    private void OnAttachmentImageClicked(object? sender, AttachmentResponse attachment)
+    {
+        ViewModel?.OpenLightbox(attachment);
+    }
+
+    /// <summary>
+    /// Called when the lightbox close is requested.
+    /// </summary>
+    private void OnLightboxCloseRequested(object? sender, EventArgs e)
+    {
+        ViewModel?.CloseLightbox();
+    }
+
+    /// <summary>
+    /// Adds a file from the storage provider as a pending attachment.
+    /// </summary>
+    private async Task AddFileAsAttachmentAsync(IStorageFile file)
+    {
+        if (ViewModel == null) return;
+
+        try
+        {
+            var props = await file.GetBasicPropertiesAsync();
+            var size = (long)(props?.Size ?? 0);
+
+            // Check file size (25MB limit)
+            if (size > 25 * 1024 * 1024)
+            {
+                Console.WriteLine($"File too large: {file.Name} ({size} bytes)");
+                return;
+            }
+
+            // Read file into memory stream
+            await using var fileStream = await file.OpenReadAsync();
+            var memoryStream = new MemoryStream();
+            await fileStream.CopyToAsync(memoryStream);
+            memoryStream.Position = 0;
+
+            // Determine content type based on extension
+            var extension = System.IO.Path.GetExtension(file.Name).ToLowerInvariant();
+            var contentType = GetContentTypeFromExtension(extension);
+
+            ViewModel.AddPendingAttachment(file.Name, memoryStream, size, contentType);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to add attachment: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Gets the content type based on file extension.
+    /// </summary>
+    private static string GetContentTypeFromExtension(string extension)
+    {
+        return extension switch
+        {
+            ".jpg" => "image/jpeg",
+            ".jpeg" => "image/jpeg",
+            ".png" => "image/png",
+            ".gif" => "image/gif",
+            ".webp" => "image/webp",
+            ".pdf" => "application/pdf",
+            ".txt" => "text/plain",
+            ".doc" => "application/msword",
+            ".docx" => "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+            ".zip" => "application/zip",
+            _ => "application/octet-stream"
+        };
     }
 }

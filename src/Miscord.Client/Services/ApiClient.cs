@@ -265,6 +265,49 @@ public class ApiClient : IApiClient
             new SendMessageRequest(content, replyToId));
     }
 
+    public async Task<ApiResult<MessageResponse>> SendMessageWithAttachmentsAsync(
+        Guid channelId,
+        string? content,
+        Guid? replyToId,
+        IEnumerable<FileAttachment> files)
+    {
+        try
+        {
+            using var formData = new MultipartFormDataContent();
+
+            formData.Add(new StringContent(content ?? string.Empty), "content");
+
+            if (replyToId.HasValue)
+                formData.Add(new StringContent(replyToId.Value.ToString()), "replyToId");
+
+            foreach (var file in files)
+            {
+                var streamContent = new StreamContent(file.Stream);
+                streamContent.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue(file.ContentType);
+                formData.Add(streamContent, "files", file.FileName);
+            }
+
+            var response = await _httpClient.PostAsync(
+                BuildUrl($"/api/channels/{channelId}/messages/with-attachments"),
+                formData);
+
+            if (response.IsSuccessStatusCode)
+            {
+                var data = await response.Content.ReadFromJsonAsync<MessageResponse>(JsonOptions);
+                return data is not null
+                    ? ApiResult<MessageResponse>.Ok(data)
+                    : ApiResult<MessageResponse>.Fail("Invalid response");
+            }
+
+            var error = await TryReadError(response);
+            return ApiResult<MessageResponse>.Fail(error);
+        }
+        catch (Exception ex)
+        {
+            return ApiResult<MessageResponse>.Fail($"Upload failed: {ex.Message}");
+        }
+    }
+
     public async Task<ApiResult<MessageResponse>> UpdateMessageAsync(Guid channelId, Guid messageId, string content)
     {
         return await PutAsync<UpdateMessageRequest, MessageResponse>(

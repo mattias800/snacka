@@ -17,6 +17,7 @@ public sealed class MiscordDbContext : DbContext
     public DbSet<ServerInvite> ServerInvites => Set<ServerInvite>();
     public DbSet<ChannelReadState> ChannelReadStates => Set<ChannelReadState>();
     public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
+    public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -172,5 +173,16 @@ public sealed class MiscordDbContext : DbContext
         modelBuilder.Entity<MessageReaction>()
             .HasIndex(mr => new { mr.MessageId, mr.UserId, mr.Emoji })
             .IsUnique();
+
+        // MessageAttachment configuration
+        modelBuilder.Entity<MessageAttachment>()
+            .HasKey(ma => ma.Id);
+        modelBuilder.Entity<MessageAttachment>()
+            .HasOne(ma => ma.Message)
+            .WithMany(m => m.Attachments)
+            .HasForeignKey(ma => ma.MessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<MessageAttachment>()
+            .HasIndex(ma => ma.MessageId);
     }
 }
