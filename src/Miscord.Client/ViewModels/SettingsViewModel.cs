@@ -23,7 +23,8 @@ public class SettingsViewModel : ViewModelBase
         IApiClient? apiClient = null,
         Action? onAccountDeleted = null,
         bool isServerAdmin = false,
-        Func<Task<IStorageFile?>>? selectImageFile = null)
+        Func<Task<IStorageFile?>>? selectImageFile = null,
+        bool gifsEnabled = false)
     {
         _onClose = onClose;
         _settingsStore = settingsStore;
@@ -48,7 +49,7 @@ public class SettingsViewModel : ViewModelBase
 
         if (apiClient is not null && isServerAdmin)
         {
-            AdminPanelViewModel = new AdminPanelViewModel(apiClient);
+            AdminPanelViewModel = new AdminPanelViewModel(apiClient, gifsEnabled);
         }
 
         // Start with Voice & Video page

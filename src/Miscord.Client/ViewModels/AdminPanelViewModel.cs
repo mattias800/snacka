@@ -18,9 +18,13 @@ public class AdminPanelViewModel : ViewModelBase
     private int _newInviteMaxUses;
     private string _selectedTab = "Invites";
 
-    public AdminPanelViewModel(IApiClient apiClient)
+    // Server feature flags
+    private readonly bool _gifsEnabled;
+
+    public AdminPanelViewModel(IApiClient apiClient, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
+        _gifsEnabled = gifsEnabled;
 
         Invites = new ObservableCollection<InviteViewModel>();
         Users = new ObservableCollection<UserViewModel>();
@@ -39,6 +43,10 @@ public class AdminPanelViewModel : ViewModelBase
     public ObservableCollection<InviteViewModel> Invites { get; }
     public ObservableCollection<UserViewModel> Users { get; }
 
+    // Server feature flags
+    public bool IsGifsEnabled => _gifsEnabled;
+    public bool HasMissingConfiguration => !_gifsEnabled;
+
     public string SelectedTab
     {
         get => _selectedTab;
@@ -47,11 +55,13 @@ public class AdminPanelViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _selectedTab, value);
             this.RaisePropertyChanged(nameof(IsInvitesTabSelected));
             this.RaisePropertyChanged(nameof(IsUsersTabSelected));
+            this.RaisePropertyChanged(nameof(IsConfigTabSelected));
         }
     }
 
     public bool IsInvitesTabSelected => SelectedTab == "Invites";
     public bool IsUsersTabSelected => SelectedTab == "Users";
+    public bool IsConfigTabSelected => SelectedTab == "Config";
 
     public bool IsLoadingInvites
     {

@@ -110,9 +110,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private CommunityMemberResponse? _editingNicknameMember;
     private string _editingNickname = string.Empty;
 
-    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null)
+    // Server feature flags
+    private readonly bool _isGifsEnabled;
+
+    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
+        _isGifsEnabled = gifsEnabled;
         _screenCaptureService = screenCaptureService;
         _signalR = signalR;
         _webRtc = webRtc;
@@ -998,6 +1002,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private string _gifSearchQuery = string.Empty;
     private bool _isLoadingGifs;
     private string? _gifNextPos;
+
+    public bool IsGifsEnabled => _isGifsEnabled;
 
     public ObservableCollection<GifResult> GifResults => _gifResults;
 

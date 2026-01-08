@@ -50,6 +50,33 @@
                         </Style>
                     </Button.Styles>
                 </Button>
+                <Button Command="{Binding SelectTabCommand}"
+                        CommandParameter="Config"
+                        Padding="16,8"
+                        CornerRadius="4"
+                        FontWeight="SemiBold"
+                        Classes.selected="{Binding IsConfigTabSelected}"
+                        Classes.warning="{Binding HasMissingConfiguration}">
+                    <StackPanel Orientation="Horizontal" Spacing="6">
+                        <TextBlock Text="Config"/>
+                        <TextBlock Text="!"
+                                   FontWeight="Bold"
+                                   IsVisible="{Binding HasMissingConfiguration}"/>
+                    </StackPanel>
+                    <Button.Styles>
+                        <Style Selector="Button">
+                            <Setter Property="Background" Value="#4f545c"/>
+                            <Setter Property="Foreground" Value="#dcddde"/>
+                        </Style>
+                        <Style Selector="Button.selected">
+                            <Setter Property="Background" Value="#5865f2"/>
+                            <Setter Property="Foreground" Value="White"/>
+                        </Style>
+                        <Style Selector="Button.warning:not(.selected)">
+                            <Setter Property="Foreground" Value="#faa61a"/>
+                        </Style>
+                    </Button.Styles>
+                </Button>
             </StackPanel>
 
             <!-- Invites Tab -->
@@ -335,6 +362,113 @@
                            Foreground="#72767d"
                            FontStyle="Italic"
                            IsVisible="{Binding !Users.Count}"/>
+            </StackPanel>
+
+            <!-- Config Tab -->
+            <StackPanel IsVisible="{Binding IsConfigTabSelected}"
+                        Spacing="16">
+                <TextBlock Text="OPTIONAL FEATURES"
+                           FontSize="12"
+                           FontWeight="SemiBold"
+                           Foreground="#72767d"/>
+
+                <TextBlock Text="Some features require additional configuration on the server. Missing configuration is indicated below."
+                           Foreground="#b9bbbe"
+                           FontSize="13"
+                           TextWrapping="Wrap"/>
+
+                <!-- GIF Support -->
+                <Border Background="#2f3136" CornerRadius="8" Padding="16">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Spacing="4">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="GIF Search"
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           Foreground="White"/>
+                                <Border CornerRadius="4"
+                                        Padding="6,2"
+                                        Background="#43b581"
+                                        IsVisible="{Binding IsGifsEnabled}">
+                                    <TextBlock Text="Enabled"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="White"/>
+                                </Border>
+                                <Border CornerRadius="4"
+                                        Padding="6,2"
+                                        Background="#f04747"
+                                        IsVisible="{Binding !IsGifsEnabled}">
+                                    <TextBlock Text="Disabled"
+                                               FontSize="11"
+                                               FontWeight="SemiBold"
+                                               Foreground="White"/>
+                                </Border>
+                            </StackPanel>
+                            <TextBlock Text="Allows users to search and send GIFs via Tenor"
+                                       FontSize="13"
+                                       Foreground="#72767d"/>
+                        </StackPanel>
+
+                        <StackPanel Grid.Column="1" VerticalAlignment="Center" IsVisible="{Binding !IsGifsEnabled}">
+                            <TextBlock Text="Missing: Tenor API Key"
+                                       Foreground="#faa61a"
+                                       FontSize="12"
+                                       FontWeight="SemiBold"/>
+                        </StackPanel>
+                    </Grid>
+                </Border>
+
+                <!-- Configuration Instructions -->
+                <Border Background="#2f3136" CornerRadius="8" Padding="16" IsVisible="{Binding HasMissingConfiguration}">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="HOW TO CONFIGURE"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="#72767d"/>
+
+                        <TextBlock TextWrapping="Wrap"
+                                   Foreground="#b9bbbe"
+                                   FontSize="13">
+                            <Run Text="To enable missing features, update your server's "/><Run Text="appsettings.json" FontFamily="Consolas, Monaco, monospace" Foreground="#7289da"/><Run Text=" or set environment variables:"/>
+                        </TextBlock>
+
+                        <Border Background="#202225" CornerRadius="4" Padding="12" IsVisible="{Binding !IsGifsEnabled}">
+                            <StackPanel Spacing="4">
+                                <TextBlock Text="GIF Search (Tenor API):"
+                                           FontSize="12"
+                                           FontWeight="SemiBold"
+                                           Foreground="#dcddde"/>
+                                <TextBlock Text="1. Get a free API key at: https://developers.google.com/tenor"
+                                           FontSize="12"
+                                           Foreground="#b9bbbe"/>
+                                <TextBlock FontSize="12"
+                                           Foreground="#b9bbbe">
+                                    <Run Text="2. Set "/><Run Text="Tenor__ApiKey" FontFamily="Consolas, Monaco, monospace" Foreground="#7289da"/><Run Text=" environment variable"/>
+                                </TextBlock>
+                                <TextBlock FontSize="12"
+                                           Foreground="#b9bbbe">
+                                    <Run Text="   Or add to appsettings.json: "/><Run Text="&quot;Tenor&quot;: { &quot;ApiKey&quot;: &quot;YOUR_KEY&quot; }" FontFamily="Consolas, Monaco, monospace" Foreground="#7289da"/>
+                                </TextBlock>
+                                <TextBlock Text="3. Restart the server"
+                                           FontSize="12"
+                                           Foreground="#b9bbbe"/>
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </Border>
+
+                <!-- All configured message -->
+                <Border Background="#2f3136" CornerRadius="8" Padding="16" IsVisible="{Binding !HasMissingConfiguration}">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="&#x2713;"
+                                   FontSize="16"
+                                   Foreground="#43b581"/>
+                        <TextBlock Text="All optional features are configured!"
+                                   FontSize="14"
+                                   Foreground="#43b581"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
         </StackPanel>
     </ScrollViewer>

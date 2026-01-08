@@ -1235,6 +1235,7 @@
                                     CornerRadius="4"
                                     Cursor="Hand"
                                     ToolTip.Tip="Send a GIF"
+                                    IsVisible="{Binding IsGifsEnabled}"
                                     Click="OnGifButtonClick">
                                 <TextBlock Text="GIF" FontSize="11" FontWeight="Bold" Foreground="#b9bbbe"/>
                             </Button>

@@ -388,7 +388,7 @@ public class MainWindowViewModel : ViewModelBase
             _connectionStore.Save(updatedServer);
         }
 
-        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, CurrentServer!.Url, auth, OnLogout, OnSwitchServer, OnOpenDirectMessages, OnOpenDirectMessagesWithUser, OnOpenSettings);
+        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, CurrentServer!.Url, auth, OnLogout, OnSwitchServer, OnOpenDirectMessages, OnOpenDirectMessagesWithUser, OnOpenSettings, gifsEnabled: _currentServerInfo?.GifsEnabled ?? false);
     }
 
     private void OnOpenDirectMessages()
@@ -408,7 +408,8 @@ public class MainWindowViewModel : ViewModelBase
             apiClient: _apiClient,
             onAccountDeleted: OnLogout,
             isServerAdmin: CurrentUser.IsServerAdmin,
-            selectImageFile: ImageFilePickerProvider
+            selectImageFile: ImageFilePickerProvider,
+            gifsEnabled: _currentServerInfo?.GifsEnabled ?? false
         );
     }
 

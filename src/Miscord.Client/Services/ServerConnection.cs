@@ -45,5 +45,6 @@ public record ServerInfoResponse(
     string Version,
     bool AllowRegistration,
     bool HasUsers,
-    string? BootstrapInviteCode
+    string? BootstrapInviteCode,
+    bool GifsEnabled = false
 );
