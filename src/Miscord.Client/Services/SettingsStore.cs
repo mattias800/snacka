@@ -24,6 +24,9 @@ public class UserSettings
     public bool IsMuted { get; set; } = false;
     public bool IsDeafened { get; set; } = false;
 
+    // Push-to-talk settings
+    public bool PushToTalkEnabled { get; set; } = false;
+
     // Video settings
     public string? VideoDevice { get; set; }  // null = default/first camera
 }

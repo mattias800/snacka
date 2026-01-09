@@ -44,6 +44,10 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         // ESC key to exit fullscreen video
         this.AddHandler(KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
 
+        // Push-to-talk: Space key handling
+        this.AddHandler(KeyDownEvent, OnPushToTalkKeyDown, RoutingStrategies.Tunnel);
+        this.AddHandler(KeyUpEvent, OnPushToTalkKeyUp, RoutingStrategies.Tunnel);
+
         // Subscribe to ViewModel changes for annotation redraw
         this.DataContextChanged += OnDataContextChanged;
 
@@ -937,5 +941,62 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             ".aac" => "audio/aac",
             _ => "application/octet-stream"
         };
+    }
+
+    // ==================== Audio Device Popup Handlers ====================
+
+    /// <summary>
+    /// Called when the audio device button is clicked to open the device selection popup.
+    /// </summary>
+    private void OnAudioDeviceButtonClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.OpenAudioDevicePopup();
+    }
+
+    /// <summary>
+    /// Called when the refresh devices button is clicked.
+    /// </summary>
+    private void OnRefreshAudioDevicesClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.RefreshAudioDevices();
+    }
+
+    // ==================== Push-to-Talk Handlers ====================
+
+    /// <summary>
+    /// Called when a key is pressed - handles push-to-talk activation.
+    /// </summary>
+    private void OnPushToTalkKeyDown(object? sender, KeyEventArgs e)
+    {
+        // Only handle Space key for push-to-talk
+        if (e.Key != Key.Space) return;
+
+        // Don't trigger PTT when typing in a text box
+        if (e.Source is TextBox) return;
+
+        // Check if push-to-talk is enabled and we're in a voice channel
+        if (ViewModel?.PushToTalkEnabled == true && ViewModel?.IsInVoiceChannel == true)
+        {
+            ViewModel.HandlePushToTalk(true);
+            // Don't mark as handled - allow other key handlers to process if needed
+        }
+    }
+
+    /// <summary>
+    /// Called when a key is released - handles push-to-talk deactivation.
+    /// </summary>
+    private void OnPushToTalkKeyUp(object? sender, KeyEventArgs e)
+    {
+        // Only handle Space key for push-to-talk
+        if (e.Key != Key.Space) return;
+
+        // Don't trigger PTT when typing in a text box
+        if (e.Source is TextBox) return;
+
+        // Check if push-to-talk is enabled and we're in a voice channel
+        if (ViewModel?.PushToTalkEnabled == true && ViewModel?.IsInVoiceChannel == true)
+        {
+            ViewModel.HandlePushToTalk(false);
+        }
     }
 }

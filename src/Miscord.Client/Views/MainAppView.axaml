@@ -407,6 +407,15 @@
                                     <TextBlock Text="🔊" Foreground="#b9bbbe" FontSize="14"/>
                                 </Button>
                             </Panel>
+                            <!-- Audio Device Button -->
+                            <Button x:Name="AudioDeviceButton"
+                                    Background="Transparent"
+                                    Padding="6,4"
+                                    Cursor="Hand"
+                                    ToolTip.Tip="Audio Devices"
+                                    Click="OnAudioDeviceButtonClick">
+                                <TextBlock Text="🎧" Foreground="#b9bbbe" FontSize="14"/>
+                            </Button>
                             <!-- Settings Button -->
                             <Button Command="{Binding OpenSettingsCommand}"
                                     Background="Transparent"
@@ -2095,6 +2104,96 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </DockPanel>
+            </Border>
+        </Popup>
+
+        <!-- Audio Device Popup -->
+        <Popup x:Name="AudioDevicePopup"
+               IsOpen="{Binding IsAudioDevicePopupOpen}"
+               IsLightDismissEnabled="True"
+               Placement="Top"
+               PlacementTarget="{Binding #AudioDeviceButton}">
+            <Border Background="#2f3136"
+                    CornerRadius="8"
+                    Padding="12"
+                    BorderBrush="#202225"
+                    BorderThickness="1"
+                    Width="280">
+                <StackPanel Spacing="12">
+                    <!-- Header -->
+                    <TextBlock Text="AUDIO DEVICES"
+                               FontSize="12"
+                               FontWeight="SemiBold"
+                               Foreground="#72767d"/>
+
+                    <!-- Input Device -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Input Device"
+                                   FontSize="12"
+                                   Foreground="#b9bbbe"/>
+                        <ComboBox ItemsSource="{Binding InputDevices}"
+                                  SelectedValue="{Binding SelectedInputDevice}"
+                                  SelectedValueBinding="{Binding Value}"
+                                  DisplayMemberBinding="{Binding DisplayName}"
+                                  Background="#40444b"
+                                  Foreground="White"
+                                  HorizontalAlignment="Stretch"/>
+                        <!-- Input Level Meter -->
+                        <StackPanel Margin="0,4,0,0" Spacing="2">
+                            <ProgressBar Minimum="0"
+                                         Maximum="1"
+                                         Value="{Binding InputLevel}"
+                                         Height="6"
+                                         Background="#40444b"
+                                         Foreground="#43b581"
+                                         CornerRadius="3"/>
+                            <TextBlock Text="Speak to test microphone"
+                                       FontSize="10"
+                                       Foreground="#72767d"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Output Device -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Output Device"
+                                   FontSize="12"
+                                   Foreground="#b9bbbe"/>
+                        <ComboBox ItemsSource="{Binding OutputDevices}"
+                                  SelectedValue="{Binding SelectedOutputDevice}"
+                                  SelectedValueBinding="{Binding Value}"
+                                  DisplayMemberBinding="{Binding DisplayName}"
+                                  Background="#40444b"
+                                  Foreground="White"
+                                  HorizontalAlignment="Stretch"/>
+                    </StackPanel>
+
+                    <!-- Voice Mode -->
+                    <StackPanel Spacing="4">
+                        <TextBlock Text="Voice Mode"
+                                   FontSize="12"
+                                   Foreground="#b9bbbe"/>
+                        <CheckBox IsChecked="{Binding PushToTalkEnabled}"
+                                  Foreground="#dcddde">
+                            <TextBlock Text="Push-to-talk (hold Space to talk)"
+                                       FontSize="12"/>
+                        </CheckBox>
+                        <TextBlock Text="{Binding VoiceModeDescription}"
+                                   FontSize="10"
+                                   Foreground="#72767d"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+
+                    <!-- Refresh Button -->
+                    <Button Content="Refresh Devices"
+                            HorizontalAlignment="Stretch"
+                            Background="#5865f2"
+                            Foreground="White"
+                            Padding="8,6"
+                            CornerRadius="4"
+                            Cursor="Hand"
+                            Click="OnRefreshAudioDevicesClick"/>
+                </StackPanel>
             </Border>
         </Popup>
 

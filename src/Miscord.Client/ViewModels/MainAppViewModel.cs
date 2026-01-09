@@ -15,6 +15,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private readonly IWebRtcService _webRtc;
     private readonly IScreenCaptureService _screenCaptureService;
     private readonly ISettingsStore _settingsStore;
+    private readonly IAudioDeviceService _audioDeviceService;
     private readonly AuthResponse _auth;
     private readonly Action _onLogout;
     private readonly Action? _onSwitchServer;
@@ -115,12 +116,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Server feature flags
     private readonly bool _isGifsEnabled;
 
-    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null, bool gifsEnabled = false)
+    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
         _isGifsEnabled = gifsEnabled;
         _screenCaptureService = screenCaptureService;
         _settingsStore = settingsStore;
+        _audioDeviceService = audioDeviceService;
         _signalR = signalR;
         _webRtc = webRtc;
         _baseUrl = baseUrl;
@@ -1113,6 +1115,175 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _gifResults.Clear();
         GifSearchQuery = string.Empty;
         _gifNextPos = null;
+    }
+
+    // Quick audio device switcher
+    private ObservableCollection<AudioDeviceItem> _inputDevices = new();
+    private ObservableCollection<AudioDeviceItem> _outputDevices = new();
+    private bool _isAudioDevicePopupOpen;
+    private float _inputLevel;
+
+    public ObservableCollection<AudioDeviceItem> InputDevices => _inputDevices;
+    public ObservableCollection<AudioDeviceItem> OutputDevices => _outputDevices;
+
+    public float InputLevel
+    {
+        get => _inputLevel;
+        set => this.RaiseAndSetIfChanged(ref _inputLevel, value);
+    }
+
+    public bool IsAudioDevicePopupOpen
+    {
+        get => _isAudioDevicePopupOpen;
+        set
+        {
+            if (_isAudioDevicePopupOpen == value) return;
+            this.RaiseAndSetIfChanged(ref _isAudioDevicePopupOpen, value);
+
+            // Start/stop audio level monitoring when popup opens/closes
+            if (value)
+            {
+                _ = StartAudioLevelMonitoringAsync();
+            }
+            else
+            {
+                _ = StopAudioLevelMonitoringAsync();
+            }
+        }
+    }
+
+    public string? SelectedInputDevice
+    {
+        get => _settingsStore.Settings.AudioInputDevice;
+        set
+        {
+            if (_settingsStore.Settings.AudioInputDevice == value) return;
+            _settingsStore.Settings.AudioInputDevice = value;
+            _settingsStore.Save();
+            this.RaisePropertyChanged(nameof(SelectedInputDevice));
+            this.RaisePropertyChanged(nameof(SelectedInputDeviceDisplay));
+            this.RaisePropertyChanged(nameof(HasNoInputDevice));
+            this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
+        }
+    }
+
+    public string? SelectedOutputDevice
+    {
+        get => _settingsStore.Settings.AudioOutputDevice;
+        set
+        {
+            if (_settingsStore.Settings.AudioOutputDevice == value) return;
+            _settingsStore.Settings.AudioOutputDevice = value;
+            _settingsStore.Save();
+            this.RaisePropertyChanged(nameof(SelectedOutputDevice));
+            this.RaisePropertyChanged(nameof(SelectedOutputDeviceDisplay));
+            this.RaisePropertyChanged(nameof(HasNoOutputDevice));
+            this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
+        }
+    }
+
+    public string SelectedInputDeviceDisplay => _settingsStore.Settings.AudioInputDevice ?? "Default";
+    public string SelectedOutputDeviceDisplay => _settingsStore.Settings.AudioOutputDevice ?? "Default";
+
+    // Push-to-talk
+    private bool _isPushToTalkActive;
+
+    public bool PushToTalkEnabled
+    {
+        get => _settingsStore.Settings.PushToTalkEnabled;
+        set
+        {
+            if (_settingsStore.Settings.PushToTalkEnabled == value) return;
+            _settingsStore.Settings.PushToTalkEnabled = value;
+            _settingsStore.Save();
+            this.RaisePropertyChanged(nameof(PushToTalkEnabled));
+            this.RaisePropertyChanged(nameof(VoiceModeDescription));
+
+            // When PTT is enabled, start muted; when disabled, unmute if was PTT muted
+            if (value && IsInVoiceChannel)
+            {
+                IsMuted = true;
+            }
+        }
+    }
+
+    public string VoiceModeDescription => PushToTalkEnabled
+        ? "Push-to-talk: Hold Space to talk"
+        : "Voice activity: Speak to transmit";
+
+    /// <summary>
+    /// Called when push-to-talk key is pressed or released.
+    /// </summary>
+    public void HandlePushToTalk(bool isPressed)
+    {
+        if (!PushToTalkEnabled || !IsInVoiceChannel) return;
+
+        _isPushToTalkActive = isPressed;
+
+        // When PTT key is pressed, unmute; when released, mute
+        if (isPressed)
+        {
+            IsMuted = false;
+        }
+        else
+        {
+            IsMuted = true;
+        }
+    }
+
+    public void OpenAudioDevicePopup()
+    {
+        RefreshAudioDevices();
+        IsAudioDevicePopupOpen = true;
+    }
+
+    public void RefreshAudioDevices()
+    {
+        _inputDevices.Clear();
+        _outputDevices.Clear();
+
+        // Add default option
+        _inputDevices.Add(new AudioDeviceItem(null, "Default"));
+        _outputDevices.Add(new AudioDeviceItem(null, "Default"));
+
+        // Add available devices
+        foreach (var device in _audioDeviceService.GetInputDevices())
+        {
+            _inputDevices.Add(new AudioDeviceItem(device, device));
+        }
+
+        foreach (var device in _audioDeviceService.GetOutputDevices())
+        {
+            _outputDevices.Add(new AudioDeviceItem(device, device));
+        }
+    }
+
+    private async Task StartAudioLevelMonitoringAsync()
+    {
+        try
+        {
+            await _audioDeviceService.StartInputTestAsync(
+                SelectedInputDevice,
+                level => Avalonia.Threading.Dispatcher.UIThread.Post(() => InputLevel = level)
+            );
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"MainAppViewModel: Failed to start audio level monitoring - {ex.Message}");
+        }
+    }
+
+    private async Task StopAudioLevelMonitoringAsync()
+    {
+        try
+        {
+            await _audioDeviceService.StopTestAsync();
+            InputLevel = 0;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"MainAppViewModel: Failed to stop audio level monitoring - {ex.Message}");
+        }
     }
 
     // Voice channel properties

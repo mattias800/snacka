@@ -34,10 +34,10 @@ This document outlines planned improvements for voice channels in Miscord.
 ### Phase 2: Audio Quality
 
 #### 2.1 Audio Device Selection
-- [ ] Quick audio input device switcher in user panel
-- [ ] Quick audio output device switcher in user panel
-- [ ] Audio level meter in user panel
-- [ ] Push-to-talk option
+- [x] Quick audio input device switcher in user panel
+- [x] Quick audio output device switcher in user panel
+- [x] Audio level meter in user panel
+- [x] Push-to-talk option
 
 #### 2.2 Noise Suppression
 - [ ] Built-in noise suppression toggle
@@ -92,9 +92,10 @@ This document outlines planned improvements for voice channels in Miscord.
 - [x] Remember mute/deafen state between sessions
 - [x] Show muted icon on user avatar
 - [x] Speaking indicator ring on avatar
+- [x] Phase 2.1: Audio device selection (input/output switcher, level meter, push-to-talk)
 
 ### In Progress
-- [ ] Phase 2: Audio Quality
+- [ ] Phase 2.2: Noise Suppression (optional)
 
 ### Not Started
 - [ ] Phase 3: Advanced Features (includes server mute for admin)
