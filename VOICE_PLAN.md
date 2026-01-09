@@ -26,8 +26,8 @@ This document outlines planned improvements for voice channels in Miscord.
 
 #### 1.2 Visual Feedback Improvements
 - [x] Show muted icon on user avatar in sidebar
-- [ ] Pulse animation on avatar when speaking
-- [ ] Different icon for self-muted vs server-muted
+- [x] Speaking indicator ring on avatar (green ring when speaking)
+- [ ] Different icon for self-muted vs server-muted (requires server-side admin mute feature - see 3.1)
 
 ---
 
@@ -49,6 +49,8 @@ This document outlines planned improvements for voice channels in Miscord.
 ### Phase 3: Advanced Features
 
 #### 3.1 Voice Channel Permissions
+- [ ] Server mute (admin can mute users)
+- [ ] Server deafen (admin can deafen users)
 - [ ] Channel-specific mute permissions
 - [ ] Priority speaker role
 - [ ] Move users between channels (admin)
@@ -89,11 +91,11 @@ This document outlines planned improvements for voice channels in Miscord.
 - [x] Phase 1.1: Always-visible mute/deafen controls
 - [x] Remember mute/deafen state between sessions
 - [x] Show muted icon on user avatar
+- [x] Speaking indicator ring on avatar
 
 ### In Progress
-- [ ] Phase 1.2: Visual feedback improvements (pulse animation, self-mute vs server-mute)
+- [ ] Phase 2: Audio Quality
 
 ### Not Started
-- [ ] Phase 2: Audio Quality
-- [ ] Phase 3: Advanced Features
+- [ ] Phase 3: Advanced Features (includes server mute for admin)
 - [ ] Phase 4: Nice to Have

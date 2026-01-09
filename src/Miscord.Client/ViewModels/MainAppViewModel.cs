@@ -41,6 +41,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isDeafened;
     private bool _isCameraOn;
     private bool _isScreenSharing;
+    private bool _isSpeaking;
     private VoiceConnectionStatus _voiceConnectionStatus = VoiceConnectionStatus.Disconnected;
     private ObservableCollection<VoiceParticipantResponse> _voiceParticipants = new();
 
@@ -619,6 +620,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Local speaking detection - broadcast to others and update own state
         _webRtc.SpeakingChanged += isSpeaking => Dispatcher.UIThread.Post(async () =>
         {
+            // Update local speaking state (for avatar indicator)
+            IsSpeaking = isSpeaking;
+
             // Capture channel reference to avoid race condition during leave
             var currentChannel = CurrentVoiceChannel;
             if (currentChannel is not null)
@@ -1163,6 +1167,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         get => _isScreenSharing;
         set => this.RaiseAndSetIfChanged(ref _isScreenSharing, value);
+    }
+
+    public bool IsSpeaking
+    {
+        get => _isSpeaking;
+        set => this.RaiseAndSetIfChanged(ref _isSpeaking, value);
     }
 
     /// <summary>

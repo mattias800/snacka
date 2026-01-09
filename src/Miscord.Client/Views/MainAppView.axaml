@@ -324,8 +324,15 @@
                             <ColumnDefinition Width="Auto"/>
                         </Grid.ColumnDefinitions>
 
-                        <Panel Grid.Column="0" Width="32" Height="32" Margin="0,0,8,0">
-                            <Border Width="32" Height="32" CornerRadius="16" Background="#5865f2">
+                        <Panel Grid.Column="0" Width="36" Height="36" Margin="0,0,6,0">
+                            <!-- Speaking indicator ring (green glow when speaking) -->
+                            <Border Width="36" Height="36"
+                                    CornerRadius="18"
+                                    BorderBrush="#3ba55c"
+                                    BorderThickness="2"
+                                    IsVisible="{Binding IsSpeaking}"/>
+                            <Border Width="32" Height="32" CornerRadius="16" Background="#5865f2"
+                                    HorizontalAlignment="Center" VerticalAlignment="Center">
                                 <TextBlock Text="{Binding Username[0]}"
                                            Foreground="White"
                                            FontSize="14"
@@ -333,13 +340,13 @@
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
-                            <!-- Muted/Deafened indicator on avatar -->
+                            <!-- Muted indicator on avatar -->
                             <Border Width="14" Height="14"
                                     CornerRadius="7"
                                     Background="#ed4245"
                                     HorizontalAlignment="Right"
                                     VerticalAlignment="Bottom"
-                                    Margin="0,0,-2,-2"
+                                    Margin="0,0,0,0"
                                     IsVisible="{Binding IsMuted}">
                                 <TextBlock Text="🔇" FontSize="8"
                                            HorizontalAlignment="Center"
