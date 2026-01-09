@@ -68,15 +68,28 @@ public partial class DMContentView : UserControl
     {
         InitializeComponent();
 
-        // Use tunneling events to intercept Enter before AcceptsReturn processes it
-        DMMessageInputBox.AddHandler(KeyDownEvent, OnDMMessageKeyDown, RoutingStrategies.Tunnel);
-        EditDMMessageInputBox.AddHandler(KeyDownEvent, OnEditDMMessageKeyDown, RoutingStrategies.Tunnel);
-
-        // Track scroll position for smart auto-scrolling
-        DMMessagesScrollViewer.ScrollChanged += OnDMMessagesScrollChanged;
-
         // Subscribe to collection changes for auto-scrolling
         this.GetObservable(DMMessagesProperty).Subscribe(OnDMMessagesChanged);
+    }
+
+    protected override void OnInitialized()
+    {
+        base.OnInitialized();
+
+        // Use tunneling events to intercept Enter before AcceptsReturn processes it
+        // These must be set up after the control is fully initialized
+        if (DMMessageInputBox != null)
+        {
+            DMMessageInputBox.AddHandler(KeyDownEvent, OnDMMessageKeyDown, RoutingStrategies.Tunnel);
+        }
+        if (EditDMMessageInputBox != null)
+        {
+            EditDMMessageInputBox.AddHandler(KeyDownEvent, OnEditDMMessageKeyDown, RoutingStrategies.Tunnel);
+        }
+        if (DMMessagesScrollViewer != null)
+        {
+            DMMessagesScrollViewer.ScrollChanged += OnDMMessagesScrollChanged;
+        }
     }
 
     public string? DMRecipientName
