@@ -280,6 +280,10 @@ public partial class ChannelListView : UserControl
     {
         if (sender is Border border && border.Tag is ChannelResponse channel)
         {
+            // Only handle left mouse button for click/drag
+            var props = e.GetCurrentPoint(border).Properties;
+            if (!props.IsLeftButtonPressed) return;
+
             // Visual feedback - darken on press
             border.Background = new SolidColorBrush(Color.Parse("#3f4248"));
 
