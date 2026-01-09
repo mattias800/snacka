@@ -44,11 +44,21 @@ This document outlines planned improvements for the text and voice channel list 
 - [ ] Drag channels between categories
 - [ ] Category-level permissions
 
-#### 1.4 Search/Filter Channels
-- [ ] Search box at top of channel list
-- [ ] Filter by name as you type
-- [ ] Highlight matching text
-- [ ] Keyboard shortcut (Ctrl+K) for quick switcher
+#### 1.4 Quick Switcher (Cmd+K / Ctrl+K)
+- [x] Modal popup with search input
+- [x] Search across channels AND DMs/users
+- [x] Fuzzy matching (typing "gen" finds "general")
+- [x] Keyboard navigation (arrow keys + Enter to select)
+- [x] Recent items shown by default when empty
+- [x] Type prefix: `#` for channels, `@` for users/DMs
+- [x] Close on Escape or click outside
+
+#### 1.5 Message Search (Cmd+F / Ctrl+F)
+- [ ] Search message content across channels
+- [ ] Search results with message preview and context
+- [ ] Filter by channel, user, date range
+- [ ] Click to jump to message in context
+- [ ] Highlight search terms in results
 
 ---
 
@@ -170,13 +180,14 @@ This document outlines planned improvements for the text and voice channel list 
 - [x] Channel deletion with confirmation dialog (Phase 1.1)
 - [x] Double-click to edit channel name (Phase 5.2)
 - [x] Drag & drop channel reordering (Phase 1.2 - complete with visual polish)
+- [x] Quick Switcher (Phase 1.4 - Cmd+K / Ctrl+K with fuzzy search)
 
 ### In Progress
 (None currently)
 
 ### Not Started
 - [ ] Phase 1.3: Channel Categories/Folders
-- [ ] Phase 1.4: Search/Filter Channels
+- [ ] Phase 1.5: Message Search (Cmd+F)
 - [ ] Phase 2: Visual Enhancements
 - [ ] Phase 3: Channel Management
 - [ ] Phase 4: Voice Channel Enhancements

@@ -1,0 +1,161 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.QuickSwitcherContent"
+             x:DataType="controls:QuickSwitcherContent"
+             Width="500">
+
+    <UserControl.Styles>
+        <!-- Search input style -->
+        <Style Selector="TextBox.search-input">
+            <Setter Property="Background" Value="#202225"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Foreground" Value="#dcddde"/>
+            <Setter Property="Padding" Value="12"/>
+            <Setter Property="FontSize" Value="16"/>
+            <Setter Property="CornerRadius" Value="4"/>
+        </Style>
+        <Style Selector="TextBox.search-input:focus /template/ Border#PART_BorderElement">
+            <Setter Property="BorderThickness" Value="0"/>
+        </Style>
+        <Style Selector="TextBox.search-input /template/ TextBlock#PART_Watermark">
+            <Setter Property="Foreground" Value="#72767d"/>
+        </Style>
+
+        <!-- ListBox style -->
+        <Style Selector="ListBox.results-list">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="BorderThickness" Value="0"/>
+            <Setter Property="Padding" Value="0"/>
+        </Style>
+
+        <!-- ListBoxItem style -->
+        <Style Selector="ListBox.results-list > ListBoxItem">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="Padding" Value="0"/>
+            <Setter Property="Margin" Value="0"/>
+        </Style>
+        <Style Selector="ListBox.results-list > ListBoxItem:pointerover /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+        <Style Selector="ListBox.results-list > ListBoxItem:selected /template/ ContentPresenter#PART_ContentPresenter">
+            <Setter Property="Background" Value="Transparent"/>
+        </Style>
+
+        <!-- Result item style -->
+        <Style Selector="Border.result-item">
+            <Setter Property="Background" Value="Transparent"/>
+            <Setter Property="CornerRadius" Value="4"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Cursor" Value="Hand"/>
+        </Style>
+        <Style Selector="Border.result-item:pointerover">
+            <Setter Property="Background" Value="#3f4248"/>
+        </Style>
+        <Style Selector="ListBoxItem:selected Border.result-item">
+            <Setter Property="Background" Value="#5865f2"/>
+        </Style>
+    </UserControl.Styles>
+
+    <Border Background="#36393f"
+            CornerRadius="8"
+            Padding="0"
+            BorderBrush="#202225"
+            BorderThickness="1"
+            MaxHeight="400">
+        <DockPanel>
+            <!-- Search Input -->
+            <Border DockPanel.Dock="Top" Padding="16,16,16,8">
+                <TextBox x:Name="SearchInput"
+                         Classes="search-input"
+                         Watermark="Where would you like to go?"
+                         Text="{Binding ViewModel.SearchQuery, RelativeSource={RelativeSource AncestorType=controls:QuickSwitcherContent}, Mode=TwoWay}"/>
+            </Border>
+
+            <!-- Header -->
+            <Border DockPanel.Dock="Top" Padding="16,4,16,8">
+                <TextBlock Text="{Binding ViewModel.HeaderText, RelativeSource={RelativeSource AncestorType=controls:QuickSwitcherContent}}"
+                           Foreground="#72767d"
+                           FontSize="11"
+                           FontWeight="Bold"/>
+            </Border>
+
+            <!-- Keyboard Hints -->
+            <Border DockPanel.Dock="Bottom"
+                    Padding="16,8"
+                    Background="#2f3136"
+                    IsVisible="{Binding ViewModel.HasItems, RelativeSource={RelativeSource AncestorType=controls:QuickSwitcherContent}}">
+                <StackPanel Orientation="Horizontal" Spacing="16">
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Border Background="#202225" CornerRadius="3" Padding="4,2">
+                            <TextBlock Text="↑↓" Foreground="#72767d" FontSize="11"/>
+                        </Border>
+                        <TextBlock Text="navigate" Foreground="#72767d" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Border Background="#202225" CornerRadius="3" Padding="4,2">
+                            <TextBlock Text="Enter" Foreground="#72767d" FontSize="11"/>
+                        </Border>
+                        <TextBlock Text="select" Foreground="#72767d" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Border Background="#202225" CornerRadius="3" Padding="4,2">
+                            <TextBlock Text="Esc" Foreground="#72767d" FontSize="11"/>
+                        </Border>
+                        <TextBlock Text="close" Foreground="#72767d" FontSize="11" VerticalAlignment="Center"/>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Empty State -->
+            <TextBlock Text="No results found"
+                       Foreground="#72767d"
+                       FontSize="14"
+                       HorizontalAlignment="Center"
+                       Margin="0,20"
+                       IsVisible="{Binding !ViewModel.HasItems, RelativeSource={RelativeSource AncestorType=controls:QuickSwitcherContent}}"/>
+
+            <!-- Results List -->
+            <ListBox x:Name="ResultsList"
+                     Classes="results-list"
+                     ItemsSource="{Binding ViewModel.FilteredItems, RelativeSource={RelativeSource AncestorType=controls:QuickSwitcherContent}}"
+                     SelectedIndex="{Binding ViewModel.SelectedIndex, RelativeSource={RelativeSource AncestorType=controls:QuickSwitcherContent}, Mode=TwoWay}"
+                     Padding="8,0,8,8"
+                     ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                <ListBox.ItemTemplate>
+                    <DataTemplate x:DataType="vm:QuickSwitcherItem">
+                        <Border Classes="result-item"
+                                PointerPressed="OnResultItemPointerPressed">
+                            <Grid ColumnDefinitions="Auto,*">
+                                <!-- Icon -->
+                                <TextBlock Grid.Column="0"
+                                           Text="{Binding Icon}"
+                                           Foreground="#72767d"
+                                           FontSize="14"
+                                           Width="24"
+                                           VerticalAlignment="Center"/>
+
+                                <!-- Name and Description -->
+                                <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8">
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="#dcddde"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Description}"
+                                               Foreground="#72767d"
+                                               FontSize="12"
+                                               VerticalAlignment="Center"
+                                               IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                </StackPanel>
+                            </Grid>
+                        </Border>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+            </ListBox>
+        </DockPanel>
+    </Border>
+</UserControl>

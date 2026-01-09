@@ -387,6 +387,14 @@
                                             TogglePinCommand="{Binding TogglePinCommand}"/>
         </Popup>
 
+        <!-- Quick Switcher Popup (Cmd+K / Ctrl+K) -->
+        <Popup x:Name="QuickSwitcherPopup"
+               IsLightDismissEnabled="True"
+               Placement="Center"
+               PlacementTarget="{Binding $parent[Grid]}">
+            <controls:QuickSwitcherContent x:Name="QuickSwitcherContent"/>
+        </Popup>
+
         <!-- Image Lightbox Overlay -->
         <controls:ImageLightbox Grid.ColumnSpan="4"
                                 Attachment="{Binding LightboxImage}"

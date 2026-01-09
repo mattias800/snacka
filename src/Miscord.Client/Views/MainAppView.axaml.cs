@@ -30,8 +30,8 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     {
         InitializeComponent();
 
-        // ESC key to exit fullscreen video
-        this.AddHandler(KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
+        // ESC key to exit fullscreen video, Cmd+K for quick switcher (handledEventsToo to capture globally)
+        this.AddHandler(KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel, handledEventsToo: true);
 
         // Push-to-talk: Space key handling
         this.AddHandler(KeyDownEvent, OnPushToTalkKeyDown, RoutingStrategies.Tunnel);
@@ -66,15 +66,92 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             // Redraw annotations when strokes change (from host or other guests)
             RedrawAnnotations();
         }
+        else if (e.PropertyName == nameof(MainAppViewModel.SelectedChannel))
+        {
+            // Auto-focus message input when a text channel is selected
+            if (ViewModel?.SelectedChannel != null)
+            {
+                Dispatcher.UIThread.Post(() => ChatArea?.FocusMessageInput(), DispatcherPriority.Input);
+            }
+        }
     }
 
-    // Global key handler for ESC to exit fullscreen
+    // Global key handler for ESC to exit fullscreen and Cmd+K / Ctrl+K for quick switcher
     private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape && ViewModel?.IsVideoFullscreen == true)
         {
             ViewModel.CloseFullscreen();
             e.Handled = true;
+            return;
+        }
+
+        // Handle Cmd+K (Mac) or Ctrl+K (Windows/Linux) for quick switcher
+        var cmdOrCtrl = OperatingSystem.IsMacOS() ? KeyModifiers.Meta : KeyModifiers.Control;
+        if (e.Key == Key.K && e.KeyModifiers == cmdOrCtrl)
+        {
+            OpenQuickSwitcher();
+            e.Handled = true;
+        }
+    }
+
+    /// <summary>
+    /// Opens the quick switcher popup and initializes its ViewModel.
+    /// </summary>
+    public void OpenQuickSwitcher()
+    {
+        if (ViewModel == null) return;
+
+        var quickSwitcherVm = new QuickSwitcherViewModel(
+            ViewModel.Channels,
+            ViewModel.VoiceChannelViewModels,
+            ViewModel.Members,
+            ViewModel.UserId,
+            ViewModel.SettingsStore,
+            OnQuickSwitcherItemSelected,
+            () => QuickSwitcherPopup.IsOpen = false);
+
+        QuickSwitcherContent.ViewModel = quickSwitcherVm;
+        QuickSwitcherPopup.IsOpen = true;
+    }
+
+    /// <summary>
+    /// Called when an item is selected in the quick switcher.
+    /// </summary>
+    private void OnQuickSwitcherItemSelected(QuickSwitcherItem item)
+    {
+        QuickSwitcherPopup.IsOpen = false;
+
+        if (ViewModel == null) return;
+
+        switch (item.Type)
+        {
+            case QuickSwitcherItemType.TextChannel:
+                // Find and select the channel
+                var channel = ViewModel.Channels.FirstOrDefault(c => c.Id == item.Id);
+                if (channel != null)
+                {
+                    ViewModel.SelectChannelCommand.Execute(channel).Subscribe();
+                }
+                break;
+
+            case QuickSwitcherItemType.VoiceChannel:
+                // Find and join the voice channel
+                var voiceChannel = ViewModel.VoiceChannelViewModels.FirstOrDefault(c => c.Id == item.Id);
+                if (voiceChannel != null)
+                {
+                    ViewModel.JoinVoiceChannelCommand.Execute(voiceChannel.Channel).Subscribe();
+                }
+                break;
+
+            case QuickSwitcherItemType.User:
+                // Start DM with user
+                var member = ViewModel.Members.FirstOrDefault(m => m.UserId == item.Id);
+                if (member != null)
+                {
+                    ViewModel.MembersList?.StartDMCommand.Execute(member).Subscribe();
+                }
+                break;
         }
     }
 

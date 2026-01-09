@@ -1,4 +1,5 @@
 using System.Text.Json;
+using Miscord.Client.ViewModels;
 
 namespace Miscord.Client.Services;
 
@@ -32,6 +33,9 @@ public class UserSettings
 
     // Per-user volume settings (key: UserId as string, value: volume 0.0-2.0)
     public Dictionary<string, float> UserVolumes { get; set; } = new();
+
+    // Quick Switcher recent items
+    public List<RecentQuickSwitcherItem> RecentQuickSwitcherItems { get; set; } = new();
 }
 
 public class SettingsStore : ISettingsStore
