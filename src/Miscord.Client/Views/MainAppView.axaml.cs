@@ -263,21 +263,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         // Shift+Enter = let AcceptsReturn handle it (inserts newline)
     }
 
-    // Called from XAML for channel rename TextBox
-    public void OnChannelRenameKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && ViewModel?.SaveChannelNameCommand.CanExecute.FirstAsync().GetAwaiter().GetResult() == true)
-        {
-            ViewModel.SaveChannelNameCommand.Execute().Subscribe();
-            e.Handled = true;
-        }
-        else if (e.Key == Key.Escape)
-        {
-            ViewModel?.CancelEditChannelCommand.Execute().Subscribe();
-            e.Handled = true;
-        }
-    }
-
     // Called for message edit TextBox (tunneling event)
     // Enter saves edit, Shift+Enter inserts newline
     private void OnEditMessageKeyDown(object? sender, KeyEventArgs e)
@@ -300,43 +285,24 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         // Shift+Enter = let AcceptsReturn handle it (inserts newline)
     }
 
-    // Called when clicking a voice channel
-    private void VoiceChannel_PointerPressed(object? sender, PointerPressedEventArgs e)
-    {
-        if (sender is Border border && border.Tag is Services.ChannelResponse channel)
-        {
-            // Visual feedback - darken on press
-            border.Background = new Avalonia.Media.SolidColorBrush(Avalonia.Media.Color.Parse("#3f4248"));
-
-            // Check if already in this voice channel
-            if (ViewModel?.CurrentVoiceChannel?.Id == channel.Id)
-            {
-                // Already in this channel - just view it (don't rejoin)
-                ViewModel.SelectedVoiceChannelForViewing = channel;
-            }
-            else
-            {
-                // Join the channel
-                ViewModel?.JoinVoiceChannelCommand.Execute(channel).Subscribe();
-            }
-        }
-    }
-
-    // Reset background when pointer released
-    private void VoiceChannel_PointerReleased(object? sender, PointerReleasedEventArgs e)
-    {
-        if (sender is Border border)
-        {
-            border.Background = Avalonia.Media.Brushes.Transparent;
-        }
-    }
-
     // Called when clicking a member in the members list - opens DMs
-    private void Member_PointerPressed(object? sender, PointerPressedEventArgs e)
+    private void OnMemberClicked(object? sender, Services.CommunityMemberResponse member)
     {
-        if (sender is Border border && border.Tag is Services.CommunityMemberResponse member)
+        ViewModel?.StartDMCommand.Execute(member).Subscribe();
+    }
+
+    // Called when clicking a voice channel to join it
+    private void OnVoiceChannelClicked(object? sender, Services.ChannelResponse channel)
+    {
+        ViewModel?.JoinVoiceChannelCommand.Execute(channel).Subscribe();
+    }
+
+    // Called when clicking a voice channel we're already in (just view it)
+    private void OnVoiceChannelViewRequested(object? sender, Services.ChannelResponse channel)
+    {
+        if (ViewModel != null)
         {
-            ViewModel?.StartDMCommand.Execute(member).Subscribe();
+            ViewModel.SelectedVoiceChannelForViewing = channel;
         }
     }
 

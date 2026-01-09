@@ -1,0 +1,330 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="using:Miscord.Client.Converters"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:services="using:Miscord.Client.Services"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.ChannelListView"
+             x:DataType="controls:ChannelListView">
+
+    <ScrollViewer>
+        <StackPanel>
+            <!-- Loading indicator -->
+            <TextBlock Text="Loading channels..."
+                       Foreground="#72767d"
+                       FontSize="12"
+                       Margin="16,8"
+                       IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"/>
+
+            <!-- Text Channels Section -->
+            <Grid Margin="8,8,8,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="TEXT CHANNELS"
+                           Foreground="#72767d"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Command="{Binding CreateChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                        Background="Transparent"
+                        Padding="4"
+                        Cursor="Hand"
+                        ToolTip.Tip="Create Text Channel"
+                        IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"
+                        IsVisible="{Binding CanManageChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
+                    <TextBlock Text="+"
+                               Foreground="#72767d"
+                               FontSize="16"
+                               FontWeight="Bold"/>
+                </Button>
+            </Grid>
+
+            <ItemsControl x:Name="TextChannelsList"
+                          ItemsSource="{Binding TextChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="services:ChannelResponse">
+                        <Grid>
+                            <Button Classes="channel-btn"
+                                    Command="{Binding SelectChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                    CommandParameter="{Binding}"
+                                    HorizontalAlignment="Stretch"
+                                    HorizontalContentAlignment="Stretch"
+                                    Padding="8,6"
+                                    Margin="0,1"
+                                    Cursor="Hand">
+                                <Grid>
+                                    <Grid.ColumnDefinitions>
+                                        <ColumnDefinition Width="*"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                        <ColumnDefinition Width="Auto"/>
+                                    </Grid.ColumnDefinitions>
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                        <TextBlock Text="#"
+                                                   Foreground="#72767d"
+                                                   FontSize="18"
+                                                   VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Foreground="#8e9297"
+                                                   FontSize="15"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+                                    <!-- Unread badge -->
+                                    <Border Grid.Column="1"
+                                            Background="#ed4245"
+                                            CornerRadius="8"
+                                            Padding="5,1"
+                                            Margin="4,0"
+                                            VerticalAlignment="Center"
+                                            IsVisible="{Binding UnreadCount, Converter={x:Static conv:IntGreaterThanZeroConverter.Instance}}">
+                                        <TextBlock Text="{Binding UnreadCount}"
+                                                   Foreground="White"
+                                                   FontSize="11"
+                                                   FontWeight="SemiBold"/>
+                                    </Border>
+                                    <Button Grid.Column="2"
+                                            Command="{Binding StartEditChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                            CommandParameter="{Binding}"
+                                            Background="Transparent"
+                                            Padding="4,2"
+                                            Cursor="Hand"
+                                            ToolTip.Tip="Rename Channel"
+                                            IsVisible="{Binding CanManageChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
+                                        <TextBlock Text="✎"
+                                                   Foreground="#72767d"
+                                                   FontSize="12"/>
+                                    </Button>
+                                </Grid>
+                            </Button>
+                        </Grid>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Voice Channels Section -->
+            <Grid Margin="8,16,8,4">
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Grid.Column="0"
+                           Text="VOICE CHANNELS"
+                           Foreground="#72767d"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Command="{Binding CreateVoiceChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                        Background="Transparent"
+                        Padding="4"
+                        Cursor="Hand"
+                        ToolTip.Tip="Create Voice Channel"
+                        IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"
+                        IsVisible="{Binding CanManageChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
+                    <TextBlock Text="+"
+                               Foreground="#72767d"
+                               FontSize="16"
+                               FontWeight="Bold"/>
+                </Button>
+            </Grid>
+
+            <!-- Voice Channels with participant tracking -->
+            <ItemsControl x:Name="VoiceChannelsList"
+                          ItemsSource="{Binding VoiceChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate x:DataType="vm:VoiceChannelViewModel">
+                        <StackPanel>
+                            <Border Classes="voice-channel-item"
+                                    Padding="8,6"
+                                    Margin="0,1"
+                                    Cursor="Hand"
+                                    PointerPressed="VoiceChannel_PointerPressed"
+                                    PointerReleased="VoiceChannel_PointerReleased"
+                                    Tag="{Binding Channel}">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="🔊"
+                                               Foreground="#72767d"
+                                               FontSize="14"
+                                               VerticalAlignment="Center"/>
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="#8e9297"
+                                               FontSize="15"
+                                               VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Border>
+                            <!-- Voice Participants - directly bound to ObservableCollection -->
+                            <ItemsControl ItemsSource="{Binding Participants}" Margin="24,0,0,4">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Classes="voice-participant" Margin="4,1">
+                                            <!-- Context menu for user volume (only for other users) -->
+                                            <Border.ContextMenu>
+                                                <ContextMenu>
+                                                    <MenuItem Header="User Volume" IsEnabled="False"
+                                                              IsVisible="{Binding !IsCurrentUser}">
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Text="🔊" FontSize="12"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <MenuItem IsVisible="{Binding !IsCurrentUser}">
+                                                        <MenuItem.Header>
+                                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                                <Slider Width="120" Minimum="0" Maximum="200"
+                                                                        Value="{Binding VolumePercent}"
+                                                                        VerticalAlignment="Center"/>
+                                                                <TextBlock Text="{Binding VolumePercent, StringFormat={}{0}%}"
+                                                                           Foreground="#dcddde"
+                                                                           FontSize="12"
+                                                                           Width="40"
+                                                                           VerticalAlignment="Center"/>
+                                                            </StackPanel>
+                                                        </MenuItem.Header>
+                                                    </MenuItem>
+                                                    <!-- Admin options separator -->
+                                                    <Separator IsVisible="{Binding CanManageVoice, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"/>
+                                                    <!-- Server Mute (admin only, not for current user) -->
+                                                    <MenuItem Header="{Binding IsServerMuted, Converter={x:Static conv:ServerMuteTextConverter.Instance}}"
+                                                              Command="{Binding ServerMuteUserCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                                              CommandParameter="{Binding}">
+                                                        <MenuItem.IsVisible>
+                                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                                <Binding Path="!IsCurrentUser"/>
+                                                                <Binding Path="CanManageVoice" RelativeSource="{RelativeSource AncestorType=controls:ChannelListView}"/>
+                                                            </MultiBinding>
+                                                        </MenuItem.IsVisible>
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Text="🔇" FontSize="12"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <!-- Server Deafen (admin only, not for current user) -->
+                                                    <MenuItem Header="{Binding IsServerDeafened, Converter={x:Static conv:ServerDeafenTextConverter.Instance}}"
+                                                              Command="{Binding ServerDeafenUserCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                                              CommandParameter="{Binding}">
+                                                        <MenuItem.IsVisible>
+                                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                                <Binding Path="!IsCurrentUser"/>
+                                                                <Binding Path="CanManageVoice" RelativeSource="{RelativeSource AncestorType=controls:ChannelListView}"/>
+                                                            </MultiBinding>
+                                                        </MenuItem.IsVisible>
+                                                        <MenuItem.Icon>
+                                                            <TextBlock Text="🔕" FontSize="12"/>
+                                                        </MenuItem.Icon>
+                                                    </MenuItem>
+                                                    <MenuItem Header="(You)" IsEnabled="False"
+                                                              IsVisible="{Binding IsCurrentUser}"/>
+                                                </ContextMenu>
+                                            </Border.ContextMenu>
+                                            <!-- Username and status icons -->
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <Ellipse Width="24" Height="24" Fill="#40444b"/>
+                                                <TextBlock Text="{Binding Username}"
+                                                           Foreground="{Binding IsSpeaking, Converter={x:Static conv:SpeakingForegroundConverter.Instance}}"
+                                                           FontSize="13"
+                                                           VerticalAlignment="Center"/>
+                                                <!-- Self muted (red) - only show if self-muted but not server-muted -->
+                                                <TextBlock Text="🔇"
+                                                           FontSize="10"
+                                                           Foreground="#ed4245"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip.Tip="Muted">
+                                                    <TextBlock.IsVisible>
+                                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                            <Binding Path="IsMuted"/>
+                                                            <Binding Path="!IsServerMuted"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.IsVisible>
+                                                </TextBlock>
+                                                <!-- Server muted (orange) -->
+                                                <TextBlock Text="🔇"
+                                                           FontSize="10"
+                                                           Foreground="#faa61a"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip.Tip="Server Muted"
+                                                           IsVisible="{Binding IsServerMuted}"/>
+                                                <!-- Self deafened (red) - only show if self-deafened but not server-deafened -->
+                                                <TextBlock Text="🔕"
+                                                           FontSize="10"
+                                                           Foreground="#ed4245"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip.Tip="Deafened">
+                                                    <TextBlock.IsVisible>
+                                                        <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                            <Binding Path="IsDeafened"/>
+                                                            <Binding Path="!IsServerDeafened"/>
+                                                        </MultiBinding>
+                                                    </TextBlock.IsVisible>
+                                                </TextBlock>
+                                                <!-- Server deafened (orange) -->
+                                                <TextBlock Text="🔕"
+                                                           FontSize="10"
+                                                           Foreground="#faa61a"
+                                                           VerticalAlignment="Center"
+                                                           ToolTip.Tip="Server Deafened"
+                                                           IsVisible="{Binding IsServerDeafened}"/>
+                                                <TextBlock Text="📹"
+                                                           FontSize="10"
+                                                           Foreground="#3ba55c"
+                                                           VerticalAlignment="Center"
+                                                           IsVisible="{Binding IsCameraOn}"/>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+
+            <!-- Channel Rename Editor -->
+            <Border Background="#202225"
+                    CornerRadius="4"
+                    Padding="8"
+                    Margin="0,8,8,0"
+                    IsVisible="{Binding EditingChannel, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="RENAME CHANNEL"
+                               Foreground="#72767d"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                    <TextBox x:Name="ChannelRenameInputBox"
+                             Text="{Binding EditingChannelName, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                             Background="#40444b"
+                             Foreground="White"
+                             BorderThickness="0"
+                             CornerRadius="4"
+                             Padding="8"
+                             IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"
+                             KeyDown="OnChannelRenameKeyDown"/>
+                    <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                        <Button Command="{Binding CancelEditChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                Background="Transparent"
+                                Foreground="#b9bbbe"
+                                Content="Cancel"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"/>
+                        <Button Command="{Binding SaveChannelNameCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="12,4"
+                                CornerRadius="4"
+                                Cursor="Hand"
+                                IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}">
+                            <Panel>
+                                <TextBlock Text="Save" IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="Saving..." IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"/>
+                            </Panel>
+                        </Button>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

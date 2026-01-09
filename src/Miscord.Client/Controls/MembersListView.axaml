@@ -1,0 +1,193 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="using:Miscord.Client.Converters"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:services="using:Miscord.Client.Services"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.MembersListView"
+             x:DataType="controls:MembersListView">
+
+    <Border Background="#2f3136">
+        <DockPanel>
+            <TextBlock DockPanel.Dock="Top"
+                       Text="MEMBERS"
+                       Foreground="#72767d"
+                       FontSize="11"
+                       FontWeight="SemiBold"
+                       Margin="16,16,16,8"/>
+
+            <ScrollViewer>
+                <ItemsControl x:Name="MembersList"
+                              ItemsSource="{Binding Members, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                              Margin="8,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:CommunityMemberResponse">
+                            <Panel>
+                                <!-- Current user (with context menu for nickname) -->
+                                <Border Padding="8,4"
+                                        Margin="0,2"
+                                        CornerRadius="4"
+                                        Background="Transparent"
+                                        Cursor="Hand"
+                                        Tag="{Binding}">
+                                    <Border.IsVisible>
+                                        <MultiBinding Converter="{x:Static conv:GuidEqualsConverter.Instance}">
+                                            <Binding Path="UserId"/>
+                                            <Binding Path="CurrentUserId" RelativeSource="{RelativeSource AncestorType=controls:MembersListView}"/>
+                                        </MultiBinding>
+                                    </Border.IsVisible>
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Change Nickname"
+                                                      Command="{Binding ChangeMyNicknameCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Avatar with online indicator -->
+                                        <Grid Grid.Column="0" Margin="0,0,8,0">
+                                            <Border Width="32" Height="32"
+                                                    CornerRadius="16"
+                                                    Background="#5865f2">
+                                                <TextBlock Text="{Binding Username[0]}"
+                                                           Foreground="White"
+                                                           FontSize="14"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                            <Ellipse Width="12" Height="12"
+                                                     Fill="#3ba55c"
+                                                     Stroke="#2f3136"
+                                                     StrokeThickness="2"
+                                                     HorizontalAlignment="Right"
+                                                     VerticalAlignment="Bottom"
+                                                     IsVisible="{Binding IsOnline}"/>
+                                        </Grid>
+
+                                        <!-- Display Name (You) and Role -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <StackPanel Orientation="Horizontal" Spacing="4">
+                                                <TextBlock Text="{Binding EffectiveDisplayName}"
+                                                           Foreground="White"
+                                                           FontSize="14"/>
+                                                <TextBlock Text="(You)"
+                                                           Foreground="#72767d"
+                                                           FontSize="14"/>
+                                            </StackPanel>
+                                            <TextBlock Text="{Binding Role}"
+                                                       Foreground="#72767d"
+                                                       FontSize="10"
+                                                       Margin="0,-2,0,0"/>
+                                        </StackPanel>
+                                    </Grid>
+                                </Border>
+
+                                <!-- Other members (clickable) -->
+                                <Border Classes="member-item"
+                                        Padding="8,4"
+                                        Margin="0,2"
+                                        Cursor="Hand"
+                                        PointerPressed="Member_PointerPressed"
+                                        Tag="{Binding}">
+                                    <Border.IsVisible>
+                                        <MultiBinding Converter="{x:Static conv:GuidNotEqualsConverter.Instance}">
+                                            <Binding Path="UserId"/>
+                                            <Binding Path="CurrentUserId" RelativeSource="{RelativeSource AncestorType=controls:MembersListView}"/>
+                                        </MultiBinding>
+                                    </Border.IsVisible>
+                                    <Border.ContextMenu>
+                                        <ContextMenu>
+                                            <MenuItem Header="Send Direct Message"
+                                                      Command="{Binding StartDMCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      CommandParameter="{Binding}"/>
+                                            <Separator IsVisible="{Binding CanManageMembers, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"/>
+                                            <MenuItem Header="Change Nickname"
+                                                      Command="{Binding ChangeMemberNicknameCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      CommandParameter="{Binding}"
+                                                      IsVisible="{Binding CanManageMembers, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"/>
+                                            <MenuItem Header="Promote to Admin"
+                                                      Command="{Binding PromoteToAdminCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      CommandParameter="{Binding}"
+                                                      IsVisible="{Binding CanManageMembers, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      IsEnabled="{Binding Role, Converter={x:Static conv:CanPromoteConverter.Instance}}"/>
+                                            <MenuItem Header="Demote to Member"
+                                                      Command="{Binding DemoteToMemberCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      CommandParameter="{Binding}"
+                                                      IsVisible="{Binding CanManageMembers, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      IsEnabled="{Binding Role, Converter={x:Static conv:CanDemoteConverter.Instance}}"/>
+                                            <Separator IsVisible="{Binding CanManageMembers, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"/>
+                                            <MenuItem Header="Transfer Ownership"
+                                                      Command="{Binding TransferOwnershipCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      CommandParameter="{Binding}"
+                                                      IsVisible="{Binding CanManageMembers, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                      IsEnabled="{Binding Role, Converter={x:Static conv:CanTransferOwnershipConverter.Instance}}"/>
+                                        </ContextMenu>
+                                    </Border.ContextMenu>
+                                    <Grid>
+                                        <Grid.ColumnDefinitions>
+                                            <ColumnDefinition Width="Auto"/>
+                                            <ColumnDefinition Width="*"/>
+                                            <ColumnDefinition Width="Auto"/>
+                                        </Grid.ColumnDefinitions>
+
+                                        <!-- Avatar with online indicator -->
+                                        <Grid Grid.Column="0" Margin="0,0,8,0">
+                                            <Border Width="32" Height="32"
+                                                    CornerRadius="16"
+                                                    Background="#5865f2">
+                                                <TextBlock Text="{Binding Username[0]}"
+                                                           Foreground="White"
+                                                           FontSize="14"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                            <Ellipse Width="12" Height="12"
+                                                     Fill="#3ba55c"
+                                                     Stroke="#2f3136"
+                                                     StrokeThickness="2"
+                                                     HorizontalAlignment="Right"
+                                                     VerticalAlignment="Bottom"
+                                                     IsVisible="{Binding IsOnline}"/>
+                                        </Grid>
+
+                                        <!-- Display Name and Role -->
+                                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                            <TextBlock Text="{Binding EffectiveDisplayName}"
+                                                       Foreground="White"
+                                                       FontSize="14"/>
+                                            <TextBlock Text="{Binding Role}"
+                                                       Foreground="#72767d"
+                                                       FontSize="10"
+                                                       Margin="0,-2,0,0"/>
+                                        </StackPanel>
+
+                                        <!-- DM Button -->
+                                        <Button Grid.Column="2"
+                                                Command="{Binding StartDMCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
+                                                CommandParameter="{Binding}"
+                                                Background="Transparent"
+                                                Padding="4"
+                                                VerticalAlignment="Center"
+                                                ToolTip.Tip="Send Direct Message">
+                                            <TextBlock Text="✉"
+                                                       Foreground="#72767d"
+                                                       FontSize="12"/>
+                                        </Button>
+                                    </Grid>
+                                </Border>
+                            </Panel>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>
