@@ -2016,46 +2016,150 @@
 
                     <!-- Replies List -->
                     <ScrollViewer x:Name="ThreadRepliesScrollViewer" Margin="0,8">
-                        <ItemsControl ItemsSource="{Binding Replies}" Margin="8,0">
+                        <ItemsControl x:Name="ThreadRepliesList" ItemsSource="{Binding Replies}" Margin="8,0">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Border Margin="0,4" Padding="8" CornerRadius="4">
-                                        <Grid>
+                                    <Border Margin="0,8" Padding="0" HorizontalAlignment="Stretch">
+                                        <Grid HorizontalAlignment="Stretch">
                                             <Grid.ColumnDefinitions>
                                                 <ColumnDefinition Width="Auto"/>
                                                 <ColumnDefinition Width="*"/>
+                                                <ColumnDefinition Width="Auto"/>
                                             </Grid.ColumnDefinitions>
 
                                             <!-- Avatar -->
                                             <Border Grid.Column="0"
-                                                    Width="32" Height="32"
-                                                    CornerRadius="16"
+                                                    Width="40" Height="40"
+                                                    CornerRadius="20"
                                                     Background="#5865f2"
                                                     VerticalAlignment="Top"
-                                                    Margin="0,0,8,0">
+                                                    Margin="0,0,12,0">
                                                 <TextBlock Text="{Binding AuthorUsername[0]}"
                                                            Foreground="White"
-                                                           FontSize="13"
+                                                           FontSize="16"
                                                            FontWeight="Bold"
                                                            HorizontalAlignment="Center"
                                                            VerticalAlignment="Center"/>
                                             </Border>
 
-                                            <!-- Reply Content -->
+                                            <!-- Message Content -->
                                             <StackPanel Grid.Column="1">
-                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <!-- Reply Preview (if this message is a reply) -->
+                                                <Border Background="#2f3136"
+                                                        CornerRadius="4"
+                                                        Padding="8,4"
+                                                        Margin="0,0,0,4"
+                                                        BorderBrush="#5865f2"
+                                                        BorderThickness="2,0,0,0"
+                                                        IsVisible="{Binding ReplyTo, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <TextBlock Text="↩" Foreground="#5865f2" FontSize="12" VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding ReplyTo.AuthorUsername}"
+                                                                   Foreground="#5865f2"
+                                                                   FontSize="12"
+                                                                   FontWeight="SemiBold"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding ReplyTo.Content}"
+                                                                   Foreground="#72767d"
+                                                                   FontSize="12"
+                                                                   TextTrimming="CharacterEllipsis"
+                                                                   MaxWidth="300"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
+                                                </Border>
+
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
                                                     <TextBlock Text="{Binding AuthorUsername}"
                                                                Foreground="White"
                                                                FontWeight="SemiBold"
-                                                               FontSize="13"/>
+                                                               FontSize="15"/>
                                                     <TextBlock Text="{Binding CreatedAt, Converter={x:Static conv:RelativeTimestampConverter.Instance}}"
+                                                               ToolTip.Tip="{Binding CreatedAt, Converter={x:Static conv:FullTimestampConverter.Instance}}"
+                                                               Foreground="#72767d"
+                                                               FontSize="12"
+                                                               VerticalAlignment="Center"/>
+                                                    <TextBlock Text="(edited)"
                                                                Foreground="#72767d"
                                                                FontSize="11"
-                                                               VerticalAlignment="Center"/>
+                                                               VerticalAlignment="Center"
+                                                               IsVisible="{Binding IsEdited}"/>
                                                 </StackPanel>
                                                 <controls:MessageContentBlock Content="{Binding Content}"
-                                                                        FontSize="13"
-                                                                        Margin="0,2,0,0"/>
+                                                                        FontSize="15"
+                                                                        Margin="0,4,0,0"/>
+
+                                                <!-- Attachments Display -->
+                                                <ItemsControl ItemsSource="{Binding Attachments}"
+                                                              Margin="0,4,0,0"
+                                                              IsVisible="{Binding Attachments, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <controls:AttachmentPreview Attachment="{Binding}"
+                                                                                         BaseUrl="{Binding $parent[UserControl].DataContext.BaseUrl}"
+                                                                                         ImageClicked="OnAttachmentImageClicked"/>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+
+                                                <!-- Reactions Display -->
+                                                <ItemsControl ItemsSource="{Binding Reactions}"
+                                                              Margin="0,4,0,0"
+                                                              IsVisible="{Binding Reactions, Converter={x:Static ObjectConverters.IsNotNull}}">
+                                                    <ItemsControl.ItemsPanel>
+                                                        <ItemsPanelTemplate>
+                                                            <StackPanel Orientation="Horizontal" Spacing="4"/>
+                                                        </ItemsPanelTemplate>
+                                                    </ItemsControl.ItemsPanel>
+                                                    <ItemsControl.ItemTemplate>
+                                                        <DataTemplate>
+                                                            <Border Classes="reaction-chip"
+                                                                    Padding="4,2"
+                                                                    CornerRadius="4"
+                                                                    Cursor="Hand"
+                                                                    Tag="{Binding}"
+                                                                    PointerPressed="ThreadReactionChip_PointerPressed">
+                                                                <Border.Background>
+                                                                    <SolidColorBrush Color="{Binding HasReacted, Converter={x:Static conv:ReactionBackgroundConverter.Instance}}"/>
+                                                                </Border.Background>
+                                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                                    <TextBlock Text="{Binding Emoji}" FontSize="14"/>
+                                                                    <TextBlock Text="{Binding Count}" Foreground="#dcddde" FontSize="12" VerticalAlignment="Center"/>
+                                                                </StackPanel>
+                                                                <ToolTip.Tip>
+                                                                    <ItemsControl ItemsSource="{Binding Users}">
+                                                                        <ItemsControl.ItemTemplate>
+                                                                            <DataTemplate>
+                                                                                <TextBlock Text="{Binding Username}" Foreground="White"/>
+                                                                            </DataTemplate>
+                                                                        </ItemsControl.ItemTemplate>
+                                                                    </ItemsControl>
+                                                                </ToolTip.Tip>
+                                                            </Border>
+                                                        </DataTemplate>
+                                                    </ItemsControl.ItemTemplate>
+                                                </ItemsControl>
+                                            </StackPanel>
+
+                                            <!-- Action Buttons: React/Edit/Delete -->
+                                            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
+                                                <Button Classes="msg-action-btn"
+                                                        ToolTip.Tip="Add Reaction"
+                                                        Tag="{Binding}"
+                                                        Click="ThreadAddReactionButton_Click">
+                                                    <TextBlock Text="😀" Foreground="#72767d" FontSize="12"/>
+                                                </Button>
+                                                <Button Classes="msg-action-btn"
+                                                        Command="{Binding $parent[UserControl].DataContext.StartEditMessageCommand}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip.Tip="Edit">
+                                                    <TextBlock Text="✎" Foreground="#72767d" FontSize="12"/>
+                                                </Button>
+                                                <Button Classes="msg-action-btn"
+                                                        Command="{Binding $parent[UserControl].DataContext.DeleteMessageCommand}"
+                                                        CommandParameter="{Binding}"
+                                                        ToolTip.Tip="Delete">
+                                                    <TextBlock Text="🗑" Foreground="#72767d" FontSize="12"/>
+                                                </Button>
                                             </StackPanel>
                                         </Grid>
                                     </Border>

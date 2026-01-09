@@ -404,6 +404,47 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
+    // Called when clicking the add reaction button on a thread message
+    private void ThreadAddReactionButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button &&
+            button.Tag is Services.MessageResponse message &&
+            ViewModel != null)
+        {
+            _emojiPickerMessage = message;
+            // Show emoji picker popup
+            var popup = this.FindControl<Popup>("EmojiPickerPopup");
+            if (popup != null)
+            {
+                popup.PlacementTarget = button;
+                popup.IsOpen = true;
+            }
+        }
+    }
+
+    // Called when clicking a reaction chip on a thread message to toggle it
+    private void ThreadReactionChip_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Border border &&
+            border.Tag is Services.ReactionSummary reaction &&
+            ViewModel != null)
+        {
+            // Find the parent message - need to traverse up the visual tree
+            var parent = border.Parent;
+            while (parent != null)
+            {
+                if (parent is Border b && b.DataContext is Services.MessageResponse)
+                    break;
+                parent = (parent as Control)?.Parent;
+            }
+
+            if (parent is Border messageBorder && messageBorder.DataContext is Services.MessageResponse message)
+            {
+                ViewModel.ToggleReactionCommand.Execute((message, reaction.Emoji)).Subscribe();
+            }
+        }
+    }
+
     // Thread panel resize state
     private bool _isResizingThreadPanel;
     private double _resizeStartX;

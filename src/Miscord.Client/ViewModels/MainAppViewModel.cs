@@ -395,9 +395,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.MessageEdited += message => Dispatcher.UIThread.Post(() =>
         {
+            // Update in main message list
             var index = Messages.ToList().FindIndex(m => m.Id == message.Id);
             if (index >= 0)
                 Messages[index] = message;
+
+            // Update in thread replies if thread is open
+            CurrentThread?.UpdateReply(message);
         });
 
         _signalR.MessageDeleted += e => Dispatcher.UIThread.Post(() =>
@@ -449,20 +453,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.ReactionUpdated += e => Dispatcher.UIThread.Post(() =>
         {
-            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
-            if (index >= 0)
+            // Helper to update reactions on a message
+            List<ReactionSummary> UpdateReactions(MessageResponse message)
             {
-                var message = Messages[index];
                 var reactions = message.Reactions?.ToList() ?? new List<ReactionSummary>();
-
-                // Find existing reaction for this emoji
                 var reactionIndex = reactions.FindIndex(r => r.Emoji == e.Emoji);
 
                 if (e.Added)
                 {
                     if (reactionIndex >= 0)
                     {
-                        // Update existing reaction
                         var existing = reactions[reactionIndex];
                         var users = existing.Users.ToList();
                         if (!users.Any(u => u.UserId == e.UserId))
@@ -476,7 +476,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                     }
                     else
                     {
-                        // Add new reaction
                         reactions.Add(new ReactionSummary(
                             e.Emoji,
                             e.Count,
@@ -487,7 +486,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 }
                 else
                 {
-                    // Reaction removed
                     if (reactionIndex >= 0)
                     {
                         if (e.Count == 0)
@@ -507,8 +505,28 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                         }
                     }
                 }
+                return reactions;
+            }
 
+            // Update in main message list
+            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
+            if (index >= 0)
+            {
+                var message = Messages[index];
+                var reactions = UpdateReactions(message);
                 Messages[index] = message with { Reactions = reactions.Count > 0 ? reactions : null };
+            }
+
+            // Update in thread replies if thread is open
+            if (CurrentThread != null)
+            {
+                var replyIndex = CurrentThread.Replies.ToList().FindIndex(m => m.Id == e.MessageId);
+                if (replyIndex >= 0)
+                {
+                    var reply = CurrentThread.Replies[replyIndex];
+                    var reactions = UpdateReactions(reply);
+                    CurrentThread.Replies[replyIndex] = reply with { Reactions = reactions.Count > 0 ? reactions : null };
+                }
             }
         });
 
