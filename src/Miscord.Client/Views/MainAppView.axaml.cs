@@ -404,6 +404,44 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
+    // Thread panel resize state
+    private bool _isResizingThreadPanel;
+    private double _resizeStartX;
+    private double _resizeStartWidth;
+
+    private void ThreadPanelResizeHandle_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Border border && ViewModel != null)
+        {
+            _isResizingThreadPanel = true;
+            _resizeStartX = e.GetPosition(this).X;
+            _resizeStartWidth = ViewModel.ThreadPanelWidth;
+            e.Pointer.Capture(border);
+            e.Handled = true;
+        }
+    }
+
+    private void ThreadPanelResizeHandle_PointerMoved(object? sender, PointerEventArgs e)
+    {
+        if (_isResizingThreadPanel && ViewModel != null)
+        {
+            var currentX = e.GetPosition(this).X;
+            var delta = _resizeStartX - currentX;
+            ViewModel.ThreadPanelWidth = _resizeStartWidth + delta;
+            e.Handled = true;
+        }
+    }
+
+    private void ThreadPanelResizeHandle_PointerReleased(object? sender, PointerReleasedEventArgs e)
+    {
+        if (_isResizingThreadPanel)
+        {
+            _isResizingThreadPanel = false;
+            e.Pointer.Capture(null);
+            e.Handled = true;
+        }
+    }
+
     // Called for thread reply input TextBox
     // Enter sends reply
     private void OnThreadReplyKeyDown(object? sender, KeyEventArgs e)

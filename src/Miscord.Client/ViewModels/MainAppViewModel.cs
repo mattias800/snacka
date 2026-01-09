@@ -110,6 +110,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     // Thread state
     private ThreadViewModel? _currentThread;
+    private double _threadPanelWidth = 400;
 
     // Nickname editing state
     private bool _isEditingNickname;
@@ -1017,6 +1018,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     public bool IsThreadOpen => CurrentThread != null;
+
+    public double ThreadPanelWidth
+    {
+        get => _threadPanelWidth;
+        set => this.RaiseAndSetIfChanged(ref _threadPanelWidth, Math.Max(280, Math.Min(600, value)));
+    }
 
     // Nickname editing properties
     public bool IsEditingNickname

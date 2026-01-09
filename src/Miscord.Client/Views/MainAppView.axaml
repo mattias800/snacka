@@ -1721,11 +1721,9 @@
         </Border>
         </Grid>
 
-        <!-- Right Sidebar (Members List or Thread Panel) -->
+        <!-- Right Sidebar (Members List - always visible) -->
         <Border Grid.Column="3" Background="#2f3136">
-            <Grid>
-                <!-- Members List (visible when thread is NOT open) -->
-                <DockPanel IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNull}}">
+            <DockPanel>
                     <TextBlock DockPanel.Dock="Top"
                                Text="MEMBERS"
                                Foreground="#72767d"
@@ -1901,11 +1899,31 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-                </DockPanel>
+            </DockPanel>
+        </Border>
 
-                <!-- Thread Panel (visible when thread IS open) -->
-                <Border IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNotNull}}">
-                <DockPanel DataContext="{Binding CurrentThread}">
+        <!-- Thread Panel Overlay (visible when thread IS open) -->
+        <Border Grid.Column="2" Grid.ColumnSpan="2"
+                HorizontalAlignment="Right"
+                Width="{Binding ThreadPanelWidth}"
+                Background="#2f3136"
+                IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNotNull}}">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="4"/>
+                    <ColumnDefinition Width="*"/>
+                </Grid.ColumnDefinitions>
+
+                <!-- Resize Handle -->
+                <Border Grid.Column="0"
+                        Background="#202225"
+                        Cursor="SizeWestEast"
+                        PointerPressed="ThreadPanelResizeHandle_PointerPressed"
+                        PointerMoved="ThreadPanelResizeHandle_PointerMoved"
+                        PointerReleased="ThreadPanelResizeHandle_PointerReleased"/>
+
+                <!-- Thread Content -->
+                <DockPanel Grid.Column="1" DataContext="{Binding CurrentThread}">
                     <!-- Header with close button -->
                     <Border DockPanel.Dock="Top" Background="#202225" Padding="12,8">
                         <Grid>
@@ -2046,7 +2064,6 @@
                         </ItemsControl>
                     </ScrollViewer>
                 </DockPanel>
-                </Border>
             </Grid>
         </Border>
 
