@@ -265,7 +265,10 @@ public class DMContentViewModel : ViewModelBase
         }
     }
 
-    private void Close()
+    /// <summary>
+    /// Closes the DM conversation and clears all state.
+    /// </summary>
+    public void Close()
     {
         RecipientId = null;
         RecipientName = null;

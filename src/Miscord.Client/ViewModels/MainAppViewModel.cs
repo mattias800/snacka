@@ -199,7 +199,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         CreateCommunityCommand = ReactiveCommand.CreateFromTask(CreateCommunityAsync);
         RefreshCommunitiesCommand = ReactiveCommand.CreateFromTask(LoadCommunitiesAsync);
         SelectCommunityCommand = ReactiveCommand.Create<CommunityResponse>(community => SelectedCommunity = community);
-        SelectChannelCommand = ReactiveCommand.Create<ChannelResponse>(channel => SelectedChannel = channel);
+        SelectChannelCommand = ReactiveCommand.Create<ChannelResponse>(channel =>
+        {
+            // Close the DM view when selecting a text channel
+            _dmContent?.Close();
+            SelectedChannel = channel;
+        });
 
         // Channel creation canExecute - prevents rapid clicks
         var canCreateChannel = this.WhenAnyValue(
