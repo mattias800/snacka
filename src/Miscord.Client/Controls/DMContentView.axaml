@@ -1,0 +1,175 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:conv="using:Miscord.Client.Converters"
+             xmlns:services="using:Miscord.Client.Services"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.DMContentView"
+             x:DataType="controls:DMContentView">
+
+    <Border Background="#36393f">
+        <DockPanel>
+            <!-- DM Header with close button -->
+            <Border DockPanel.Dock="Top" Background="#36393f" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="*"/>
+                        <ColumnDefinition Width="Auto"/>
+                    </Grid.ColumnDefinitions>
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                        <TextBlock Text="@"
+                                   Foreground="#72767d"
+                                   FontSize="22"
+                                   VerticalAlignment="Center"/>
+                        <TextBlock Text="{Binding DMRecipientName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, FallbackValue='User'}"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   FontSize="16"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Command="{Binding CloseDMCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                            Background="Transparent"
+                            Padding="8,4"
+                            Cursor="Hand"
+                            ToolTip.Tip="Close DM">
+                        <TextBlock Text="✕"
+                                   Foreground="#72767d"
+                                   FontSize="16"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- DM Message Input -->
+            <Border DockPanel.Dock="Bottom" Padding="16" Background="#36393f">
+                <StackPanel>
+                    <!-- DM Typing Indicator -->
+                    <TextBlock Text="{Binding DMTypingIndicatorText, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                               IsVisible="{Binding IsDMTyping, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                               Foreground="#72767d"
+                               FontSize="12"
+                               FontStyle="Italic"
+                               Margin="0,0,0,4"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <TextBox x:Name="DMMessageInputBox"
+                                 Grid.Column="0"
+                                 Text="{Binding DMMessageInput, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Mode=TwoWay}"
+                                 Watermark="{Binding DMRecipientName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, StringFormat='Message @{0}'}"
+                                 Background="#40444b"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="8"
+                                 Padding="16,12"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MaxHeight="200"/>
+
+                        <Button Grid.Column="1"
+                                Command="{Binding SendDMMessageCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="16,10"
+                                Margin="8,0,0,0"
+                                CornerRadius="4">
+                            <Panel>
+                                <TextBlock Text="Send" IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="..." IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"/>
+                            </Panel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- DM Message Edit Overlay -->
+            <Border Background="#2f3136"
+                    DockPanel.Dock="Bottom"
+                    Padding="16"
+                    IsVisible="{Binding EditingDMMessage, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="EDITING MESSAGE"
+                               Foreground="#72767d"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 x:Name="EditDMMessageInputBox"
+                                 Text="{Binding EditingDMMessageContent, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Mode=TwoWay}"
+                                 Background="#40444b"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="4"
+                                 Padding="12,8"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MaxHeight="200"/>
+                        <Button Grid.Column="1"
+                                Command="{Binding CancelEditDMMessageCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                                Background="Transparent"
+                                Foreground="#b9bbbe"
+                                Content="Cancel"
+                                Padding="12,8"
+                                Margin="8,0,0,0"
+                                Cursor="Hand"/>
+                        <Button Grid.Column="2"
+                                Command="{Binding SaveDMMessageEditCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="12,8"
+                                Margin="8,0,0,0"
+                                CornerRadius="4"
+                                Cursor="Hand">
+                            <Panel>
+                                <TextBlock Text="Save" IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="..." IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"/>
+                            </Panel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- DM Messages List -->
+            <ScrollViewer x:Name="DMMessagesScrollViewer" Margin="0,8">
+                <ItemsControl x:Name="DMMessagesList"
+                              ItemsSource="{Binding DMMessages, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                              Margin="16,0">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:DirectMessageResponse">
+                            <controls:MessageItemView
+                                Message="{Binding}"
+                                AuthorUsername="{Binding SenderUsername}"
+                                MessageContent="{Binding Content}"
+                                CreatedAt="{Binding CreatedAt}"
+                                StartEditMessageCommand="{Binding StartEditDMMessageCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                                DeleteMessageCommand="{Binding DeleteDMMessageCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                                ShowThreadIndicator="False"
+                                ShowStartThreadButton="False"
+                                ShowPinButton="False"
+                                ShowReplyButton="False"
+                                ShowReactions="False"
+                                ShowAttachments="False">
+                                <controls:MessageItemView.ShowDateSeparator>
+                                    <MultiBinding Converter="{x:Static conv:ShowDateSeparatorConverter.Instance}">
+                                        <Binding />
+                                        <Binding Path="DMMessages" RelativeSource="{RelativeSource AncestorType=controls:DMContentView}" />
+                                    </MultiBinding>
+                                </controls:MessageItemView.ShowDateSeparator>
+                            </controls:MessageItemView>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

@@ -1,0 +1,66 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.GifPickerContent"
+             x:DataType="controls:GifPickerContent">
+
+    <Border Background="#2f3136"
+            CornerRadius="8"
+            Padding="12"
+            BorderBrush="#202225"
+            BorderThickness="1"
+            Width="420"
+            Height="400">
+        <DockPanel>
+            <!-- Search Box -->
+            <TextBox x:Name="GifSearchBox"
+                     DockPanel.Dock="Top"
+                     Text="{Binding GifSearchQuery, RelativeSource={RelativeSource AncestorType=controls:GifPickerContent}, Mode=TwoWay}"
+                     Watermark="Search Tenor"
+                     Background="#202225"
+                     Foreground="White"
+                     BorderThickness="0"
+                     CornerRadius="4"
+                     Padding="12,8"
+                     Margin="0,0,0,8"
+                     KeyDown="GifSearchBox_KeyDown"/>
+
+            <!-- Loading Indicator -->
+            <TextBlock DockPanel.Dock="Top"
+                       Text="Loading..."
+                       Foreground="#72767d"
+                       FontSize="12"
+                       Margin="4,4,0,8"
+                       IsVisible="{Binding IsLoadingGifs, RelativeSource={RelativeSource AncestorType=controls:GifPickerContent}}"/>
+
+            <!-- Powered by Tenor -->
+            <TextBlock DockPanel.Dock="Bottom"
+                       Text="Powered by Tenor"
+                       Foreground="#72767d"
+                       FontSize="10"
+                       HorizontalAlignment="Right"
+                       Margin="0,8,0,0"/>
+
+            <!-- GIF Grid -->
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled"
+                          VerticalScrollBarVisibility="Auto">
+                <ItemsControl x:Name="GifResultsControl"
+                              ItemsSource="{Binding GifResults, RelativeSource={RelativeSource AncestorType=controls:GifPickerContent}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate>
+                            <controls:GifPreview Gif="{Binding}" GifClicked="GifPreview_GifClicked"/>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

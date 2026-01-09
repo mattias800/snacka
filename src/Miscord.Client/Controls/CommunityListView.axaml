@@ -1,0 +1,88 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:services="using:Miscord.Client.Services"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.CommunityListView"
+             x:DataType="controls:CommunityListView">
+
+    <Border Background="#202225" Padding="0,12">
+        <DockPanel>
+            <!-- Add Community Button -->
+            <Button DockPanel.Dock="Bottom"
+                    Command="{Binding CreateCommunityCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
+                    Background="Transparent"
+                    HorizontalAlignment="Center"
+                    Margin="0,8"
+                    Padding="0"
+                    Cursor="Hand"
+                    IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}, Converter={x:Static BoolConverters.Not}}">
+                <Border Width="48" Height="48" CornerRadius="24"
+                        Background="#36393f">
+                    <TextBlock Text="+"
+                               Foreground="#3ba55c"
+                               FontSize="28"
+                               FontWeight="Light"
+                               HorizontalAlignment="Center"
+                               VerticalAlignment="Center"/>
+                </Border>
+            </Button>
+
+            <!-- DM Button and Server Icons -->
+            <ScrollViewer VerticalScrollBarVisibility="Hidden">
+                <StackPanel>
+                    <!-- Direct Messages Button -->
+                    <Button Command="{Binding OpenDMsCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
+                            Background="Transparent"
+                            HorizontalAlignment="Center"
+                            Margin="0,4"
+                            Padding="0"
+                            Cursor="Hand"
+                            ToolTip.Tip="Direct Messages">
+                        <Border Width="48" Height="48"
+                                CornerRadius="24"
+                                Background="#36393f">
+                            <TextBlock Text="✉"
+                                       Foreground="White"
+                                       FontSize="20"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
+                    </Button>
+
+                    <!-- Separator -->
+                    <Border Width="32" Height="2" Background="#36393f" Margin="8,8" HorizontalAlignment="Center"/>
+
+                    <!-- Community Icons -->
+                    <ItemsControl x:Name="CommunitiesList"
+                                  ItemsSource="{Binding Communities, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate x:DataType="services:CommunityResponse">
+                                <Button Background="Transparent"
+                                        Command="{Binding SelectCommunityCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
+                                        CommandParameter="{Binding}"
+                                        HorizontalAlignment="Center"
+                                        Margin="0,4"
+                                        Padding="0"
+                                        Cursor="Hand">
+                                    <Border Width="48" Height="48"
+                                            CornerRadius="24"
+                                            Background="#5865f2">
+                                        <TextBlock Text="{Binding Name[0]}"
+                                                   Foreground="White"
+                                                   FontSize="20"
+                                                   FontWeight="SemiBold"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                </Button>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

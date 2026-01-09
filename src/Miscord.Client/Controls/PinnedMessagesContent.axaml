@@ -1,0 +1,92 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:services="using:Miscord.Client.Services"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.PinnedMessagesContent"
+             x:DataType="controls:PinnedMessagesContent">
+
+    <Border Background="#36393f"
+            CornerRadius="8"
+            Padding="16"
+            BorderBrush="#202225"
+            BorderThickness="1"
+            MaxWidth="500"
+            MaxHeight="600">
+        <DockPanel>
+            <!-- Header -->
+            <Border DockPanel.Dock="Top" Margin="0,0,0,12">
+                <Grid>
+                    <TextBlock Text="📌 Pinned Messages"
+                               Foreground="White"
+                               FontWeight="SemiBold"
+                               FontSize="16"
+                               VerticalAlignment="Center"/>
+                    <Button HorizontalAlignment="Right"
+                            Background="Transparent"
+                            Padding="4"
+                            Command="{Binding ClosePinnedPopupCommand, RelativeSource={RelativeSource AncestorType=controls:PinnedMessagesContent}}"
+                            ToolTip.Tip="Close">
+                        <TextBlock Text="✕" Foreground="#72767d" FontSize="14"/>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Empty State -->
+            <TextBlock DockPanel.Dock="Bottom"
+                       Text="No pinned messages"
+                       Foreground="#72767d"
+                       FontSize="14"
+                       HorizontalAlignment="Center"
+                       Margin="0,20"
+                       IsVisible="{Binding !PinnedMessages.Count, RelativeSource={RelativeSource AncestorType=controls:PinnedMessagesContent}}"/>
+
+            <!-- Pinned Messages List -->
+            <ScrollViewer>
+                <ItemsControl ItemsSource="{Binding PinnedMessages, RelativeSource={RelativeSource AncestorType=controls:PinnedMessagesContent}}">
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:MessageResponse">
+                            <Border Background="#2f3136"
+                                    CornerRadius="4"
+                                    Padding="12"
+                                    Margin="0,0,0,8">
+                                <StackPanel>
+                                    <!-- Author and Time -->
+                                    <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
+                                        <TextBlock Text="{Binding AuthorUsername}"
+                                                   Foreground="#5865f2"
+                                                   FontWeight="SemiBold"
+                                                   FontSize="13"/>
+                                        <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:MMM d, yyyy h:mm tt}'}"
+                                                   Foreground="#72767d"
+                                                   FontSize="11"
+                                                   VerticalAlignment="Center"/>
+                                    </StackPanel>
+
+                                    <!-- Message Content -->
+                                    <TextBlock Text="{Binding Content}"
+                                               Foreground="#dcddde"
+                                               FontSize="14"
+                                               TextWrapping="Wrap"/>
+
+                                    <!-- Unpin Button -->
+                                    <Button HorizontalAlignment="Right"
+                                            Margin="0,8,0,0"
+                                            Background="Transparent"
+                                            Padding="8,4"
+                                            Command="{Binding TogglePinCommand, RelativeSource={RelativeSource AncestorType=controls:PinnedMessagesContent}}"
+                                            CommandParameter="{Binding}"
+                                            ToolTip.Tip="Unpin">
+                                        <TextBlock Text="Unpin" Foreground="#72767d" FontSize="12"/>
+                                    </Button>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

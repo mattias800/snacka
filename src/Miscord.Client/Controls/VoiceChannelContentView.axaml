@@ -1,0 +1,202 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.VoiceChannelContentView"
+             x:DataType="controls:VoiceChannelContentView">
+
+    <Border Background="#36393f">
+        <DockPanel>
+            <!-- Voice Channel Header -->
+            <Border DockPanel.Dock="Top" Background="#36393f" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="🔊"
+                               Foreground="#3ba55c"
+                               FontSize="18"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding SelectedVoiceChannel.Name, RelativeSource={RelativeSource AncestorType=controls:VoiceChannelContentView}, FallbackValue='Voice Channel'}"
+                               Foreground="White"
+                               FontWeight="SemiBold"
+                               FontSize="16"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+            </Border>
+
+            <!-- Audio Device Warning Banner -->
+            <Border DockPanel.Dock="Top"
+                    Background="#faa61a"
+                    Padding="16,12"
+                    IsVisible="{Binding ShowAudioDeviceWarning, RelativeSource={RelativeSource AncestorType=controls:VoiceChannelContentView}}">
+                <Grid ColumnDefinitions="Auto,*,Auto">
+                    <TextBlock Grid.Column="0"
+                               Text="⚠️"
+                               FontSize="18"
+                               VerticalAlignment="Center"
+                               Margin="0,0,12,0"/>
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                        <TextBlock Text="Audio devices not configured"
+                                   Foreground="#1a1a1a"
+                                   FontWeight="SemiBold"
+                                   FontSize="14"/>
+                        <TextBlock Text="Go to Settings to select your microphone and speakers."
+                                   Foreground="#333333"
+                                   FontSize="12"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                    <Button Grid.Column="2"
+                            Content="Open Settings"
+                            Background="#1a1a1a"
+                            Foreground="White"
+                            Padding="12,6"
+                            CornerRadius="4"
+                            VerticalAlignment="Center"
+                            Command="{Binding OpenSettingsCommand, RelativeSource={RelativeSource AncestorType=controls:VoiceChannelContentView}}"/>
+                </Grid>
+            </Border>
+
+            <!-- Voice Channel Video Streams Grid -->
+            <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+                <ItemsControl ItemsSource="{Binding VoiceChannelContent.VideoStreams, RelativeSource={RelativeSource AncestorType=controls:VoiceChannelContentView}}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <WrapPanel Orientation="Horizontal"
+                                       HorizontalAlignment="Center"
+                                       Margin="16"/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="vm:VideoStreamViewModel">
+                            <!-- Video Stream Box -->
+                            <Border Width="320" Height="240"
+                                    Margin="8"
+                                    CornerRadius="8"
+                                    Background="#2f3136"
+                                    BorderThickness="0"
+                                    ClipToBounds="True"
+                                    DoubleTapped="OnVideoTileDoubleTapped"
+                                    Tag="{Binding}">
+
+                                <Grid>
+                                    <!-- Video content (only shown when watching) -->
+                                    <Grid IsVisible="{Binding ShowVideoContent}">
+                                        <!-- Video Feed -->
+                                        <Image Source="{Binding VideoBitmap}"
+                                               Stretch="UniformToFill"
+                                               IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                                        <!-- Avatar placeholder (shown when no video) -->
+                                        <StackPanel VerticalAlignment="Center"
+                                                    HorizontalAlignment="Center"
+                                                    IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                                            <!-- Large Avatar Circle -->
+                                            <Border Width="80" Height="80"
+                                                    CornerRadius="40"
+                                                    Background="#5865f2"
+                                                    HorizontalAlignment="Center">
+                                                <TextBlock Text="{Binding Username[0]}"
+                                                           Foreground="White"
+                                                           FontSize="36"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Grid>
+
+                                    <!-- Watch button overlay for remote screen shares -->
+                                    <StackPanel VerticalAlignment="Center"
+                                                HorizontalAlignment="Center"
+                                                Spacing="16"
+                                                IsVisible="{Binding ShowWatchButton}">
+                                        <!-- Screen share icon -->
+                                        <Border Width="64" Height="64"
+                                                CornerRadius="32"
+                                                Background="#5865f2"
+                                                HorizontalAlignment="Center">
+                                            <TextBlock Text="🖥️"
+                                                       FontSize="28"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Border>
+                                        <!-- Info text -->
+                                        <TextBlock Text="{Binding Username, StringFormat='{}{0} is sharing screen'}"
+                                                   Foreground="#dcddde"
+                                                   FontSize="14"
+                                                   HorizontalAlignment="Center"/>
+                                        <!-- Watch button -->
+                                        <Button Background="#5865f2"
+                                                Foreground="White"
+                                                Padding="16,10"
+                                                CornerRadius="4"
+                                                HorizontalAlignment="Center"
+                                                Cursor="Hand"
+                                                Click="OnWatchScreenShareClick"
+                                                Tag="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="👁️" VerticalAlignment="Center"/>
+                                                <TextBlock Text="Watch Stream" VerticalAlignment="Center" FontWeight="SemiBold"/>
+                                            </StackPanel>
+                                        </Button>
+                                    </StackPanel>
+
+                                    <!-- Username and stream type overlay at bottom -->
+                                    <Border VerticalAlignment="Bottom"
+                                            Background="#80000000"
+                                            Padding="12,6">
+                                        <StackPanel Orientation="Horizontal" Spacing="8">
+                                            <TextBlock Text="{Binding Username}"
+                                                       Foreground="White"
+                                                       FontSize="14"
+                                                       FontWeight="SemiBold"
+                                                       VerticalAlignment="Center"/>
+                                            <!-- Stream type label (shows "Screen" for screen shares) -->
+                                            <Border Background="#5865f2"
+                                                    CornerRadius="4"
+                                                    Padding="6,2"
+                                                    IsVisible="{Binding StreamLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                                                <TextBlock Text="{Binding StreamLabel}"
+                                                           Foreground="White"
+                                                           FontSize="11"
+                                                           FontWeight="SemiBold"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                        </StackPanel>
+                                    </Border>
+
+                                    <!-- Speaking indicator ring (only for camera streams) -->
+                                    <Border CornerRadius="8"
+                                            BorderThickness="3"
+                                            BorderBrush="#3ba55c"
+                                            IsVisible="{Binding ShowSpeakingIndicator}"/>
+
+                                    <!-- Fullscreen button - top right corner (only for screen shares when watching) -->
+                                    <Button VerticalAlignment="Top"
+                                            HorizontalAlignment="Right"
+                                            Margin="8"
+                                            Padding="8,4"
+                                            Background="#80000000"
+                                            BorderThickness="0"
+                                            CornerRadius="4"
+                                            Cursor="Hand"
+                                            Click="OnFullscreenButtonClick"
+                                            Tag="{Binding}">
+                                        <Button.IsVisible>
+                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                <Binding Path="ShowVideoContent"/>
+                                                <Binding Path="StreamLabel" Converter="{x:Static StringConverters.IsNotNullOrEmpty}"/>
+                                            </MultiBinding>
+                                        </Button.IsVisible>
+                                        <TextBlock Text="⛶" Foreground="White" FontSize="16"/>
+                                    </Button>
+                                </Grid>
+                            </Border>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

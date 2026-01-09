@@ -1,0 +1,408 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:conv="using:Miscord.Client.Converters"
+             xmlns:services="using:Miscord.Client.Services"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.ChatAreaView"
+             x:DataType="controls:ChatAreaView">
+
+    <Border Background="#36393f">
+        <DockPanel>
+            <!-- Channel Header -->
+            <Border DockPanel.Dock="Top" Background="#36393f" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <TextBlock Text="#"
+                               Foreground="#72767d"
+                               FontSize="22"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding ChannelName, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, FallbackValue='general'}"
+                               Foreground="White"
+                               FontWeight="SemiBold"
+                               FontSize="16"
+                               VerticalAlignment="Center"/>
+                    <TextBlock Text="{Binding ChannelTopic, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                               Foreground="#72767d"
+                               FontSize="13"
+                               VerticalAlignment="Center"
+                               Margin="8,0,0,0"
+                               IsVisible="{Binding ChannelTopic, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                    <!-- Pinned Messages Button -->
+                    <Button Classes="msg-action-btn"
+                            Command="{Binding ShowPinnedMessagesCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                            ToolTip.Tip="Pinned Messages"
+                            Margin="8,0,0,0"
+                            VerticalAlignment="Center">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <TextBlock Text="📌" FontSize="14"/>
+                            <TextBlock Text="{Binding PinnedCount, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                       Foreground="#72767d"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding PinnedCount, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, Converter={x:Static conv:IntGreaterThanZeroConverter.Instance}}"/>
+                        </StackPanel>
+                    </Button>
+                </StackPanel>
+            </Border>
+
+            <!-- Message Input -->
+            <Border DockPanel.Dock="Bottom" Padding="16,8,16,16" Background="#36393f">
+                <StackPanel Spacing="8">
+                    <!-- Formatting Toolbar -->
+                    <StackPanel Orientation="Horizontal" Spacing="4">
+                        <Button Background="Transparent"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Bold (wrap with **)"
+                                Click="OnBoldClick">
+                            <TextBlock Text="B" Foreground="#b9bbbe" FontWeight="Bold" FontSize="14"/>
+                        </Button>
+                        <Button Background="Transparent"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Italic (wrap with *)"
+                                Click="OnItalicClick">
+                            <TextBlock Text="I" Foreground="#b9bbbe" FontStyle="Italic" FontSize="14"/>
+                        </Button>
+                        <Button Background="Transparent"
+                                Padding="8,4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Code (wrap with `)"
+                                Click="OnCodeClick">
+                            <TextBlock Text="&lt;/&gt;" Foreground="#b9bbbe" FontFamily="Consolas,monospace" FontSize="12"/>
+                        </Button>
+                        <Border Width="1" Background="#42464d" Margin="4,2"/>
+                        <TextBlock Text="Markdown supported"
+                                   Foreground="#72767d"
+                                   FontSize="11"
+                                   VerticalAlignment="Center"
+                                   Margin="4,0,0,0"/>
+                    </StackPanel>
+
+                    <!-- Reply Preview Banner -->
+                    <Border Background="#2f3136"
+                            CornerRadius="4"
+                            Padding="12,8"
+                            Margin="0,0,0,8"
+                            IsVisible="{Binding IsReplying, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="↩" Foreground="#5865f2" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="Replying to" Foreground="#72767d" FontSize="13" VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ReplyingToAuthor, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                           Foreground="#5865f2"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ReplyingToContent, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                           Foreground="#72767d"
+                                           FontSize="13"
+                                           TextTrimming="CharacterEllipsis"
+                                           MaxWidth="350"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Command="{Binding CancelReplyCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                    Background="Transparent"
+                                    Padding="4"
+                                    Cursor="Hand"
+                                    ToolTip.Tip="Cancel Reply">
+                                <TextBlock Text="✕" Foreground="#72767d" FontSize="14"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Typing Indicator -->
+                    <TextBlock Text="{Binding TypingIndicatorText, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                               IsVisible="{Binding IsAnyoneTyping, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                               Foreground="#72767d"
+                               FontSize="12"
+                               FontStyle="Italic"
+                               Margin="0,0,0,4"/>
+
+                    <!-- Pending Attachments Preview -->
+                    <Border Background="#2f3136"
+                            CornerRadius="4"
+                            Padding="8"
+                            Margin="0,0,0,8"
+                            IsVisible="{Binding HasPendingAttachments, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                        <DockPanel>
+                            <TextBlock DockPanel.Dock="Top"
+                                       Text="Attachments"
+                                       Foreground="#72767d"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Margin="0,0,0,4"/>
+                            <ItemsControl x:Name="PendingAttachmentsList"
+                                          ItemsSource="{Binding PendingAttachments, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate>
+                                        <Border Background="#40444b"
+                                                CornerRadius="4"
+                                                Padding="8,4"
+                                                Margin="0,0,8,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <TextBlock Text="{Binding FileName}"
+                                                           Foreground="#dcddde"
+                                                           FontSize="12"
+                                                           MaxWidth="200"
+                                                           TextTrimming="CharacterEllipsis"
+                                                           VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding FormattedSize}"
+                                                           Foreground="#72767d"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"/>
+                                                <Button Background="Transparent"
+                                                        Padding="4,2"
+                                                        Cursor="Hand"
+                                                        ToolTip.Tip="Remove"
+                                                        Click="OnRemovePendingAttachment"
+                                                        Tag="{Binding}">
+                                                    <TextBlock Text="✕" Foreground="#72767d" FontSize="10"/>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </DockPanel>
+                    </Border>
+
+                    <!-- Mention Autocomplete Popup -->
+                    <Border Background="#2f3136"
+                            CornerRadius="4"
+                            Padding="4"
+                            Margin="0,0,0,8"
+                            IsVisible="{Binding IsMentionPopupOpen, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                        <ItemsControl x:Name="MentionSuggestionsList"
+                                      ItemsSource="{Binding MentionSuggestions, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:CommunityMemberResponse">
+                                    <Border x:Name="MentionItemBorder"
+                                            Classes="member-item"
+                                            Padding="8,6"
+                                            CornerRadius="4"
+                                            Cursor="Hand"
+                                            PointerPressed="MentionSuggestion_PointerPressed">
+                                        <Border.Background>
+                                            <MultiBinding Converter="{x:Static conv:MentionSelectedBackgroundConverter.Instance}">
+                                                <Binding />
+                                                <Binding Path="MentionSuggestions" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
+                                                <Binding Path="SelectedMentionIndex" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
+                                            </MultiBinding>
+                                        </Border.Background>
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Avatar -->
+                                            <Border Grid.Column="0"
+                                                    Width="28" Height="28"
+                                                    CornerRadius="14"
+                                                    Background="#5865f2"
+                                                    Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding Username[0]}"
+                                                           Foreground="White"
+                                                           FontSize="12"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+
+                                            <!-- Username -->
+                                            <TextBlock Grid.Column="1"
+                                                       Text="{Binding Username}"
+                                                       Foreground="#dcddde"
+                                                       FontSize="14"
+                                                       VerticalAlignment="Center"/>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </Border>
+
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+
+                        <!-- Attach Button -->
+                        <Button Grid.Column="0"
+                                Background="Transparent"
+                                Padding="12,10"
+                                Margin="0,0,4,0"
+                                CornerRadius="4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Attach files"
+                                Click="OnAttachButtonClick">
+                            <TextBlock Text="📎" FontSize="18" Foreground="#b9bbbe"/>
+                        </Button>
+
+                        <!-- GIF Button -->
+                        <Button x:Name="GifButton"
+                                Grid.Column="1"
+                                Background="Transparent"
+                                Padding="8,10"
+                                Margin="0,0,4,0"
+                                CornerRadius="4"
+                                Cursor="Hand"
+                                ToolTip.Tip="Send a GIF"
+                                IsVisible="{Binding IsGifsEnabled, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                Click="OnGifButtonClick">
+                            <TextBlock Text="GIF" FontSize="11" FontWeight="Bold" Foreground="#b9bbbe"/>
+                        </Button>
+
+                        <TextBox x:Name="MessageInputBox"
+                                 Grid.Column="2"
+                                 Text="{Binding MessageInput, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, Mode=TwoWay}"
+                                 Watermark="{Binding ChannelName, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, StringFormat='Message #{0}'}"
+                                 Background="#40444b"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="8"
+                                 Padding="16,12"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MaxHeight="200"
+                                 DragDrop.AllowDrop="True"/>
+
+                        <Button Grid.Column="3"
+                                Command="{Binding SendMessageCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="16,10"
+                                Margin="8,0,0,0"
+                                CornerRadius="4">
+                            <Panel>
+                                <TextBlock Text="Send" IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="..." IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"/>
+                            </Panel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- Messages List -->
+            <ScrollViewer x:Name="MessagesScrollViewer" Margin="0,8" HorizontalScrollBarVisibility="Disabled">
+                <ItemsControl x:Name="MessagesList"
+                              ItemsSource="{Binding Messages, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                              Margin="16,0"
+                              HorizontalAlignment="Stretch"
+                              Width="{Binding $parent[ScrollViewer].Viewport.Width}">
+                    <ItemsControl.ItemsPanel>
+                        <ItemsPanelTemplate>
+                            <StackPanel/>
+                        </ItemsPanelTemplate>
+                    </ItemsControl.ItemsPanel>
+                    <ItemsControl.ItemTemplate>
+                        <DataTemplate x:DataType="services:MessageResponse">
+                            <controls:MessageItemView
+                                Message="{Binding}"
+                                AuthorUsername="{Binding AuthorUsername}"
+                                MessageContent="{Binding Content}"
+                                CreatedAt="{Binding CreatedAt}"
+                                IsEdited="{Binding IsEdited}"
+                                ReplyTo="{Binding ReplyTo}"
+                                Reactions="{Binding Reactions}"
+                                Attachments="{Binding Attachments}"
+                                IsPinned="{Binding IsPinned}"
+                                ReplyCount="{Binding ReplyCount}"
+                                BaseUrl="{Binding BaseUrl, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                TogglePinCommand="{Binding TogglePinCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                ReplyToMessageCommand="{Binding ReplyToMessageCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                StartEditMessageCommand="{Binding StartEditMessageCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                DeleteMessageCommand="{Binding DeleteMessageCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                ShowThreadIndicator="True"
+                                ShowStartThreadButton="True"
+                                ShowPinButton="True"
+                                ShowReplyButton="True"
+                                ShowReactions="True"
+                                ShowAttachments="True"
+                                AddReactionRequested="OnMessageAddReactionRequested"
+                                StartThreadRequested="OnMessageStartThreadRequested"
+                                ViewThreadRequested="OnMessageViewThreadRequested"
+                                ReactionToggleRequested="OnMessageReactionToggleRequested"
+                                ImageClicked="OnAttachmentImageClicked">
+                                <controls:MessageItemView.ShowDateSeparator>
+                                    <MultiBinding Converter="{x:Static conv:ShowDateSeparatorConverter.Instance}">
+                                        <Binding />
+                                        <Binding Path="Messages" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
+                                    </MultiBinding>
+                                </controls:MessageItemView.ShowDateSeparator>
+                            </controls:MessageItemView>
+                        </DataTemplate>
+                    </ItemsControl.ItemTemplate>
+                </ItemsControl>
+            </ScrollViewer>
+
+            <!-- Message Edit Overlay -->
+            <Border Background="#2f3136"
+                    DockPanel.Dock="Bottom"
+                    Padding="16"
+                    IsVisible="{Binding IsEditing, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                <StackPanel Spacing="8">
+                    <TextBlock Text="EDITING MESSAGE"
+                               Foreground="#72767d"
+                               FontSize="11"
+                               FontWeight="SemiBold"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBox Grid.Column="0"
+                                 x:Name="EditMessageInputBox"
+                                 Text="{Binding EditingMessageContent, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, Mode=TwoWay}"
+                                 Background="#40444b"
+                                 Foreground="White"
+                                 BorderThickness="0"
+                                 CornerRadius="4"
+                                 Padding="12,8"
+                                 AcceptsReturn="True"
+                                 TextWrapping="Wrap"
+                                 MaxHeight="200"/>
+                        <Button Grid.Column="1"
+                                Command="{Binding CancelEditMessageCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                Background="Transparent"
+                                Foreground="#b9bbbe"
+                                Content="Cancel"
+                                Padding="12,8"
+                                Margin="8,0,0,0"
+                                Cursor="Hand"/>
+                        <Button Grid.Column="2"
+                                Command="{Binding SaveMessageEditCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                Background="#5865f2"
+                                Foreground="White"
+                                Padding="12,8"
+                                Margin="8,0,0,0"
+                                CornerRadius="4"
+                                Cursor="Hand">
+                            <Panel>
+                                <TextBlock Text="Save" IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="..." IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"/>
+                            </Panel>
+                        </Button>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </DockPanel>
+    </Border>
+</UserControl>

@@ -8,72 +8,6 @@
              x:Class="Miscord.Client.Views.MainAppView"
              x:DataType="vm:MainAppViewModel"
              x:CompileBindings="False">
-    <UserControl.Styles>
-        <!-- Voice channel item style with hover/press highlights -->
-        <Style Selector="Border.voice-channel-item">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="CornerRadius" Value="4"/>
-        </Style>
-        <Style Selector="Border.voice-channel-item:pointerover">
-            <Setter Property="Background" Value="#35373c"/>
-        </Style>
-        <Style Selector="Border.voice-channel-item:pressed">
-            <Setter Property="Background" Value="#3f4248"/>
-        </Style>
-
-        <!-- Text channel button style -->
-        <Style Selector="Button.channel-btn">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-        </Style>
-        <Style Selector="Button.channel-btn:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#35373c"/>
-        </Style>
-        <Style Selector="Button.channel-btn:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="#3f4248"/>
-        </Style>
-
-        <!-- Member list item style with hover/press highlights -->
-        <Style Selector="Border.member-item">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="CornerRadius" Value="4"/>
-        </Style>
-        <Style Selector="Border.member-item:pointerover">
-            <Setter Property="Background" Value="#35373c"/>
-        </Style>
-        <Style Selector="Border.member-item:pressed">
-            <Setter Property="Background" Value="#3f4248"/>
-        </Style>
-
-        <!-- Voice participant item style with hover/press highlights -->
-        <Style Selector="Border.voice-participant">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Padding" Value="4"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-        <Style Selector="Border.voice-participant:pointerover">
-            <Setter Property="Background" Value="#35373c"/>
-        </Style>
-        <Style Selector="Border.voice-participant:pressed">
-            <Setter Property="Background" Value="#3f4248"/>
-        </Style>
-
-        <!-- Message action button style (reply, react, edit, delete) -->
-        <Style Selector="Button.msg-action-btn">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="BorderThickness" Value="0"/>
-            <Setter Property="Padding" Value="6"/>
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-        <Style Selector="Button.msg-action-btn:pointerover /template/ ContentPresenter">
-            <Setter Property="Background" Value="#40444b"/>
-        </Style>
-        <Style Selector="Button.msg-action-btn:pressed /template/ ContentPresenter">
-            <Setter Property="Background" Value="#4f545c"/>
-        </Style>
-    </UserControl.Styles>
     <UserControl.Resources>
         <conv:ColorToBorderConverter x:Key="ColorToBorderConverter"/>
     </UserControl.Resources>
@@ -86,82 +20,12 @@
         </Grid.ColumnDefinitions>
 
         <!-- Community List (Left Sidebar) -->
-        <Border Grid.Column="0" Background="#202225" Padding="0,12">
-            <DockPanel>
-                <!-- Add Community Button -->
-                <Button DockPanel.Dock="Bottom"
-                        Command="{Binding CreateCommunityCommand}"
-                        Background="Transparent"
-                        HorizontalAlignment="Center"
-                        Margin="0,8"
-                        Padding="0"
-                        Cursor="Hand"
-                        IsEnabled="{Binding IsLoading, Converter={x:Static BoolConverters.Not}}">
-                    <Border Width="48" Height="48" CornerRadius="24"
-                            Background="#36393f">
-                        <TextBlock Text="+"
-                                   Foreground="#3ba55c"
-                                   FontSize="28"
-                                   FontWeight="Light"
-                                   HorizontalAlignment="Center"
-                                   VerticalAlignment="Center"/>
-                    </Border>
-                </Button>
-
-                <!-- DM Button and Server Icons -->
-                <ScrollViewer VerticalScrollBarVisibility="Hidden">
-                    <StackPanel>
-                        <!-- Direct Messages Button -->
-                        <Button Command="{Binding OpenDMsCommand}"
-                                Background="Transparent"
-                                HorizontalAlignment="Center"
-                                Margin="0,4"
-                                Padding="0"
-                                Cursor="Hand"
-                                ToolTip.Tip="Direct Messages">
-                            <Border Width="48" Height="48"
-                                    CornerRadius="24"
-                                    Background="#36393f">
-                                <TextBlock Text="✉"
-                                           Foreground="White"
-                                           FontSize="20"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                        </Button>
-
-                        <!-- Separator -->
-                        <Border Width="32" Height="2" Background="#36393f" Margin="8,8" HorizontalAlignment="Center"/>
-
-                        <!-- Community Icons -->
-                        <ItemsControl x:Name="CommunitiesList" ItemsSource="{Binding Communities}">
-                        <ItemsControl.ItemTemplate>
-                            <DataTemplate>
-                                <Button Background="Transparent"
-                                        Command="{Binding #CommunitiesList.DataContext.SelectCommunityCommand}"
-                                        CommandParameter="{Binding}"
-                                        HorizontalAlignment="Center"
-                                        Margin="0,4"
-                                        Padding="0"
-                                        Cursor="Hand">
-                                    <Border Width="48" Height="48"
-                                            CornerRadius="24"
-                                            Background="#5865f2">
-                                        <TextBlock Text="{Binding Name[0]}"
-                                                   Foreground="White"
-                                                   FontSize="20"
-                                                   FontWeight="SemiBold"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Border>
-                                </Button>
-                            </DataTemplate>
-                        </ItemsControl.ItemTemplate>
-                    </ItemsControl>
-                    </StackPanel>
-                </ScrollViewer>
-            </DockPanel>
-        </Border>
+        <controls:CommunityListView Grid.Column="0"
+                                    Communities="{Binding Communities}"
+                                    IsLoading="{Binding IsLoading}"
+                                    SelectCommunityCommand="{Binding SelectCommunityCommand}"
+                                    CreateCommunityCommand="{Binding CreateCommunityCommand}"
+                                    OpenDMsCommand="{Binding OpenDMsCommand}"/>
 
         <!-- Channel List (Second Column) -->
         <Border Grid.Column="1" Background="#2f3136">
@@ -175,234 +39,29 @@
                 </Border>
 
                 <!-- User Panel at Bottom (always visible, docked first to be at very bottom) -->
-                <Border DockPanel.Dock="Bottom" Background="#292b2f" Padding="8">
-                    <Grid>
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto"/>
-                            <ColumnDefinition Width="*"/>
-                            <ColumnDefinition Width="Auto"/>
-                        </Grid.ColumnDefinitions>
-
-                        <Panel Grid.Column="0" Width="36" Height="36" Margin="0,0,6,0">
-                            <!-- Speaking indicator ring (green glow when speaking) -->
-                            <Border Width="36" Height="36"
-                                    CornerRadius="18"
-                                    BorderBrush="#3ba55c"
-                                    BorderThickness="2"
-                                    IsVisible="{Binding IsSpeaking}"/>
-                            <Border Width="32" Height="32" CornerRadius="16" Background="#5865f2"
-                                    HorizontalAlignment="Center" VerticalAlignment="Center">
-                                <TextBlock Text="{Binding Username[0]}"
-                                           Foreground="White"
-                                           FontSize="14"
-                                           FontWeight="Bold"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                            <!-- Muted indicator on avatar -->
-                            <Border Width="14" Height="14"
-                                    CornerRadius="7"
-                                    Background="#ed4245"
-                                    HorizontalAlignment="Right"
-                                    VerticalAlignment="Bottom"
-                                    Margin="0,0,0,0"
-                                    IsVisible="{Binding IsMuted}">
-                                <TextBlock Text="🔇" FontSize="8"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
-                        </Panel>
-
-                        <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                            <TextBlock Text="{Binding Username}"
-                                       Foreground="White"
-                                       FontSize="13"
-                                       FontWeight="SemiBold"/>
-                            <TextBlock Text="Online"
-                                       Foreground="#3ba55c"
-                                       FontSize="11"/>
-                        </StackPanel>
-
-                        <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
-                            <!-- Mute Button - always visible -->
-                            <Panel>
-                                <Button Command="{Binding ToggleMuteCommand}"
-                                        Padding="6,4"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="#ed4245"
-                                        ToolTip.Tip="Unmute"
-                                        IsVisible="{Binding IsMuted}">
-                                    <TextBlock Text="🔇" Foreground="White" FontSize="14"/>
-                                </Button>
-                                <Button Command="{Binding ToggleMuteCommand}"
-                                        Padding="6,4"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="Transparent"
-                                        ToolTip.Tip="Mute"
-                                        IsVisible="{Binding !IsMuted}">
-                                    <TextBlock Text="🎤" Foreground="#b9bbbe" FontSize="14"/>
-                                </Button>
-                            </Panel>
-                            <!-- Deafen Button - always visible -->
-                            <Panel>
-                                <Button Command="{Binding ToggleDeafenCommand}"
-                                        Padding="6,4"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="#ed4245"
-                                        ToolTip.Tip="Undeafen"
-                                        IsVisible="{Binding IsDeafened}">
-                                    <TextBlock Text="🔇" Foreground="White" FontSize="14"/>
-                                </Button>
-                                <Button Command="{Binding ToggleDeafenCommand}"
-                                        Padding="6,4"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="Transparent"
-                                        ToolTip.Tip="Deafen"
-                                        IsVisible="{Binding !IsDeafened}">
-                                    <TextBlock Text="🔊" Foreground="#b9bbbe" FontSize="14"/>
-                                </Button>
-                            </Panel>
-                            <!-- Audio Device Button -->
-                            <Button x:Name="AudioDeviceButton"
-                                    Background="Transparent"
-                                    Padding="6,4"
-                                    Cursor="Hand"
-                                    ToolTip.Tip="Audio Devices"
-                                    Click="OnAudioDeviceButtonClick">
-                                <TextBlock Text="🎧" Foreground="#b9bbbe" FontSize="14"/>
-                            </Button>
-                            <!-- Settings Button -->
-                            <Button Command="{Binding OpenSettingsCommand}"
-                                    Background="Transparent"
-                                    Padding="6,4"
-                                    Cursor="Hand"
-                                    ToolTip.Tip="Settings">
-                                <TextBlock Text="⚙"
-                                           Foreground="#b9bbbe"
-                                           FontSize="14"/>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Border>
+                <controls:UserPanelView DockPanel.Dock="Bottom"
+                                        Username="{Binding Username}"
+                                        IsSpeaking="{Binding IsSpeaking}"
+                                        IsMuted="{Binding IsMuted}"
+                                        IsDeafened="{Binding IsDeafened}"
+                                        ToggleMuteCommand="{Binding ToggleMuteCommand}"
+                                        ToggleDeafenCommand="{Binding ToggleDeafenCommand}"
+                                        OpenSettingsCommand="{Binding OpenSettingsCommand}"
+                                        AudioDeviceButtonClicked="OnUserPanelAudioDeviceButtonClick"/>
 
                 <!-- Voice Connected Panel (shows when in voice channel, above user panel) -->
-                <Border DockPanel.Dock="Bottom"
-                        Background="#292b2f"
-                        Padding="8"
-                        BorderThickness="0,0,0,1"
-                        BorderBrush="#202225"
-                        IsVisible="{Binding IsInVoiceChannel}">
-                    <Grid>
-                        <Grid.RowDefinitions>
-                            <RowDefinition Height="Auto"/>
-                            <RowDefinition Height="Auto"/>
-                        </Grid.RowDefinitions>
-
-                        <!-- Voice Channel Info -->
-                        <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="8" Margin="0,0,0,8">
-                            <!-- Connected icon (green) -->
-                            <TextBlock Text="🔊"
-                                       Foreground="#3ba55c"
-                                       FontSize="14"
-                                       VerticalAlignment="Center"
-                                       IsVisible="{Binding IsVoiceConnected}"/>
-                            <!-- Connecting icon (yellow) -->
-                            <TextBlock Text="📡"
-                                       Foreground="#faa61a"
-                                       FontSize="14"
-                                       VerticalAlignment="Center"
-                                       IsVisible="{Binding IsVoiceConnecting}"/>
-                            <StackPanel>
-                                <!-- Connected status (green) -->
-                                <TextBlock Text="{Binding VoiceConnectionStatusText}"
-                                           Foreground="#3ba55c"
-                                           FontSize="12"
-                                           FontWeight="SemiBold"
-                                           IsVisible="{Binding IsVoiceConnected}"/>
-                                <!-- Connecting status (yellow) -->
-                                <TextBlock Text="{Binding VoiceConnectionStatusText}"
-                                           Foreground="#faa61a"
-                                           FontSize="12"
-                                           FontWeight="SemiBold"
-                                           IsVisible="{Binding IsVoiceConnecting}"/>
-                                <TextBlock Text="{Binding CurrentVoiceChannel.Name}"
-                                           Foreground="#72767d"
-                                           FontSize="11"/>
-                            </StackPanel>
-                        </StackPanel>
-
-                        <!-- Voice Controls (only show when connected) - no mute/deafen since they're in user panel -->
-                        <StackPanel Grid.Row="1" Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8"
-                                    IsVisible="{Binding IsVoiceConnected}">
-                            <!-- Camera Button - green when on -->
-                            <Panel>
-                                <Button Command="{Binding ToggleCameraCommand}"
-                                        Padding="8"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="#3ba55c"
-                                        ToolTip.Tip="Turn off camera"
-                                        IsVisible="{Binding IsCameraOn}">
-                                    <TextBlock Text="📹" Foreground="White" FontSize="16"/>
-                                </Button>
-                                <Button Command="{Binding ToggleCameraCommand}"
-                                        Padding="8"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="Transparent"
-                                        ToolTip.Tip="Turn on camera"
-                                        IsVisible="{Binding !IsCameraOn}">
-                                    <TextBlock Text="📷" Foreground="White" FontSize="16"/>
-                                </Button>
-                            </Panel>
-                            <!-- Screen Share Button - green when sharing -->
-                            <Panel>
-                                <Button Command="{Binding ToggleScreenShareCommand}"
-                                        Padding="8"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="#3ba55c"
-                                        ToolTip.Tip="Stop sharing"
-                                        IsVisible="{Binding IsScreenSharing}">
-                                    <TextBlock Text="🖥️" Foreground="White" FontSize="16"/>
-                                </Button>
-                                <Button Command="{Binding ToggleScreenShareCommand}"
-                                        Padding="8"
-                                        CornerRadius="4"
-                                        Cursor="Hand"
-                                        Background="Transparent"
-                                        ToolTip.Tip="Share screen"
-                                        IsVisible="{Binding !IsScreenSharing}">
-                                    <TextBlock Text="🖥️" Foreground="White" FontSize="16"/>
-                                </Button>
-                            </Panel>
-                            <!-- Allow Drawing Button - only visible when screen sharing -->
-                            <Panel IsVisible="{Binding IsScreenSharing}">
-                                <ToggleButton IsChecked="{Binding IsDrawingAllowedForViewers}"
-                                              Padding="8"
-                                              CornerRadius="4"
-                                              Cursor="Hand"
-                                              ToolTip.Tip="Allow viewers to draw on your screen">
-                                    <TextBlock Text="✏️" Foreground="White" FontSize="16"/>
-                                </ToggleButton>
-                            </Panel>
-                            <Button Command="{Binding LeaveVoiceChannelCommand}"
-                                    Background="#ed4245"
-                                    Padding="8"
-                                    CornerRadius="4"
-                                    Cursor="Hand"
-                                    ToolTip.Tip="Disconnect">
-                                <TextBlock Text="📞"
-                                           Foreground="White"
-                                           FontSize="16"/>
-                            </Button>
-                        </StackPanel>
-                    </Grid>
-                </Border>
+                <controls:VoiceConnectedPanelView DockPanel.Dock="Bottom"
+                                                  IsInVoiceChannel="{Binding IsInVoiceChannel}"
+                                                  IsVoiceConnected="{Binding IsVoiceConnected}"
+                                                  IsVoiceConnecting="{Binding IsVoiceConnecting}"
+                                                  VoiceConnectionStatusText="{Binding VoiceConnectionStatusText}"
+                                                  CurrentVoiceChannel="{Binding CurrentVoiceChannel}"
+                                                  IsCameraOn="{Binding IsCameraOn}"
+                                                  IsScreenSharing="{Binding IsScreenSharing}"
+                                                  IsDrawingAllowedForViewers="{Binding IsDrawingAllowedForViewers, Mode=TwoWay}"
+                                                  ToggleCameraCommand="{Binding ToggleCameraCommand}"
+                                                  ToggleScreenShareCommand="{Binding ToggleScreenShareCommand}"
+                                                  LeaveVoiceChannelCommand="{Binding LeaveVoiceChannelCommand}"/>
 
                 <!-- Channel List -->
                 <controls:ChannelListView Margin="8,8,0,0"
@@ -430,366 +89,37 @@
         <!-- Main Content Area (Chat, Voice Channel, or DM) -->
         <Grid Grid.Column="2">
             <!-- DM Content (shown when viewing DM conversation) -->
-            <Border Background="#36393f" IsVisible="{Binding IsViewingDM}">
-                <DockPanel>
-                    <!-- DM Header with close button -->
-                    <Border DockPanel.Dock="Top" Background="#36393f" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                                <TextBlock Text="@"
-                                           Foreground="#72767d"
-                                           FontSize="22"
-                                           VerticalAlignment="Center"/>
-                                <TextBlock Text="{Binding DMRecipientName, FallbackValue='User'}"
-                                           Foreground="White"
-                                           FontWeight="SemiBold"
-                                           FontSize="16"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <Button Grid.Column="1"
-                                    Command="{Binding CloseDMCommand}"
-                                    Background="Transparent"
-                                    Padding="8,4"
-                                    Cursor="Hand"
-                                    ToolTip.Tip="Close DM">
-                                <TextBlock Text="✕"
-                                           Foreground="#72767d"
-                                           FontSize="16"/>
-                            </Button>
-                        </Grid>
-                    </Border>
-
-                    <!-- DM Message Input -->
-                    <Border DockPanel.Dock="Bottom" Padding="16" Background="#36393f">
-                        <StackPanel>
-                            <!-- DM Typing Indicator -->
-                            <TextBlock Text="{Binding DMTypingIndicatorText}"
-                                       IsVisible="{Binding IsDMTyping}"
-                                       Foreground="#72767d"
-                                       FontSize="12"
-                                       FontStyle="Italic"
-                                       Margin="0,0,0,4"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-
-                                <TextBox x:Name="DMMessageInputBox"
-                                     Grid.Column="0"
-                                     Text="{Binding DMMessageInput}"
-                                     Watermark="{Binding DMRecipientName, StringFormat='Message @{0}'}"
-                                     Background="#40444b"
-                                     Foreground="White"
-                                     BorderThickness="0"
-                                     CornerRadius="8"
-                                     Padding="16,12"
-                                     AcceptsReturn="True"
-                                     TextWrapping="Wrap"
-                                     MaxHeight="200"/>
-
-                            <Button Grid.Column="1"
-                                    Command="{Binding SendDMMessageCommand}"
-                                    Background="#5865f2"
-                                    Foreground="White"
-                                    Padding="16,10"
-                                    Margin="8,0,0,0"
-                                    CornerRadius="4">
-                                <Panel>
-                                    <TextBlock Text="Send" IsVisible="{Binding IsLoading, Converter={x:Static BoolConverters.Not}}"/>
-                                    <TextBlock Text="..." IsVisible="{Binding IsLoading}"/>
-                                </Panel>
-                            </Button>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- DM Messages List -->
-                    <ScrollViewer x:Name="DMMessagesScrollViewer" Margin="0,8">
-                        <ItemsControl x:Name="DMMessagesList" ItemsSource="{Binding DMMessages}" Margin="16,0">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <controls:MessageItemView
-                                        Message="{Binding}"
-                                        AuthorUsername="{Binding SenderUsername}"
-                                        MessageContent="{Binding Content}"
-                                        CreatedAt="{Binding CreatedAt}"
-                                        StartEditMessageCommand="{Binding #DMMessagesList.DataContext.StartEditDMMessageCommand}"
-                                        DeleteMessageCommand="{Binding #DMMessagesList.DataContext.DeleteDMMessageCommand}"
-                                        ShowThreadIndicator="False"
-                                        ShowStartThreadButton="False"
-                                        ShowPinButton="False"
-                                        ShowReplyButton="False"
-                                        ShowReactions="False"
-                                        ShowAttachments="False">
-                                        <controls:MessageItemView.ShowDateSeparator>
-                                            <MultiBinding Converter="{x:Static conv:ShowDateSeparatorConverter.Instance}">
-                                                <Binding />
-                                                <Binding Path="DataContext.DMMessages" ElementName="DMMessagesList" />
-                                            </MultiBinding>
-                                        </controls:MessageItemView.ShowDateSeparator>
-                                    </controls:MessageItemView>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-
-                    <!-- DM Message Edit Overlay -->
-                    <Border Background="#2f3136"
-                            DockPanel.Dock="Bottom"
-                            Padding="16"
-                            IsVisible="{Binding EditingDMMessage, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <StackPanel Spacing="8">
-                            <TextBlock Text="EDITING MESSAGE"
-                                       Foreground="#72767d"
-                                       FontSize="11"
-                                       FontWeight="SemiBold"/>
-                            <Grid>
-                                <Grid.ColumnDefinitions>
-                                    <ColumnDefinition Width="*"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                    <ColumnDefinition Width="Auto"/>
-                                </Grid.ColumnDefinitions>
-                                <TextBox Grid.Column="0"
-                                         x:Name="EditDMMessageInputBox"
-                                         Text="{Binding EditingDMMessageContent}"
-                                         Background="#40444b"
-                                         Foreground="White"
-                                         BorderThickness="0"
-                                         CornerRadius="4"
-                                         Padding="12,8"
-                                         AcceptsReturn="True"
-                                         TextWrapping="Wrap"
-                                         MaxHeight="200"/>
-                                <Button Grid.Column="1"
-                                        Command="{Binding CancelEditDMMessageCommand}"
-                                        Background="Transparent"
-                                        Foreground="#b9bbbe"
-                                        Content="Cancel"
-                                        Padding="12,8"
-                                        Margin="8,0,0,0"
-                                        Cursor="Hand"/>
-                                <Button Grid.Column="2"
-                                        Command="{Binding SaveDMMessageEditCommand}"
-                                        Background="#5865f2"
-                                        Foreground="White"
-                                        Padding="12,8"
-                                        Margin="8,0,0,0"
-                                        CornerRadius="4"
-                                        Cursor="Hand">
-                                    <Panel>
-                                        <TextBlock Text="Save" IsVisible="{Binding IsLoading, Converter={x:Static BoolConverters.Not}}"/>
-                                        <TextBlock Text="..." IsVisible="{Binding IsLoading}"/>
-                                    </Panel>
-                                </Button>
-                            </Grid>
-                        </StackPanel>
-                    </Border>
-                </DockPanel>
-            </Border>
+            <controls:DMContentView IsVisible="{Binding IsViewingDM}"
+                                    DMRecipientName="{Binding DMRecipientName}"
+                                    IsDMTyping="{Binding IsDMTyping}"
+                                    DMTypingIndicatorText="{Binding DMTypingIndicatorText}"
+                                    DMMessageInput="{Binding DMMessageInput, Mode=TwoWay}"
+                                    DMMessages="{Binding DMMessages}"
+                                    EditingDMMessage="{Binding EditingDMMessage}"
+                                    EditingDMMessageContent="{Binding EditingDMMessageContent, Mode=TwoWay}"
+                                    IsLoading="{Binding IsLoading}"
+                                    CloseDMCommand="{Binding CloseDMCommand}"
+                                    SendDMMessageCommand="{Binding SendDMMessageCommand}"
+                                    StartEditDMMessageCommand="{Binding StartEditDMMessageCommand}"
+                                    DeleteDMMessageCommand="{Binding DeleteDMMessageCommand}"
+                                    CancelEditDMMessageCommand="{Binding CancelEditDMMessageCommand}"
+                                    SaveDMMessageEditCommand="{Binding SaveDMMessageEditCommand}"/>
 
             <!-- Voice Channel Content (shown when viewing voice channel, but not DM) -->
-            <Border Background="#36393f" IsVisible="{Binding IsViewingVoiceChannel}">
-                <Border.IsVisible>
+            <controls:VoiceChannelContentView SelectedVoiceChannel="{Binding SelectedVoiceChannelForViewing}"
+                                              ShowAudioDeviceWarning="{Binding ShowAudioDeviceWarning}"
+                                              VoiceChannelContent="{Binding VoiceChannelContent}"
+                                              OpenSettingsCommand="{Binding OpenSettingsCommand}"
+                                              WatchScreenShareRequested="OnVoiceChannelWatchScreenShare"
+                                              FullscreenRequested="OnVoiceChannelFullscreen"
+                                              VideoTileDoubleTapped="OnVoiceChannelVideoTileDoubleTapped">
+                <controls:VoiceChannelContentView.IsVisible>
                     <MultiBinding Converter="{x:Static BoolConverters.And}">
                         <Binding Path="IsViewingVoiceChannel"/>
                         <Binding Path="IsViewingDM" Converter="{x:Static BoolConverters.Not}"/>
                     </MultiBinding>
-                </Border.IsVisible>
-                <DockPanel>
-                    <!-- Voice Channel Header -->
-                    <Border DockPanel.Dock="Top" Background="#36393f" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
-                        <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Text="🔊"
-                                       Foreground="#3ba55c"
-                                       FontSize="18"
-                                       VerticalAlignment="Center"/>
-                            <TextBlock Text="{Binding SelectedVoiceChannelForViewing.Name, FallbackValue='Voice Channel'}"
-                                       Foreground="White"
-                                       FontWeight="SemiBold"
-                                       FontSize="16"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Audio Device Warning Banner -->
-                    <Border DockPanel.Dock="Top"
-                            Background="#faa61a"
-                            Padding="16,12"
-                            IsVisible="{Binding ShowAudioDeviceWarning}">
-                        <Grid ColumnDefinitions="Auto,*,Auto">
-                            <TextBlock Grid.Column="0"
-                                       Text="⚠️"
-                                       FontSize="18"
-                                       VerticalAlignment="Center"
-                                       Margin="0,0,12,0"/>
-                            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="Audio devices not configured"
-                                           Foreground="#1a1a1a"
-                                           FontWeight="SemiBold"
-                                           FontSize="14"/>
-                                <TextBlock Text="Go to Settings to select your microphone and speakers."
-                                           Foreground="#333333"
-                                           FontSize="12"
-                                           TextWrapping="Wrap"/>
-                            </StackPanel>
-                            <Button Grid.Column="2"
-                                    Content="Open Settings"
-                                    Background="#1a1a1a"
-                                    Foreground="White"
-                                    Padding="12,6"
-                                    CornerRadius="4"
-                                    VerticalAlignment="Center"
-                                    Command="{Binding OpenSettingsCommand}"/>
-                        </Grid>
-                    </Border>
-
-                    <!-- Voice Channel Video Streams Grid -->
-                    <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
-                        <ItemsControl ItemsSource="{Binding VoiceChannelContent.VideoStreams}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel Orientation="Horizontal"
-                                               HorizontalAlignment="Center"
-                                               Margin="16"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <!-- Video Stream Box -->
-                                    <Border Width="320" Height="240"
-                                            Margin="8"
-                                            CornerRadius="8"
-                                            Background="#2f3136"
-                                            BorderThickness="0"
-                                            ClipToBounds="True"
-                                            DoubleTapped="OnVideoTileDoubleTapped"
-                                            Tag="{Binding}">
-
-                                        <Grid>
-                                            <!-- Video content (only shown when watching) -->
-                                            <Grid IsVisible="{Binding ShowVideoContent}">
-                                                <!-- Video Feed -->
-                                                <Image Source="{Binding VideoBitmap}"
-                                                       Stretch="UniformToFill"
-                                                       IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
-
-                                                <!-- Avatar placeholder (shown when no video) -->
-                                                <StackPanel VerticalAlignment="Center"
-                                                            HorizontalAlignment="Center"
-                                                            IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
-                                                    <!-- Large Avatar Circle -->
-                                                    <Border Width="80" Height="80"
-                                                            CornerRadius="40"
-                                                            Background="#5865f2"
-                                                            HorizontalAlignment="Center">
-                                                        <TextBlock Text="{Binding Username[0]}"
-                                                                   Foreground="White"
-                                                                   FontSize="36"
-                                                                   FontWeight="Bold"
-                                                                   HorizontalAlignment="Center"
-                                                                   VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </StackPanel>
-                                            </Grid>
-
-                                            <!-- Watch button overlay for remote screen shares -->
-                                            <StackPanel VerticalAlignment="Center"
-                                                        HorizontalAlignment="Center"
-                                                        Spacing="16"
-                                                        IsVisible="{Binding ShowWatchButton}">
-                                                <!-- Screen share icon -->
-                                                <Border Width="64" Height="64"
-                                                        CornerRadius="32"
-                                                        Background="#5865f2"
-                                                        HorizontalAlignment="Center">
-                                                    <TextBlock Text="🖥️"
-                                                               FontSize="28"
-                                                               HorizontalAlignment="Center"
-                                                               VerticalAlignment="Center"/>
-                                                </Border>
-                                                <!-- Info text -->
-                                                <TextBlock Text="{Binding Username, StringFormat='{}{0} is sharing screen'}"
-                                                           Foreground="#dcddde"
-                                                           FontSize="14"
-                                                           HorizontalAlignment="Center"/>
-                                                <!-- Watch button -->
-                                                <Button Background="#5865f2"
-                                                        Foreground="White"
-                                                        Padding="16,10"
-                                                        CornerRadius="4"
-                                                        HorizontalAlignment="Center"
-                                                        Cursor="Hand"
-                                                        Click="OnWatchScreenShareClick"
-                                                        Tag="{Binding}">
-                                                    <StackPanel Orientation="Horizontal" Spacing="8">
-                                                        <TextBlock Text="👁️" VerticalAlignment="Center"/>
-                                                        <TextBlock Text="Watch Stream" VerticalAlignment="Center" FontWeight="SemiBold"/>
-                                                    </StackPanel>
-                                                </Button>
-                                            </StackPanel>
-
-                                            <!-- Username and stream type overlay at bottom -->
-                                            <Border VerticalAlignment="Bottom"
-                                                    Background="#80000000"
-                                                    Padding="12,6">
-                                                <StackPanel Orientation="Horizontal" Spacing="8">
-                                                    <TextBlock Text="{Binding Username}"
-                                                               Foreground="White"
-                                                               FontSize="14"
-                                                               FontWeight="SemiBold"
-                                                               VerticalAlignment="Center"/>
-                                                    <!-- Stream type label (shows "Screen" for screen shares) -->
-                                                    <Border Background="#5865f2"
-                                                            CornerRadius="4"
-                                                            Padding="6,2"
-                                                            IsVisible="{Binding StreamLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                                                        <TextBlock Text="{Binding StreamLabel}"
-                                                                   Foreground="White"
-                                                                   FontSize="11"
-                                                                   FontWeight="SemiBold"
-                                                                   VerticalAlignment="Center"/>
-                                                    </Border>
-                                                </StackPanel>
-                                            </Border>
-
-                                            <!-- Speaking indicator ring (only for camera streams) -->
-                                            <Border CornerRadius="8"
-                                                    BorderThickness="3"
-                                                    BorderBrush="#3ba55c"
-                                                    IsVisible="{Binding ShowSpeakingIndicator}"/>
-
-                                            <!-- Fullscreen button - top right corner (only for screen shares when watching) -->
-                                            <Button VerticalAlignment="Top"
-                                                    HorizontalAlignment="Right"
-                                                    Margin="8"
-                                                    Padding="8,4"
-                                                    Background="#80000000"
-                                                    BorderThickness="0"
-                                                    CornerRadius="4"
-                                                    Cursor="Hand"
-                                                    Click="OnFullscreenButtonClick"
-                                                    Tag="{Binding}">
-                                                <Button.IsVisible>
-                                                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                                        <Binding Path="ShowVideoContent"/>
-                                                        <Binding Path="StreamLabel" Converter="{x:Static StringConverters.IsNotNullOrEmpty}"/>
-                                                    </MultiBinding>
-                                                </Button.IsVisible>
-                                                <TextBlock Text="⛶" Foreground="White" FontSize="16"/>
-                                            </Button>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
-            </Border>
+                </controls:VoiceChannelContentView.IsVisible>
+            </controls:VoiceChannelContentView>
 
             <!-- Chat Area (shown when not viewing voice channel or DM) -->
             <Border Background="#36393f">
@@ -1365,113 +695,20 @@
         </Border>
 
         <!-- Nickname Edit Overlay -->
-        <Border Grid.ColumnSpan="4"
-                Background="#80000000"
-                IsVisible="{Binding IsEditingNickname}"
-                HorizontalAlignment="Stretch"
-                VerticalAlignment="Stretch">
-            <Border Background="#36393f"
-                    CornerRadius="8"
-                    Padding="24"
-                    MinWidth="400"
-                    HorizontalAlignment="Center"
-                    VerticalAlignment="Center">
-                <StackPanel Spacing="16">
-                    <TextBlock Text="{Binding IsEditingMyNickname, Converter={x:Static conv:BoolToStringConverter.Instance}, ConverterParameter='Change Your Nickname|Change Member Nickname'}"
-                               FontSize="18"
-                               FontWeight="Bold"
-                               Foreground="White"/>
-
-                    <StackPanel Spacing="8">
-                        <TextBlock Text="NICKNAME"
-                                   FontSize="11"
-                                   FontWeight="SemiBold"
-                                   Foreground="#b9bbbe"/>
-                        <TextBox Text="{Binding EditingNickname}"
-                                 Watermark="Leave blank to use display name"
-                                 Background="#202225"
-                                 Foreground="White"
-                                 BorderThickness="0"
-                                 CornerRadius="4"
-                                 Padding="12"/>
-                        <TextBlock Text="This nickname is only visible in this community."
-                                   FontSize="12"
-                                   Foreground="#72767d"/>
-                    </StackPanel>
-
-                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
-                        <Button Command="{Binding CancelNicknameEditCommand}"
-                                Content="Cancel"
-                                Background="#4f545c"
-                                Foreground="White"
-                                Padding="16,8"
-                                CornerRadius="4"
-                                FontWeight="SemiBold"/>
-                        <Button Command="{Binding SaveNicknameCommand}"
-                                Content="Save"
-                                Background="#5865f2"
-                                Foreground="White"
-                                Padding="16,8"
-                                CornerRadius="4"
-                                FontWeight="SemiBold"
-                                IsEnabled="{Binding !IsLoading}"/>
-                    </StackPanel>
-                </StackPanel>
-            </Border>
-        </Border>
+        <controls:NicknameEditOverlay Grid.ColumnSpan="4"
+                                      IsVisibleOverlay="{Binding IsEditingNickname}"
+                                      IsEditingMyNickname="{Binding IsEditingMyNickname}"
+                                      EditingNickname="{Binding EditingNickname, Mode=TwoWay}"
+                                      IsLoading="{Binding IsLoading}"
+                                      SaveNicknameCommand="{Binding SaveNicknameCommand}"
+                                      CancelNicknameEditCommand="{Binding CancelNicknameEditCommand}"/>
 
         <!-- Emoji Picker Popup -->
         <Popup x:Name="EmojiPickerPopup"
                IsLightDismissEnabled="True"
                Placement="Top"
                PlacementGravity="Top">
-            <Border Background="#2f3136"
-                    CornerRadius="8"
-                    Padding="8"
-                    BorderBrush="#202225"
-                    BorderThickness="1">
-                <StackPanel Spacing="4">
-                    <TextBlock Text="Reactions" Foreground="#72767d" FontSize="11" FontWeight="SemiBold" Margin="4,0,0,4"/>
-                    <WrapPanel>
-                        <Button Tag="👍" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="👍" FontSize="20"/>
-                        </Button>
-                        <Button Tag="❤️" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="❤️" FontSize="20"/>
-                        </Button>
-                        <Button Tag="😂" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="😂" FontSize="20"/>
-                        </Button>
-                        <Button Tag="😮" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="😮" FontSize="20"/>
-                        </Button>
-                        <Button Tag="😢" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="😢" FontSize="20"/>
-                        </Button>
-                        <Button Tag="😡" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="😡" FontSize="20"/>
-                        </Button>
-                        <Button Tag="🎉" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="🎉" FontSize="20"/>
-                        </Button>
-                        <Button Tag="🔥" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="🔥" FontSize="20"/>
-                        </Button>
-                        <Button Tag="👀" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="👀" FontSize="20"/>
-                        </Button>
-                        <Button Tag="✅" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="✅" FontSize="20"/>
-                        </Button>
-                        <Button Tag="❌" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="❌" FontSize="20"/>
-                        </Button>
-                        <Button Tag="💯" Background="Transparent" Padding="6" Click="EmojiPicker_EmojiSelected" Cursor="Hand">
-                            <TextBlock Text="💯" FontSize="20"/>
-                        </Button>
-                    </WrapPanel>
-                </StackPanel>
-            </Border>
+            <controls:EmojiPickerContent EmojiSelected="OnEmojiPickerEmojiSelected"/>
         </Popup>
 
         <!-- GIF Picker Popup -->
@@ -1479,149 +716,28 @@
                IsLightDismissEnabled="True"
                Placement="Top"
                PlacementGravity="Top">
-            <Border Background="#2f3136"
-                    CornerRadius="8"
-                    Padding="12"
-                    BorderBrush="#202225"
-                    BorderThickness="1"
-                    Width="420"
-                    Height="400">
-                <DockPanel>
-                    <!-- Search Box -->
-                    <TextBox x:Name="GifSearchBox"
-                             DockPanel.Dock="Top"
-                             Text="{Binding GifSearchQuery}"
-                             Watermark="Search Tenor"
-                             Background="#202225"
-                             Foreground="White"
-                             BorderThickness="0"
-                             CornerRadius="4"
-                             Padding="12,8"
-                             Margin="0,0,0,8"
-                             KeyDown="GifSearchBox_KeyDown"/>
-
-                    <!-- Loading Indicator -->
-                    <TextBlock DockPanel.Dock="Top"
-                               Text="Loading..."
-                               Foreground="#72767d"
-                               FontSize="12"
-                               Margin="4,4,0,8"
-                               IsVisible="{Binding IsLoadingGifs}"/>
-
-                    <!-- Powered by Tenor -->
-                    <TextBlock DockPanel.Dock="Bottom"
-                               Text="Powered by Tenor"
-                               Foreground="#72767d"
-                               FontSize="10"
-                               HorizontalAlignment="Right"
-                               Margin="0,8,0,0"/>
-
-                    <!-- GIF Grid -->
-                    <ScrollViewer HorizontalScrollBarVisibility="Disabled"
-                                  VerticalScrollBarVisibility="Auto">
-                        <ItemsControl x:Name="GifResultsControl" ItemsSource="{Binding GifResults}">
-                            <ItemsControl.ItemsPanel>
-                                <ItemsPanelTemplate>
-                                    <WrapPanel Orientation="Horizontal"/>
-                                </ItemsPanelTemplate>
-                            </ItemsControl.ItemsPanel>
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <controls:GifPreview Gif="{Binding}" GifClicked="GifPreview_GifClicked"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
-            </Border>
+            <controls:GifPickerContent x:Name="GifPickerContent"
+                                       GifSearchQuery="{Binding GifSearchQuery, Mode=TwoWay}"
+                                       IsLoadingGifs="{Binding IsLoadingGifs}"
+                                       GifResults="{Binding GifResults}"
+                                       SearchGifsCommand="{Binding SearchGifsCommand}"
+                                       GifSelected="OnGifPickerGifSelected"/>
         </Popup>
 
         <!-- Audio Device Popup -->
         <Popup x:Name="AudioDevicePopup"
                IsOpen="{Binding IsAudioDevicePopupOpen}"
                IsLightDismissEnabled="True"
-               Placement="Top"
-               PlacementTarget="{Binding #AudioDeviceButton}">
-            <Border Background="#2f3136"
-                    CornerRadius="8"
-                    Padding="12"
-                    BorderBrush="#202225"
-                    BorderThickness="1"
-                    Width="280">
-                <StackPanel Spacing="12">
-                    <!-- Header -->
-                    <TextBlock Text="AUDIO DEVICES"
-                               FontSize="12"
-                               FontWeight="SemiBold"
-                               Foreground="#72767d"/>
-
-                    <!-- Input Device -->
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Input Device"
-                                   FontSize="12"
-                                   Foreground="#b9bbbe"/>
-                        <ComboBox ItemsSource="{Binding InputDevices}"
-                                  SelectedItem="{Binding SelectedInputDeviceItem, Mode=TwoWay}"
-                                  DisplayMemberBinding="{Binding DisplayName}"
-                                  Background="#40444b"
-                                  Foreground="White"
-                                  HorizontalAlignment="Stretch"/>
-                        <!-- Input Level Meter -->
-                        <StackPanel Margin="0,4,0,0" Spacing="2">
-                            <ProgressBar Minimum="0"
-                                         Maximum="1"
-                                         Value="{Binding InputLevel}"
-                                         Height="6"
-                                         Background="#40444b"
-                                         Foreground="#43b581"
-                                         CornerRadius="3"/>
-                            <TextBlock Text="Speak to test microphone"
-                                       FontSize="10"
-                                       Foreground="#72767d"
-                                       HorizontalAlignment="Center"/>
-                        </StackPanel>
-                    </StackPanel>
-
-                    <!-- Output Device -->
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Output Device"
-                                   FontSize="12"
-                                   Foreground="#b9bbbe"/>
-                        <ComboBox ItemsSource="{Binding OutputDevices}"
-                                  SelectedItem="{Binding SelectedOutputDeviceItem, Mode=TwoWay}"
-                                  DisplayMemberBinding="{Binding DisplayName}"
-                                  Background="#40444b"
-                                  Foreground="White"
-                                  HorizontalAlignment="Stretch"/>
-                    </StackPanel>
-
-                    <!-- Voice Mode -->
-                    <StackPanel Spacing="4">
-                        <TextBlock Text="Voice Mode"
-                                   FontSize="12"
-                                   Foreground="#b9bbbe"/>
-                        <CheckBox IsChecked="{Binding PushToTalkEnabled}"
-                                  Foreground="#dcddde">
-                            <TextBlock Text="Push-to-talk (hold Space to talk)"
-                                       FontSize="12"/>
-                        </CheckBox>
-                        <TextBlock Text="{Binding VoiceModeDescription}"
-                                   FontSize="10"
-                                   Foreground="#72767d"
-                                   TextWrapping="Wrap"/>
-                    </StackPanel>
-
-                    <!-- Refresh Button -->
-                    <Button Content="Refresh Devices"
-                            HorizontalAlignment="Stretch"
-                            Background="#5865f2"
-                            Foreground="White"
-                            Padding="8,6"
-                            CornerRadius="4"
-                            Cursor="Hand"
-                            Click="OnRefreshAudioDevicesClick"/>
-                </StackPanel>
-            </Border>
+               Placement="Bottom"
+               PlacementTarget="{Binding $parent[Grid]}">
+            <controls:AudioDeviceContent InputDevices="{Binding InputDevices}"
+                                         SelectedInputDeviceItem="{Binding SelectedInputDeviceItem, Mode=TwoWay}"
+                                         OutputDevices="{Binding OutputDevices}"
+                                         SelectedOutputDeviceItem="{Binding SelectedOutputDeviceItem, Mode=TwoWay}"
+                                         InputLevel="{Binding InputLevel}"
+                                         PushToTalkEnabled="{Binding PushToTalkEnabled, Mode=TwoWay}"
+                                         VoiceModeDescription="{Binding VoiceModeDescription}"
+                                         RefreshDevicesRequested="OnAudioDeviceRefreshRequested"/>
         </Popup>
 
         <!-- Pinned Messages Popup -->
@@ -1629,86 +745,9 @@
                IsLightDismissEnabled="True"
                Placement="Center"
                PlacementTarget="{Binding $parent[Grid]}">
-            <Border Background="#36393f"
-                    CornerRadius="8"
-                    Padding="16"
-                    BorderBrush="#202225"
-                    BorderThickness="1"
-                    MaxWidth="500"
-                    MaxHeight="600">
-                <DockPanel>
-                    <!-- Header -->
-                    <Border DockPanel.Dock="Top" Margin="0,0,0,12">
-                        <Grid>
-                            <TextBlock Text="📌 Pinned Messages"
-                                       Foreground="White"
-                                       FontWeight="SemiBold"
-                                       FontSize="16"
-                                       VerticalAlignment="Center"/>
-                            <Button HorizontalAlignment="Right"
-                                    Background="Transparent"
-                                    Padding="4"
-                                    Command="{Binding ClosePinnedPopupCommand}"
-                                    ToolTip.Tip="Close">
-                                <TextBlock Text="✕" Foreground="#72767d" FontSize="14"/>
-                            </Button>
-                        </Grid>
-                    </Border>
-
-                    <!-- Pinned Messages List -->
-                    <ScrollViewer>
-                        <ItemsControl ItemsSource="{Binding PinnedMessages}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <Border Background="#2f3136"
-                                            CornerRadius="4"
-                                            Padding="12"
-                                            Margin="0,0,0,8">
-                                        <StackPanel>
-                                            <!-- Author and Time -->
-                                            <StackPanel Orientation="Horizontal" Spacing="8" Margin="0,0,0,4">
-                                                <TextBlock Text="{Binding AuthorUsername}"
-                                                           Foreground="#5865f2"
-                                                           FontWeight="SemiBold"
-                                                           FontSize="13"/>
-                                                <TextBlock Text="{Binding CreatedAt, StringFormat='{}{0:MMM d, yyyy h:mm tt}'}"
-                                                           Foreground="#72767d"
-                                                           FontSize="11"
-                                                           VerticalAlignment="Center"/>
-                                            </StackPanel>
-
-                                            <!-- Message Content -->
-                                            <TextBlock Text="{Binding Content}"
-                                                       Foreground="#dcddde"
-                                                       FontSize="14"
-                                                       TextWrapping="Wrap"/>
-
-                                            <!-- Unpin Button -->
-                                            <Button HorizontalAlignment="Right"
-                                                    Margin="0,8,0,0"
-                                                    Background="Transparent"
-                                                    Padding="8,4"
-                                                    Command="{Binding $parent[ItemsControl].DataContext.TogglePinCommand}"
-                                                    CommandParameter="{Binding}"
-                                                    ToolTip.Tip="Unpin">
-                                                <TextBlock Text="Unpin" Foreground="#72767d" FontSize="12"/>
-                                            </Button>
-                                        </StackPanel>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-
-                    <!-- Empty State -->
-                    <TextBlock Text="No pinned messages"
-                               Foreground="#72767d"
-                               FontSize="14"
-                               HorizontalAlignment="Center"
-                               Margin="0,20"
-                               IsVisible="{Binding !PinnedMessages.Count}"/>
-                </DockPanel>
-            </Border>
+            <controls:PinnedMessagesContent PinnedMessages="{Binding PinnedMessages}"
+                                            ClosePinnedPopupCommand="{Binding ClosePinnedPopupCommand}"
+                                            TogglePinCommand="{Binding TogglePinCommand}"/>
         </Popup>
 
         <!-- Image Lightbox Overlay -->

@@ -28,7 +28,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 
     // Auto-scroll state - track if user is at bottom of message lists
     private bool _isMessagesAtBottom = true;
-    private bool _isDMMessagesAtBottom = true;
     private const double ScrollBottomThreshold = 50; // pixels from bottom to consider "at bottom"
 
     public MainAppView()
@@ -38,8 +37,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         // Use tunneling (Preview) events to intercept Enter before AcceptsReturn processes it
         MessageInputBox.AddHandler(KeyDownEvent, OnMessageKeyDown, RoutingStrategies.Tunnel);
         EditMessageInputBox.AddHandler(KeyDownEvent, OnEditMessageKeyDown, RoutingStrategies.Tunnel);
-        DMMessageInputBox.AddHandler(KeyDownEvent, OnDMMessageKeyDown, RoutingStrategies.Tunnel);
-        EditDMMessageInputBox.AddHandler(KeyDownEvent, OnEditDMMessageKeyDown, RoutingStrategies.Tunnel);
 
         // ESC key to exit fullscreen video
         this.AddHandler(KeyDownEvent, OnGlobalKeyDown, RoutingStrategies.Tunnel);
@@ -53,7 +50,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 
         // Track scroll position for smart auto-scrolling
         MessagesScrollViewer.ScrollChanged += OnMessagesScrollChanged;
-        DMMessagesScrollViewer.ScrollChanged += OnDMMessagesScrollChanged;
 
         // Drag-drop handlers for file attachments
         MessageInputBox.AddHandler(DragDrop.DragOverEvent, OnDragOver);
@@ -68,7 +64,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 
             // Subscribe to collection changes for auto-scrolling
             ViewModel.Messages.CollectionChanged += OnMessagesCollectionChanged;
-            ViewModel.DMMessages.CollectionChanged += OnDMMessagesCollectionChanged;
 
             // Scroll to bottom if messages are already loaded (we missed the events)
             // Also scroll after a short delay to handle async loading
@@ -89,7 +84,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 
     // Track if user is scrolled to the bottom of messages
     private double _lastMessagesExtentHeight;
-    private double _lastDMMessagesExtentHeight;
 
     private void OnMessagesScrollChanged(object? sender, ScrollChangedEventArgs e)
     {
@@ -107,27 +101,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         _lastMessagesExtentHeight = scrollViewer.Extent.Height;
         _isMessagesAtBottom = distanceFromBottom <= ScrollBottomThreshold;
         scrollViewer.VerticalScrollBarVisibility = _isMessagesAtBottom
-            ? Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden
-            : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
-    }
-
-    // Track if user is scrolled to the bottom of DM messages
-    private void OnDMMessagesScrollChanged(object? sender, ScrollChangedEventArgs e)
-    {
-        var scrollViewer = DMMessagesScrollViewer;
-        if (scrollViewer == null) return;
-
-        var distanceFromBottom = scrollViewer.Extent.Height - scrollViewer.Offset.Y - scrollViewer.Viewport.Height;
-
-        // If content grew (e.g., link preview loaded) and we were at bottom, scroll to bottom again
-        if (_isDMMessagesAtBottom && scrollViewer.Extent.Height > _lastDMMessagesExtentHeight && _lastDMMessagesExtentHeight > 0)
-        {
-            Dispatcher.UIThread.Post(() => scrollViewer.ScrollToEnd(), DispatcherPriority.Background);
-        }
-
-        _lastDMMessagesExtentHeight = scrollViewer.Extent.Height;
-        _isDMMessagesAtBottom = distanceFromBottom <= ScrollBottomThreshold;
-        scrollViewer.VerticalScrollBarVisibility = _isDMMessagesAtBottom
             ? Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden
             : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
     }
@@ -153,31 +126,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             Dispatcher.UIThread.Post(() =>
             {
                 MessagesScrollViewer?.ScrollToEnd();
-            }, DispatcherPriority.Background);
-        }
-    }
-
-    // Auto-scroll to bottom when new DM messages arrive (if already at bottom)
-    private void OnDMMessagesCollectionChanged(object? sender, System.Collections.Specialized.NotifyCollectionChangedEventArgs e)
-    {
-        // Reset scroll state when collection is cleared (conversation changed)
-        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Reset)
-        {
-            _isDMMessagesAtBottom = true;
-            // Scroll to bottom after messages are loaded (delay to allow layout)
-            Dispatcher.UIThread.Post(() =>
-            {
-                DMMessagesScrollViewer?.ScrollToEnd();
-            }, DispatcherPriority.Background);
-            return;
-        }
-
-        if (e.Action == System.Collections.Specialized.NotifyCollectionChangedAction.Add && _isDMMessagesAtBottom)
-        {
-            // Delay scroll to allow layout to update
-            Dispatcher.UIThread.Post(() =>
-            {
-                DMMessagesScrollViewer?.ScrollToEnd();
             }, DispatcherPriority.Background);
         }
     }
@@ -432,7 +380,18 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
-    // Called when an emoji is selected from the picker
+    // Called when an emoji is selected from the EmojiPickerContent component
+    private void OnEmojiPickerEmojiSelected(object? sender, string emoji)
+    {
+        if (_emojiPickerMessage != null && ViewModel != null)
+        {
+            ViewModel.AddReactionCommand.Execute((_emojiPickerMessage, emoji)).Subscribe();
+            EmojiPickerPopup.IsOpen = false;
+            _emojiPickerMessage = null;
+        }
+    }
+
+    // Legacy handler - Called when an emoji is selected from the picker (unused, kept for reference)
     private void EmojiPicker_EmojiSelected(object? sender, RoutedEventArgs e)
     {
         if (sender is Button button &&
@@ -468,22 +427,15 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             // Load trending GIFs when opening
             await ViewModel.LoadTrendingGifsAsync();
 
-            // Focus the search box
-            var searchBox = this.FindControl<TextBox>("GifSearchBox");
-            searchBox?.Focus();
+            // Focus the search box in the GifPickerContent
+            GifPickerContent?.FocusSearchBox();
         }
     }
 
-    private async void GifSearchBox_KeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && ViewModel != null)
-        {
-            e.Handled = true;
-            await ViewModel.SearchGifsAsync();
-        }
-    }
-
-    private async void GifPreview_GifClicked(object? sender, Services.GifResult gif)
+    /// <summary>
+    /// Called when a GIF is selected from the GifPickerContent component.
+    /// </summary>
+    private async void OnGifPickerGifSelected(object? sender, Services.GifResult gif)
     {
         if (ViewModel == null) return;
 
@@ -491,49 +443,10 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         await ViewModel.SendGifMessageAsync(gif);
 
         // Close the popup
-        var popup = this.FindControl<Popup>("GifPickerPopup");
-        if (popup != null)
-        {
-            popup.IsOpen = false;
-        }
+        GifPickerPopup.IsOpen = false;
 
         // Clear GIF state
         ViewModel.ClearGifResults();
-    }
-
-    // Called for DM message input TextBox (tunneling event)
-    // Enter sends message, Shift+Enter inserts newline
-    private void OnDMMessageKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-        {
-            e.Handled = true;
-
-            if (ViewModel?.SendDMMessageCommand.CanExecute.FirstAsync().GetAwaiter().GetResult() == true)
-            {
-                ViewModel.SendDMMessageCommand.Execute().Subscribe();
-            }
-        }
-    }
-
-    // Called for DM message edit TextBox (tunneling event)
-    // Enter saves edit, Shift+Enter inserts newline
-    private void OnEditDMMessageKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-        {
-            e.Handled = true;
-
-            if (ViewModel?.SaveDMMessageEditCommand.CanExecute.FirstAsync().GetAwaiter().GetResult() == true)
-            {
-                ViewModel.SaveDMMessageEditCommand.Execute().Subscribe();
-            }
-        }
-        else if (e.Key == Key.Escape)
-        {
-            ViewModel?.CancelEditDMMessageCommand.Execute().Subscribe();
-            e.Handled = true;
-        }
     }
 
     // Formatting toolbar handlers
@@ -575,7 +488,38 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         textBox.Focus();
     }
 
-    // Called when clicking the Watch button on a screen share
+    // Called when Watch button is clicked in VoiceChannelContentView
+    private async void OnVoiceChannelWatchScreenShare(object? sender, VideoStreamViewModel stream)
+    {
+        if (ViewModel?.VoiceChannelContent != null)
+        {
+            await ViewModel.VoiceChannelContent.WatchScreenShareAsync(stream);
+        }
+    }
+
+    // Called when fullscreen button is clicked in VoiceChannelContentView
+    private void OnVoiceChannelFullscreen(object? sender, VideoStreamViewModel stream)
+    {
+        ViewModel?.OpenFullscreen(stream);
+    }
+
+    // Called when video tile is double-tapped in VoiceChannelContentView
+    private void OnVoiceChannelVideoTileDoubleTapped(object? sender, VideoStreamViewModel stream)
+    {
+        // Only allow fullscreen for screen shares (not camera streams)
+        if (!string.IsNullOrEmpty(stream.StreamLabel))
+        {
+            ViewModel?.OpenFullscreen(stream);
+        }
+    }
+
+    // Called when clicking the close button on fullscreen video overlay
+    private void OnCloseFullscreenClick(object? sender, RoutedEventArgs e)
+    {
+        ViewModel?.CloseFullscreen();
+    }
+
+    // Legacy handler - Called when clicking the Watch button on a screen share (unused)
     private async void OnWatchScreenShareClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button button &&
@@ -586,13 +530,7 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
-    // Called when clicking the close button on fullscreen video overlay
-    private void OnCloseFullscreenClick(object? sender, RoutedEventArgs e)
-    {
-        ViewModel?.CloseFullscreen();
-    }
-
-    // Called when clicking the fullscreen button on a video tile
+    // Legacy handler - Called when clicking the fullscreen button on a video tile (unused)
     private void OnFullscreenButtonClick(object? sender, RoutedEventArgs e)
     {
         if (sender is Button button && button.Tag is VideoStreamViewModel stream)
@@ -601,7 +539,7 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
-    // Called when double-clicking a screen share video tile
+    // Legacy handler - Called when double-clicking a screen share video tile (unused)
     private void OnVideoTileDoubleTapped(object? sender, TappedEventArgs e)
     {
         if (sender is Border border && border.Tag is VideoStreamViewModel stream)
@@ -975,17 +913,17 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     // ==================== Audio Device Popup Handlers ====================
 
     /// <summary>
-    /// Called when the audio device button is clicked to open the device selection popup.
+    /// Called when the audio device button is clicked in UserPanelView to open the device selection popup.
     /// </summary>
-    private void OnAudioDeviceButtonClick(object? sender, RoutedEventArgs e)
+    private void OnUserPanelAudioDeviceButtonClick(object? sender, EventArgs e)
     {
         ViewModel?.OpenAudioDevicePopup();
     }
 
     /// <summary>
-    /// Called when the refresh devices button is clicked.
+    /// Called when the refresh devices button is clicked in AudioDeviceContent component.
     /// </summary>
-    private void OnRefreshAudioDevicesClick(object? sender, RoutedEventArgs e)
+    private void OnAudioDeviceRefreshRequested(object? sender, EventArgs e)
     {
         ViewModel?.RefreshAudioDevices();
     }

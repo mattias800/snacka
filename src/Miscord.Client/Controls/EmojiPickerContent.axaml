@@ -1,0 +1,57 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.EmojiPickerContent"
+             x:DataType="controls:EmojiPickerContent">
+
+    <Border Background="#2f3136"
+            CornerRadius="8"
+            Padding="8"
+            BorderBrush="#202225"
+            BorderThickness="1">
+        <StackPanel Spacing="4">
+            <TextBlock Text="Reactions" Foreground="#72767d" FontSize="11" FontWeight="SemiBold" Margin="4,0,0,4"/>
+            <WrapPanel>
+                <Button Tag="👍" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="👍" FontSize="20"/>
+                </Button>
+                <Button Tag="❤️" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="❤️" FontSize="20"/>
+                </Button>
+                <Button Tag="😂" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="😂" FontSize="20"/>
+                </Button>
+                <Button Tag="😮" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="😮" FontSize="20"/>
+                </Button>
+                <Button Tag="😢" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="😢" FontSize="20"/>
+                </Button>
+                <Button Tag="😡" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="😡" FontSize="20"/>
+                </Button>
+                <Button Tag="🎉" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="🎉" FontSize="20"/>
+                </Button>
+                <Button Tag="🔥" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="🔥" FontSize="20"/>
+                </Button>
+                <Button Tag="👀" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="👀" FontSize="20"/>
+                </Button>
+                <Button Tag="✅" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="✅" FontSize="20"/>
+                </Button>
+                <Button Tag="❌" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="❌" FontSize="20"/>
+                </Button>
+                <Button Tag="💯" Background="Transparent" Padding="6" Click="OnEmojiClick" Cursor="Hand">
+                    <TextBlock Text="💯" FontSize="20"/>
+                </Button>
+            </WrapPanel>
+        </StackPanel>
+    </Border>
+</UserControl>

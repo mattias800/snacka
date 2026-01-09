@@ -5,6 +5,7 @@
     RequestedThemeVariant="Dark">
     <Application.Styles>
         <FluentTheme />
+        <StyleInclude Source="avares://Miscord.Client/Styles/ComponentStyles.axaml"/>
         <Style Selector="TextBox">
             <Setter Property="CaretBrush" Value="White"/>
             <Setter Property="SelectionBrush" Value="#5865f2"/>

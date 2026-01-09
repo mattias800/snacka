@@ -1,0 +1,64 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:conv="using:Miscord.Client.Converters"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.NicknameEditOverlay"
+             x:DataType="controls:NicknameEditOverlay"
+             IsVisible="{Binding IsVisibleOverlay, RelativeSource={RelativeSource Self}}">
+
+    <Border Background="#80000000"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch">
+        <Border Background="#36393f"
+                CornerRadius="8"
+                Padding="24"
+                MinWidth="400"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center">
+            <StackPanel Spacing="16">
+                <TextBlock Text="{Binding IsEditingMyNickname, RelativeSource={RelativeSource AncestorType=controls:NicknameEditOverlay}, Converter={x:Static conv:BoolToStringConverter.Instance}, ConverterParameter='Change Your Nickname|Change Member Nickname'}"
+                           FontSize="18"
+                           FontWeight="Bold"
+                           Foreground="White"/>
+
+                <StackPanel Spacing="8">
+                    <TextBlock Text="NICKNAME"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="#b9bbbe"/>
+                    <TextBox Text="{Binding EditingNickname, RelativeSource={RelativeSource AncestorType=controls:NicknameEditOverlay}, Mode=TwoWay}"
+                             Watermark="Leave blank to use display name"
+                             Background="#202225"
+                             Foreground="White"
+                             BorderThickness="0"
+                             CornerRadius="4"
+                             Padding="12"/>
+                    <TextBlock Text="This nickname is only visible in this community."
+                               FontSize="12"
+                               Foreground="#72767d"/>
+                </StackPanel>
+
+                <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Right">
+                    <Button Command="{Binding CancelNicknameEditCommand, RelativeSource={RelativeSource AncestorType=controls:NicknameEditOverlay}}"
+                            Content="Cancel"
+                            Background="#4f545c"
+                            Foreground="White"
+                            Padding="16,8"
+                            CornerRadius="4"
+                            FontWeight="SemiBold"/>
+                    <Button Command="{Binding SaveNicknameCommand, RelativeSource={RelativeSource AncestorType=controls:NicknameEditOverlay}}"
+                            Content="Save"
+                            Background="#5865f2"
+                            Foreground="White"
+                            Padding="16,8"
+                            CornerRadius="4"
+                            FontWeight="SemiBold"
+                            IsEnabled="{Binding !IsLoading, RelativeSource={RelativeSource AncestorType=controls:NicknameEditOverlay}}"/>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </Border>
+</UserControl>
