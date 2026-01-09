@@ -13,10 +13,31 @@ public class Message
     public bool IsEdited => UpdatedAt > CreatedAt;
 
     /// <summary>
-    /// Optional reference to the message this is replying to
+    /// Optional reference to the message this is replying to (for reply preview display)
     /// </summary>
     public Guid? ReplyToId { get; set; }
     public Message? ReplyTo { get; set; }
+
+    /// <summary>
+    /// If set, this message belongs to a thread. Points to the thread's parent message.
+    /// </summary>
+    public Guid? ThreadParentMessageId { get; set; }
+    public Message? ThreadParentMessage { get; set; }
+
+    /// <summary>
+    /// All messages that are part of this message's thread (only populated on thread parent messages)
+    /// </summary>
+    public ICollection<Message> ThreadReplies { get; set; } = new List<Message>();
+
+    /// <summary>
+    /// Cached count of replies in this thread (only used on thread parent messages)
+    /// </summary>
+    public int ReplyCount { get; set; }
+
+    /// <summary>
+    /// Timestamp of the most recent reply in this thread (only used on thread parent messages)
+    /// </summary>
+    public DateTime? LastReplyAt { get; set; }
 
     /// <summary>
     /// Reactions on this message

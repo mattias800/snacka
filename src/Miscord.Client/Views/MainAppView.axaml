@@ -1592,6 +1592,28 @@
                                                     </DataTemplate>
                                                 </ItemsControl.ItemTemplate>
                                             </ItemsControl>
+
+                                            <!-- Thread Indicator (only when there are replies) -->
+                                            <Border Margin="0,6,0,0"
+                                                    Padding="8,6"
+                                                    Background="#32353b"
+                                                    CornerRadius="4"
+                                                    Cursor="Hand"
+                                                    IsVisible="{Binding ReplyCount, Converter={x:Static conv:IntGreaterThanZeroConverter.Instance}}"
+                                                    Tag="{Binding}"
+                                                    PointerPressed="ThreadIndicator_PointerPressed">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Foreground="#5865f2" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center">
+                                                        <TextBlock.Text>
+                                                            <MultiBinding StringFormat="{}{0} {1}">
+                                                                <Binding Path="ReplyCount"/>
+                                                                <Binding Path="ReplyCount" Converter="{x:Static conv:PluralizeConverter.Instance}" ConverterParameter="reply|replies"/>
+                                                            </MultiBinding>
+                                                        </TextBlock.Text>
+                                                    </TextBlock>
+                                                    <TextBlock Text="View thread" Foreground="#72767d" FontSize="12" VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                            </Border>
                                         </StackPanel>
 
                                         <!-- Reply/React/Pin/Edit/Delete Buttons -->
@@ -1601,6 +1623,13 @@
                                                     Tag="{Binding}"
                                                     Click="AddReactionButton_Click">
                                                 <TextBlock Text="😀" Foreground="#72767d" FontSize="12"/>
+                                            </Button>
+                                            <Button Classes="msg-action-btn"
+                                                    Tag="{Binding}"
+                                                    ToolTip.Tip="Start Thread"
+                                                    IsVisible="{Binding ReplyCount, Converter={x:Static conv:IntEqualsZeroConverter.Instance}}"
+                                                    Click="StartThreadButton_Click">
+                                                <TextBlock Text="💬" Foreground="#72767d" FontSize="12"/>
                                             </Button>
                                             <Button Classes="msg-action-btn"
                                                     Command="{Binding #MessagesList.DataContext.TogglePinCommand}"
@@ -1692,15 +1721,17 @@
         </Border>
         </Grid>
 
-        <!-- Members List (Right Sidebar) -->
+        <!-- Right Sidebar (Members List or Thread Panel) -->
         <Border Grid.Column="3" Background="#2f3136">
-            <DockPanel>
-                <TextBlock DockPanel.Dock="Top"
-                           Text="MEMBERS"
-                           Foreground="#72767d"
-                           FontSize="11"
-                           FontWeight="SemiBold"
-                           Margin="16,16,16,8"/>
+            <Grid>
+                <!-- Members List (visible when thread is NOT open) -->
+                <DockPanel IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNull}}">
+                    <TextBlock DockPanel.Dock="Top"
+                               Text="MEMBERS"
+                               Foreground="#72767d"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Margin="16,16,16,8"/>
 
                 <ScrollViewer>
                     <ItemsControl x:Name="MembersList" ItemsSource="{Binding SortedMembers}" Margin="8,0">
@@ -1870,7 +1901,153 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-            </DockPanel>
+                </DockPanel>
+
+                <!-- Thread Panel (visible when thread IS open) -->
+                <Border IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNotNull}}">
+                <DockPanel DataContext="{Binding CurrentThread}">
+                    <!-- Header with close button -->
+                    <Border DockPanel.Dock="Top" Background="#202225" Padding="12,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBlock Text="Thread"
+                                       Foreground="White"
+                                       FontSize="14"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"/>
+                            <Button Grid.Column="1"
+                                    Command="{Binding CloseCommand}"
+                                    Background="Transparent"
+                                    Padding="4"
+                                    ToolTip.Tip="Close thread">
+                                <TextBlock Text="✕" Foreground="#72767d" FontSize="14"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Parent Message Preview -->
+                    <Border DockPanel.Dock="Top" Background="#36393f" Padding="12" Margin="8,8,8,0" CornerRadius="4">
+                        <StackPanel>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Border Width="24" Height="24" CornerRadius="12" Background="#5865f2">
+                                    <TextBlock Text="{Binding ParentMessage.AuthorUsername[0]}"
+                                               Foreground="White"
+                                               FontSize="11"
+                                               FontWeight="Bold"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <TextBlock Text="{Binding ParentMessage.AuthorUsername}"
+                                           Foreground="White"
+                                           FontSize="13"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <TextBlock Text="{Binding ParentMessage.Content}"
+                                       Foreground="#dcddde"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       MaxLines="3"
+                                       Margin="0,4,0,0"/>
+                            <TextBlock Foreground="#72767d" FontSize="11" Margin="0,4,0,0">
+                                <TextBlock.Text>
+                                    <MultiBinding StringFormat="{}{0} replies">
+                                        <Binding Path="TotalReplyCount"/>
+                                    </MultiBinding>
+                                </TextBlock.Text>
+                            </TextBlock>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Reply Input (docked at bottom) -->
+                    <Border DockPanel.Dock="Bottom" Background="#40444b" Margin="8" CornerRadius="8" Padding="12,8">
+                        <Grid>
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/>
+                                <ColumnDefinition Width="Auto"/>
+                            </Grid.ColumnDefinitions>
+                            <TextBox x:Name="ThreadReplyInput"
+                                     Text="{Binding ReplyInput, Mode=TwoWay}"
+                                     Watermark="Reply..."
+                                     Background="Transparent"
+                                     BorderThickness="0"
+                                     Foreground="White"
+                                     AcceptsReturn="False"
+                                     KeyDown="OnThreadReplyKeyDown"/>
+                            <Button Grid.Column="1"
+                                    Command="{Binding SendReplyCommand}"
+                                    Background="#5865f2"
+                                    Foreground="White"
+                                    Padding="12,6"
+                                    CornerRadius="4"
+                                    Margin="8,0,0,0">
+                                <TextBlock Text="Send" FontSize="12"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Loading indicator -->
+                    <TextBlock Text="Loading..."
+                               Foreground="#72767d"
+                               HorizontalAlignment="Center"
+                               Margin="0,20,0,0"
+                               IsVisible="{Binding IsLoading}"/>
+
+                    <!-- Replies List -->
+                    <ScrollViewer x:Name="ThreadRepliesScrollViewer" Margin="0,8">
+                        <ItemsControl ItemsSource="{Binding Replies}" Margin="8,0">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Border Margin="0,4" Padding="8" CornerRadius="4">
+                                        <Grid>
+                                            <Grid.ColumnDefinitions>
+                                                <ColumnDefinition Width="Auto"/>
+                                                <ColumnDefinition Width="*"/>
+                                            </Grid.ColumnDefinitions>
+
+                                            <!-- Avatar -->
+                                            <Border Grid.Column="0"
+                                                    Width="32" Height="32"
+                                                    CornerRadius="16"
+                                                    Background="#5865f2"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,0,8,0">
+                                                <TextBlock Text="{Binding AuthorUsername[0]}"
+                                                           Foreground="White"
+                                                           FontSize="13"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+
+                                            <!-- Reply Content -->
+                                            <StackPanel Grid.Column="1">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <TextBlock Text="{Binding AuthorUsername}"
+                                                               Foreground="White"
+                                                               FontWeight="SemiBold"
+                                                               FontSize="13"/>
+                                                    <TextBlock Text="{Binding CreatedAt, Converter={x:Static conv:RelativeTimestampConverter.Instance}}"
+                                                               Foreground="#72767d"
+                                                               FontSize="11"
+                                                               VerticalAlignment="Center"/>
+                                                </StackPanel>
+                                                <controls:MessageContentBlock Content="{Binding Content}"
+                                                                        FontSize="13"
+                                                                        Margin="0,2,0,0"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </ScrollViewer>
+                </DockPanel>
+                </Border>
+            </Grid>
         </Border>
 
         <!-- Screen Share Picker Overlay -->

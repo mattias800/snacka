@@ -74,6 +74,15 @@ public sealed class MiscordDbContext : DbContext
             .WithMany()
             .HasForeignKey(m => m.ReplyToId)
             .OnDelete(DeleteBehavior.SetNull);
+        // Thread parent relationship - cascade delete all thread messages when parent is deleted
+        modelBuilder.Entity<Message>()
+            .HasOne(m => m.ThreadParentMessage)
+            .WithMany(m => m.ThreadReplies)
+            .HasForeignKey(m => m.ThreadParentMessageId)
+            .OnDelete(DeleteBehavior.Cascade);
+        // Index for efficient thread queries
+        modelBuilder.Entity<Message>()
+            .HasIndex(m => m.ThreadParentMessageId);
 
         // DirectMessage configuration
         modelBuilder.Entity<DirectMessage>()

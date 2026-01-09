@@ -61,6 +61,10 @@ public interface IApiClient
     Task<ApiResult<MessagePinnedEvent>> UnpinMessageAsync(Guid channelId, Guid messageId);
     Task<ApiResult<List<MessageResponse>>> GetPinnedMessagesAsync(Guid channelId);
 
+    // Threads
+    Task<ApiResult<ThreadResponse>> GetThreadAsync(Guid parentMessageId, int page = 1, int pageSize = 50);
+    Task<ApiResult<MessageResponse>> CreateThreadReplyAsync(Guid parentMessageId, string content, Guid? replyToId = null);
+
     // Members
     Task<ApiResult<List<CommunityMemberResponse>>> GetMembersAsync(Guid communityId);
     Task<ApiResult<CommunityMemberResponse>> GetMemberAsync(Guid communityId, Guid userId);

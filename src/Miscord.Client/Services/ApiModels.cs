@@ -110,7 +110,22 @@ public record MessageResponse(
     DateTime? PinnedAt = null,
     string? PinnedByUsername = null,
     string? PinnedByEffectiveDisplayName = null,
-    List<AttachmentResponse>? Attachments = null
+    List<AttachmentResponse>? Attachments = null,
+    // Thread fields
+    Guid? ThreadParentMessageId = null,  // If set, this message is part of a thread
+    int ReplyCount = 0,                   // Number of thread replies (for thread parent messages)
+    DateTime? LastReplyAt = null          // Timestamp of most recent reply (for thread parent messages)
+);
+
+/// <summary>
+/// Response containing a thread with its parent message and replies
+/// </summary>
+public record ThreadResponse(
+    MessageResponse ParentMessage,
+    List<MessageResponse> Replies,
+    int TotalReplyCount,
+    int Page,
+    int PageSize
 );
 
 /// <summary>
@@ -317,6 +332,10 @@ public record SfuIceCandidateEvent(string Candidate, string? SdpMid, int? SdpMLi
 // Video Stream Signaling Events
 public record VideoStreamStartedEvent(Guid ChannelId, Guid UserId, string Username, VideoStreamType StreamType);
 public record VideoStreamStoppedEvent(Guid ChannelId, Guid UserId, VideoStreamType StreamType);
+
+// Thread Events
+public record ThreadReplyEvent(Guid ChannelId, Guid ParentMessageId, MessageResponse Reply);
+public record ThreadMetadataUpdatedEvent(Guid ChannelId, Guid MessageId, int ReplyCount, DateTime? LastReplyAt);
 
 // GIF Search Models
 public record GifSearchResponse(

@@ -382,6 +382,43 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
+    // Called when clicking the thread indicator to open the thread panel
+    private void ThreadIndicator_PointerPressed(object? sender, PointerPressedEventArgs e)
+    {
+        if (sender is Border border &&
+            border.Tag is Services.MessageResponse message &&
+            ViewModel != null)
+        {
+            ViewModel.OpenThreadCommand?.Execute(message).Subscribe();
+        }
+    }
+
+    // Called when clicking the "Start thread" button to open an empty thread panel
+    private void StartThreadButton_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is Button button &&
+            button.Tag is Services.MessageResponse message &&
+            ViewModel != null)
+        {
+            ViewModel.OpenThreadCommand?.Execute(message).Subscribe();
+        }
+    }
+
+    // Called for thread reply input TextBox
+    // Enter sends reply
+    private void OnThreadReplyKeyDown(object? sender, KeyEventArgs e)
+    {
+        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
+        {
+            e.Handled = true;
+
+            if (ViewModel?.CurrentThread?.SendReplyCommand.CanExecute.FirstAsync().GetAwaiter().GetResult() == true)
+            {
+                ViewModel.CurrentThread.SendReplyCommand.Execute().Subscribe();
+            }
+        }
+    }
+
     // Store the current message for the emoji picker
     private Services.MessageResponse? _emojiPickerMessage;
 

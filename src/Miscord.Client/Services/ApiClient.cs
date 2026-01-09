@@ -429,6 +429,18 @@ public class ApiClient : IApiClient
         return await GetAsync<List<MessageResponse>>($"/api/channels/{channelId}/messages/pinned");
     }
 
+    // Thread methods
+    public async Task<ApiResult<ThreadResponse>> GetThreadAsync(Guid parentMessageId, int page = 1, int pageSize = 50)
+    {
+        return await GetAsync<ThreadResponse>($"/api/messages/{parentMessageId}/thread?page={page}&pageSize={pageSize}");
+    }
+
+    public async Task<ApiResult<MessageResponse>> CreateThreadReplyAsync(Guid parentMessageId, string content, Guid? replyToId = null)
+    {
+        var request = new SendMessageRequest(content, replyToId);
+        return await PostAsync<SendMessageRequest, MessageResponse>($"/api/messages/{parentMessageId}/replies", request);
+    }
+
     // Member methods
     public async Task<ApiResult<List<CommunityMemberResponse>>> GetMembersAsync(Guid communityId)
     {

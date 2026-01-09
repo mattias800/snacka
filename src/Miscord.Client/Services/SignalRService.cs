@@ -102,6 +102,10 @@ public interface ISignalRService : IAsyncDisposable
     // SSRC mapping events (for per-user volume control)
     event Action<SsrcMappingEvent>? UserAudioSsrcMapped;
     event Action<SsrcMappingBatchEvent>? SsrcMappingsBatchReceived;
+
+    // Thread events
+    event Action<ThreadReplyEvent>? ThreadReplyReceived;
+    event Action<ThreadMetadataUpdatedEvent>? ThreadMetadataUpdated;
 }
 
 // Typing indicator event DTOs
@@ -170,6 +174,10 @@ public class SignalRService : ISignalRService
     // SSRC mapping events (for per-user volume control)
     public event Action<SsrcMappingEvent>? UserAudioSsrcMapped;
     public event Action<SsrcMappingBatchEvent>? SsrcMappingsBatchReceived;
+
+    // Thread events
+    public event Action<ThreadReplyEvent>? ThreadReplyReceived;
+    public event Action<ThreadMetadataUpdatedEvent>? ThreadMetadataUpdated;
 
     public async Task ConnectAsync(string baseUrl, string accessToken)
     {
@@ -616,6 +624,19 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: SsrcMappingsBatch - {e.Mappings.Count} mappings for channel {e.ChannelId}");
             SsrcMappingsBatchReceived?.Invoke(e);
+        });
+
+        // Thread events
+        _hubConnection.On<ThreadReplyEvent>("ReceiveThreadReply", e =>
+        {
+            Console.WriteLine($"SignalR: ReceiveThreadReply - reply to message {e.ParentMessageId} in channel {e.ChannelId}");
+            ThreadReplyReceived?.Invoke(e);
+        });
+
+        _hubConnection.On<ThreadMetadataUpdatedEvent>("ThreadMetadataUpdated", e =>
+        {
+            Console.WriteLine($"SignalR: ThreadMetadataUpdated - message {e.MessageId} now has {e.ReplyCount} replies");
+            ThreadMetadataUpdated?.Invoke(e);
         });
 
         _hubConnection.Reconnecting += error =>

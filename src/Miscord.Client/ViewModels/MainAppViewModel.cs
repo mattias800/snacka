@@ -108,6 +108,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isPinnedPopupOpen;
     private ObservableCollection<MessageResponse> _pinnedMessages = new();
 
+    // Thread state
+    private ThreadViewModel? _currentThread;
+
     // Nickname editing state
     private bool _isEditingNickname;
     private CommunityMemberResponse? _editingNicknameMember;
@@ -203,6 +206,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         TogglePinCommand = ReactiveCommand.CreateFromTask<MessageResponse>(TogglePinAsync);
         ShowPinnedMessagesCommand = ReactiveCommand.CreateFromTask(ShowPinnedMessagesAsync);
         ClosePinnedPopupCommand = ReactiveCommand.Create(() => { IsPinnedPopupOpen = false; });
+
+        // Thread commands
+        OpenThreadCommand = ReactiveCommand.CreateFromTask<MessageResponse>(OpenThreadAsync);
+        CloseThreadCommand = ReactiveCommand.Create(CloseThread);
 
         // Member commands
         StartDMCommand = ReactiveCommand.Create<CommunityMemberResponse>(StartDMWithMember);
@@ -397,6 +404,46 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             var message = Messages.FirstOrDefault(m => m.Id == e.MessageId);
             if (message is not null)
                 Messages.Remove(message);
+
+            // Also remove from thread if open
+            CurrentThread?.RemoveReply(e.MessageId);
+        });
+
+        // Thread events
+        _signalR.ThreadReplyReceived += e => Dispatcher.UIThread.Post(() =>
+        {
+            // If this thread is currently open, add the reply
+            if (CurrentThread?.ParentMessage?.Id == e.ParentMessageId)
+            {
+                CurrentThread.AddReply(e.Reply);
+            }
+
+            // Update the parent message's reply count in the main message list
+            var index = Messages.ToList().FindIndex(m => m.Id == e.ParentMessageId);
+            if (index >= 0)
+            {
+                var message = Messages[index];
+                Messages[index] = message with
+                {
+                    ReplyCount = message.ReplyCount + 1,
+                    LastReplyAt = e.Reply.CreatedAt
+                };
+            }
+        });
+
+        _signalR.ThreadMetadataUpdated += e => Dispatcher.UIThread.Post(() =>
+        {
+            // Update the message's thread metadata in the main message list
+            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
+            if (index >= 0)
+            {
+                var message = Messages[index];
+                Messages[index] = message with
+                {
+                    ReplyCount = e.ReplyCount,
+                    LastReplyAt = e.LastReplyAt
+                };
+            }
         });
 
         _signalR.ReactionUpdated += e => Dispatcher.UIThread.Post(() =>
@@ -961,6 +1008,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     public int PinnedCount => Messages.Count(m => m.IsPinned);
+
+    // Thread properties
+    public ThreadViewModel? CurrentThread
+    {
+        get => _currentThread;
+        set => this.RaiseAndSetIfChanged(ref _currentThread, value);
+    }
+
+    public bool IsThreadOpen => CurrentThread != null;
 
     // Nickname editing properties
     public bool IsEditingNickname
@@ -1774,6 +1830,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<MessageResponse, Unit> TogglePinCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowPinnedMessagesCommand { get; }
     public ReactiveCommand<Unit, Unit> ClosePinnedPopupCommand { get; }
+
+    // Thread commands
+    public ReactiveCommand<MessageResponse, Unit> OpenThreadCommand { get; }
+    public ReactiveCommand<Unit, Unit> CloseThreadCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> StartDMCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> PromoteToAdminCommand { get; }
     public ReactiveCommand<CommunityMemberResponse, Unit> DemoteToMemberCommand { get; }
@@ -3188,6 +3248,47 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             PinnedMessages.Clear();
             foreach (var message in result.Data)
                 PinnedMessages.Add(message);
+        }
+    }
+
+    // Thread methods
+    private async Task OpenThreadAsync(MessageResponse parentMessage)
+    {
+        // Close any existing thread
+        CloseThread();
+
+        // Create new thread view model
+        CurrentThread = new ThreadViewModel(_apiClient, parentMessage, CloseThread);
+        await CurrentThread.LoadAsync();
+
+        // Notify that IsThreadOpen changed
+        this.RaisePropertyChanged(nameof(IsThreadOpen));
+    }
+
+    private void CloseThread()
+    {
+        if (CurrentThread != null)
+        {
+            CurrentThread.Dispose();
+            CurrentThread = null;
+            this.RaisePropertyChanged(nameof(IsThreadOpen));
+        }
+    }
+
+    /// <summary>
+    /// Updates thread metadata on a parent message when a new reply is added.
+    /// Called from SignalR event handler.
+    /// </summary>
+    public void UpdateThreadMetadata(Guid parentMessageId, int replyCount, DateTime? lastReplyAt)
+    {
+        var message = Messages.FirstOrDefault(m => m.Id == parentMessageId);
+        if (message != null)
+        {
+            // Create a new MessageResponse with updated thread metadata
+            // Since records are immutable, we need to create a new instance
+            var index = Messages.IndexOf(message);
+            var updatedMessage = message with { ReplyCount = replyCount, LastReplyAt = lastReplyAt };
+            Messages[index] = updatedMessage;
         }
     }
 

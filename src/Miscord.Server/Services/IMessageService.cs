@@ -12,4 +12,8 @@ public interface IMessageService
     Task<MessagePinnedEvent> PinMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
     Task<MessagePinnedEvent> UnpinMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
     Task<IEnumerable<MessageResponse>> GetPinnedMessagesAsync(Guid channelId, Guid currentUserId, CancellationToken cancellationToken = default);
+
+    // Thread methods
+    Task<ThreadResponse> GetThreadAsync(Guid parentMessageId, Guid currentUserId, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default);
+    Task<MessageResponse> CreateThreadReplyAsync(Guid parentMessageId, Guid authorId, string content, Guid? replyToId = null, CancellationToken cancellationToken = default);
 }
