@@ -1,0 +1,135 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:conv="using:Miscord.Client.Converters"
+             xmlns:controls="using:Miscord.Client.Controls"
+             xmlns:vm="using:Miscord.Client.ViewModels"
+             mc:Ignorable="d"
+             x:Class="Miscord.Client.Controls.ThreadPanelView"
+             x:DataType="vm:ThreadViewModel">
+
+    <DockPanel Background="#2f3136">
+        <!-- Header with close button -->
+        <Border DockPanel.Dock="Top" Background="#202225" Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBlock Text="Thread"
+                           Foreground="White"
+                           FontSize="14"
+                           FontWeight="SemiBold"
+                           VerticalAlignment="Center"/>
+                <Button Grid.Column="1"
+                        Command="{Binding CloseCommand}"
+                        Background="Transparent"
+                        Padding="4"
+                        ToolTip.Tip="Close thread">
+                    <TextBlock Text="✕" Foreground="#72767d" FontSize="14"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Parent Message Preview -->
+        <Border DockPanel.Dock="Top" Background="#36393f" Padding="12" Margin="8,8,8,0" CornerRadius="4">
+            <StackPanel>
+                <StackPanel Orientation="Horizontal" Spacing="8">
+                    <Border Width="24" Height="24" CornerRadius="12" Background="#5865f2">
+                        <TextBlock Text="{Binding ParentMessage.AuthorUsername[0]}"
+                                   Foreground="White"
+                                   FontSize="11"
+                                   FontWeight="Bold"
+                                   HorizontalAlignment="Center"
+                                   VerticalAlignment="Center"/>
+                    </Border>
+                    <TextBlock Text="{Binding ParentMessage.AuthorUsername}"
+                               Foreground="White"
+                               FontSize="13"
+                               FontWeight="SemiBold"
+                               VerticalAlignment="Center"/>
+                </StackPanel>
+                <TextBlock Text="{Binding ParentMessage.Content}"
+                           Foreground="#dcddde"
+                           FontSize="13"
+                           TextWrapping="Wrap"
+                           MaxLines="3"
+                           Margin="0,4,0,0"/>
+                <TextBlock Foreground="#72767d" FontSize="11" Margin="0,4,0,0">
+                    <TextBlock.Text>
+                        <MultiBinding StringFormat="{}{0} replies">
+                            <Binding Path="TotalReplyCount"/>
+                        </MultiBinding>
+                    </TextBlock.Text>
+                </TextBlock>
+            </StackPanel>
+        </Border>
+
+        <!-- Reply Input (docked at bottom) -->
+        <Border DockPanel.Dock="Bottom" Background="#40444b" Margin="8" CornerRadius="8" Padding="12,8">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <TextBox x:Name="ThreadReplyInput"
+                         Text="{Binding ReplyInput, Mode=TwoWay}"
+                         Watermark="Reply..."
+                         Background="Transparent"
+                         BorderThickness="0"
+                         Foreground="White"
+                         AcceptsReturn="False"
+                         KeyDown="OnThreadReplyKeyDown"/>
+                <Button Grid.Column="1"
+                        Command="{Binding SendReplyCommand}"
+                        Background="#5865f2"
+                        Foreground="White"
+                        Padding="12,6"
+                        CornerRadius="4"
+                        Margin="8,0,0,0">
+                    <TextBlock Text="Send" FontSize="12"/>
+                </Button>
+            </Grid>
+        </Border>
+
+        <!-- Loading indicator -->
+        <TextBlock Text="Loading..."
+                   Foreground="#72767d"
+                   HorizontalAlignment="Center"
+                   Margin="0,20,0,0"
+                   IsVisible="{Binding IsLoading}"/>
+
+        <!-- Replies List -->
+        <ScrollViewer x:Name="ThreadRepliesScrollViewer" Margin="0,8">
+            <ItemsControl x:Name="ThreadRepliesList" ItemsSource="{Binding Replies}" Margin="8,0">
+                <ItemsControl.ItemTemplate>
+                    <DataTemplate>
+                        <controls:MessageItemView
+                            Message="{Binding}"
+                            AuthorUsername="{Binding AuthorUsername}"
+                            MessageContent="{Binding Content}"
+                            CreatedAt="{Binding CreatedAt}"
+                            IsEdited="{Binding IsEdited}"
+                            ReplyTo="{Binding ReplyTo}"
+                            Reactions="{Binding Reactions}"
+                            Attachments="{Binding Attachments}"
+                            BaseUrl="{Binding BaseUrl, RelativeSource={RelativeSource AncestorType=controls:ThreadPanelView}}"
+                            StartEditMessageCommand="{Binding StartEditMessageCommand, RelativeSource={RelativeSource AncestorType=controls:ThreadPanelView}}"
+                            DeleteMessageCommand="{Binding DeleteMessageCommand, RelativeSource={RelativeSource AncestorType=controls:ThreadPanelView}}"
+                            ShowThreadIndicator="False"
+                            ShowStartThreadButton="False"
+                            ShowPinButton="False"
+                            ShowReplyButton="False"
+                            ShowReactions="True"
+                            ShowAttachments="True"
+                            ShowDateSeparator="False"
+                            AddReactionRequested="OnMessageAddReactionRequested"
+                            ReactionToggleRequested="OnMessageReactionToggleRequested"
+                            ImageClicked="OnMessageImageClicked"/>
+                    </DataTemplate>
+                </ItemsControl.ItemTemplate>
+            </ItemsControl>
+        </ScrollViewer>
+    </DockPanel>
+</UserControl>

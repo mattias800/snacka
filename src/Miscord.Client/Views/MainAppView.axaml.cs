@@ -397,21 +397,6 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
-    // Called for thread reply input TextBox
-    // Enter sends reply
-    private void OnThreadReplyKeyDown(object? sender, KeyEventArgs e)
-    {
-        if (e.Key == Key.Enter && !e.KeyModifiers.HasFlag(KeyModifiers.Shift))
-        {
-            e.Handled = true;
-
-            if (ViewModel?.CurrentThread?.SendReplyCommand.CanExecute.FirstAsync().GetAwaiter().GetResult() == true)
-            {
-                ViewModel.CurrentThread.SendReplyCommand.Execute().Subscribe();
-            }
-        }
-    }
-
     // Store the current message for the emoji picker
     private Services.MessageResponse? _emojiPickerMessage;
 

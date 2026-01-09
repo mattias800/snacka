@@ -1668,7 +1668,6 @@
         <Border Grid.Column="2" Grid.ColumnSpan="2"
                 HorizontalAlignment="Right"
                 Width="{Binding ThreadPanelWidth}"
-                Background="#2f3136"
                 IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNotNull}}">
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -1685,129 +1684,14 @@
                         PointerReleased="ThreadPanelResizeHandle_PointerReleased"/>
 
                 <!-- Thread Content -->
-                <DockPanel Grid.Column="1" DataContext="{Binding CurrentThread}">
-                    <!-- Header with close button -->
-                    <Border DockPanel.Dock="Top" Background="#202225" Padding="12,8">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBlock Text="Thread"
-                                       Foreground="White"
-                                       FontSize="14"
-                                       FontWeight="SemiBold"
-                                       VerticalAlignment="Center"/>
-                            <Button Grid.Column="1"
-                                    Command="{Binding CloseCommand}"
-                                    Background="Transparent"
-                                    Padding="4"
-                                    ToolTip.Tip="Close thread">
-                                <TextBlock Text="✕" Foreground="#72767d" FontSize="14"/>
-                            </Button>
-                        </Grid>
-                    </Border>
-
-                    <!-- Parent Message Preview -->
-                    <Border DockPanel.Dock="Top" Background="#36393f" Padding="12" Margin="8,8,8,0" CornerRadius="4">
-                        <StackPanel>
-                            <StackPanel Orientation="Horizontal" Spacing="8">
-                                <Border Width="24" Height="24" CornerRadius="12" Background="#5865f2">
-                                    <TextBlock Text="{Binding ParentMessage.AuthorUsername[0]}"
-                                               Foreground="White"
-                                               FontSize="11"
-                                               FontWeight="Bold"
-                                               HorizontalAlignment="Center"
-                                               VerticalAlignment="Center"/>
-                                </Border>
-                                <TextBlock Text="{Binding ParentMessage.AuthorUsername}"
-                                           Foreground="White"
-                                           FontSize="13"
-                                           FontWeight="SemiBold"
-                                           VerticalAlignment="Center"/>
-                            </StackPanel>
-                            <TextBlock Text="{Binding ParentMessage.Content}"
-                                       Foreground="#dcddde"
-                                       FontSize="13"
-                                       TextWrapping="Wrap"
-                                       MaxLines="3"
-                                       Margin="0,4,0,0"/>
-                            <TextBlock Foreground="#72767d" FontSize="11" Margin="0,4,0,0">
-                                <TextBlock.Text>
-                                    <MultiBinding StringFormat="{}{0} replies">
-                                        <Binding Path="TotalReplyCount"/>
-                                    </MultiBinding>
-                                </TextBlock.Text>
-                            </TextBlock>
-                        </StackPanel>
-                    </Border>
-
-                    <!-- Reply Input (docked at bottom) -->
-                    <Border DockPanel.Dock="Bottom" Background="#40444b" Margin="8" CornerRadius="8" Padding="12,8">
-                        <Grid>
-                            <Grid.ColumnDefinitions>
-                                <ColumnDefinition Width="*"/>
-                                <ColumnDefinition Width="Auto"/>
-                            </Grid.ColumnDefinitions>
-                            <TextBox x:Name="ThreadReplyInput"
-                                     Text="{Binding ReplyInput, Mode=TwoWay}"
-                                     Watermark="Reply..."
-                                     Background="Transparent"
-                                     BorderThickness="0"
-                                     Foreground="White"
-                                     AcceptsReturn="False"
-                                     KeyDown="OnThreadReplyKeyDown"/>
-                            <Button Grid.Column="1"
-                                    Command="{Binding SendReplyCommand}"
-                                    Background="#5865f2"
-                                    Foreground="White"
-                                    Padding="12,6"
-                                    CornerRadius="4"
-                                    Margin="8,0,0,0">
-                                <TextBlock Text="Send" FontSize="12"/>
-                            </Button>
-                        </Grid>
-                    </Border>
-
-                    <!-- Loading indicator -->
-                    <TextBlock Text="Loading..."
-                               Foreground="#72767d"
-                               HorizontalAlignment="Center"
-                               Margin="0,20,0,0"
-                               IsVisible="{Binding IsLoading}"/>
-
-                    <!-- Replies List -->
-                    <ScrollViewer x:Name="ThreadRepliesScrollViewer" Margin="0,8">
-                        <ItemsControl x:Name="ThreadRepliesList" ItemsSource="{Binding Replies}" Margin="8,0">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate>
-                                    <controls:MessageItemView
-                                        Message="{Binding}"
-                                        AuthorUsername="{Binding AuthorUsername}"
-                                        MessageContent="{Binding Content}"
-                                        CreatedAt="{Binding CreatedAt}"
-                                        IsEdited="{Binding IsEdited}"
-                                        ReplyTo="{Binding ReplyTo}"
-                                        Reactions="{Binding Reactions}"
-                                        Attachments="{Binding Attachments}"
-                                        BaseUrl="{Binding $parent[UserControl].DataContext.BaseUrl}"
-                                        StartEditMessageCommand="{Binding $parent[UserControl].DataContext.StartEditMessageCommand}"
-                                        DeleteMessageCommand="{Binding $parent[UserControl].DataContext.DeleteMessageCommand}"
-                                        ShowThreadIndicator="False"
-                                        ShowStartThreadButton="False"
-                                        ShowPinButton="False"
-                                        ShowReplyButton="False"
-                                        ShowReactions="True"
-                                        ShowAttachments="True"
-                                        ShowDateSeparator="False"
-                                        AddReactionRequested="OnThreadMessageAddReactionRequested"
-                                        ReactionToggleRequested="OnThreadMessageReactionToggleRequested"
-                                        ImageClicked="OnAttachmentImageClicked"/>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </ScrollViewer>
-                </DockPanel>
+                <controls:ThreadPanelView Grid.Column="1"
+                                          DataContext="{Binding CurrentThread}"
+                                          BaseUrl="{Binding $parent[UserControl].DataContext.BaseUrl}"
+                                          StartEditMessageCommand="{Binding $parent[UserControl].DataContext.StartEditMessageCommand}"
+                                          DeleteMessageCommand="{Binding $parent[UserControl].DataContext.DeleteMessageCommand}"
+                                          AddReactionRequested="OnThreadMessageAddReactionRequested"
+                                          ReactionToggleRequested="OnThreadMessageReactionToggleRequested"
+                                          ImageClicked="OnAttachmentImageClicked"/>
             </Grid>
         </Border>
 
