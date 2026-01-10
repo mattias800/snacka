@@ -105,6 +105,7 @@
                                               VoiceChannelContent="{Binding VoiceChannelContent}"
                                               OpenSettingsCommand="{Binding OpenSettingsCommand}"
                                               WatchScreenShareRequested="OnVoiceChannelWatchScreenShare"
+                                              StopWatchingRequested="OnVoiceChannelStopWatching"
                                               FullscreenRequested="OnVoiceChannelFullscreen"
                                               VideoTileDoubleTapped="OnVoiceChannelVideoTileDoubleTapped">
                 <controls:VoiceChannelContentView.IsVisible>
@@ -223,12 +224,19 @@
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch">
             <Grid>
-                <!-- Video fills the space -->
+                <!-- GPU-accelerated video (used when Metal/Vulkan is available) -->
+                <controls:GpuVideoView x:Name="FullscreenGpuVideo"
+                                       HorizontalAlignment="Stretch"
+                                       VerticalAlignment="Stretch"
+                                       IsVisible="{Binding IsGpuFullscreenActive}"/>
+
+                <!-- Software fallback video (used when GPU rendering is not available) -->
                 <Image x:Name="FullscreenVideoImage"
                        Source="{Binding FullscreenStream.VideoBitmap}"
                        Stretch="Uniform"
                        HorizontalAlignment="Stretch"
-                       VerticalAlignment="Stretch"/>
+                       VerticalAlignment="Stretch"
+                       IsVisible="{Binding !IsGpuFullscreenActive}"/>
 
                 <!-- Drawing Canvas Overlay (transparent, captures drawing input when enabled) -->
                 <Canvas x:Name="AnnotationCanvas"

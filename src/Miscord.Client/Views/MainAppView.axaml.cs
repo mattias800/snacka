@@ -52,6 +52,31 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         if (ViewModel != null)
         {
             ViewModel.PropertyChanged += OnViewModelPropertyChanged;
+            ViewModel.GpuFullscreenFrameReceived += OnGpuFullscreenFrameReceived;
+        }
+    }
+
+    private bool _gpuVideoInitialized;
+
+    private void OnGpuFullscreenFrameReceived(int width, int height, byte[] nv12Data)
+    {
+        // Ensure GpuVideoView is initialized with correct dimensions
+        if (!_gpuVideoInitialized || FullscreenGpuVideo.VideoDimensions != (width, height))
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                if (FullscreenGpuVideo.InitializeRenderer(width, height))
+                {
+                    _gpuVideoInitialized = true;
+                    Console.WriteLine($"MainAppView: GPU video initialized for {width}x{height}");
+                }
+            });
+        }
+
+        // Render the frame (can be called from any thread)
+        if (_gpuVideoInitialized)
+        {
+            FullscreenGpuVideo.RenderFrame(nv12Data);
         }
     }
 
@@ -486,6 +511,15 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         if (ViewModel?.VoiceChannelContent != null)
         {
             await ViewModel.VoiceChannelContent.WatchScreenShareAsync(stream);
+        }
+    }
+
+    // Called when Stop Watching button is clicked in VoiceChannelContentView
+    private async void OnVoiceChannelStopWatching(object? sender, VideoStreamViewModel stream)
+    {
+        if (ViewModel?.VoiceChannelContent != null)
+        {
+            await ViewModel.VoiceChannelContent.StopWatchingScreenShareAsync(stream);
         }
     }
 

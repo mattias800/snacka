@@ -5,6 +5,7 @@ using Avalonia.Media.Imaging;
 using Avalonia.Platform;
 using Avalonia.Threading;
 using Miscord.Client.Services;
+using Miscord.Client.Services.HardwareVideo;
 using Miscord.Shared.Models;
 using ReactiveUI;
 
@@ -19,6 +20,7 @@ public class VideoStreamViewModel : ReactiveObject
     private WriteableBitmap? _videoBitmap;
     private bool _isSpeaking;
     private bool _isWatching;
+    private IHardwareVideoDecoder? _hardwareDecoder;
     private readonly Guid _localUserId;
 
     public VideoStreamViewModel(Guid userId, string username, VideoStreamType streamType, Guid localUserId)
@@ -74,7 +76,33 @@ public class VideoStreamViewModel : ReactiveObject
     /// <summary>
     /// Whether to show loading indicator. True when watching a screen share but no frames received yet.
     /// </summary>
-    public bool IsLoadingStream => IsRemoteScreenShare && IsWatching && VideoBitmap == null;
+    public bool IsLoadingStream => IsRemoteScreenShare && IsWatching && VideoBitmap == null && !IsUsingHardwareDecoder;
+
+    /// <summary>
+    /// The hardware video decoder for zero-copy GPU rendering.
+    /// When set, the UI should embed the native view instead of showing the bitmap.
+    /// </summary>
+    public IHardwareVideoDecoder? HardwareDecoder
+    {
+        get => _hardwareDecoder;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _hardwareDecoder, value);
+            this.RaisePropertyChanged(nameof(IsUsingHardwareDecoder));
+            this.RaisePropertyChanged(nameof(IsLoadingStream));
+            this.RaisePropertyChanged(nameof(ShowAvatarPlaceholder));
+        }
+    }
+
+    /// <summary>
+    /// Whether this stream is using hardware decoding with native view rendering.
+    /// </summary>
+    public bool IsUsingHardwareDecoder => _hardwareDecoder != null;
+
+    /// <summary>
+    /// Whether to show the avatar placeholder (no video available from any source).
+    /// </summary>
+    public bool ShowAvatarPlaceholder => !IsUsingHardwareDecoder && VideoBitmap == null;
 
     /// <summary>
     /// Display label shown on the tile. Empty for camera, "Screen" for screen share.
@@ -103,6 +131,7 @@ public class VideoStreamViewModel : ReactiveObject
         {
             this.RaiseAndSetIfChanged(ref _videoBitmap, value);
             this.RaisePropertyChanged(nameof(IsLoadingStream));
+            this.RaisePropertyChanged(nameof(ShowAvatarPlaceholder));
         }
     }
 
@@ -194,6 +223,7 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         // Subscribe to video frames from WebRTC
         _webRtc.VideoFrameReceived += OnVideoFrameReceived;
         _webRtc.LocalVideoFrameCaptured += OnLocalVideoFrameCaptured;
+        _webRtc.HardwareDecoderReady += OnHardwareDecoderReady;
     }
 
     public ChannelResponse? Channel
@@ -383,6 +413,20 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         stream?.UpdateVideoFrame(rgbData, width, height);
     }
 
+    private void OnHardwareDecoderReady(Guid userId, VideoStreamType streamType, IHardwareVideoDecoder decoder)
+    {
+        // Route hardware decoder to the appropriate video stream for native view embedding
+        Dispatcher.UIThread.Post(() =>
+        {
+            var stream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == streamType);
+            if (stream != null)
+            {
+                stream.HardwareDecoder = decoder;
+                Console.WriteLine($"VoiceChannelContent: Hardware decoder ready for {stream.Username} ({streamType})");
+            }
+        });
+    }
+
     /// <summary>
     /// Start watching a remote user's screen share.
     /// </summary>
@@ -392,6 +436,7 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
             return;
 
         await _signalR.WatchScreenShareAsync(Channel.Id, stream.UserId);
+        _webRtc.StartWatchingScreenShare(stream.UserId);
         stream.IsWatching = true;
         Console.WriteLine($"VoiceChannelContent: Started watching screen share from {stream.Username}");
     }
@@ -405,14 +450,43 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
             return;
 
         await _signalR.StopWatchingScreenShareAsync(Channel.Id, stream.UserId);
+        _webRtc.StopWatchingScreenShare(stream.UserId);
         stream.IsWatching = false;
         stream.VideoBitmap = null; // Clear the video frame
+        stream.HardwareDecoder = null; // Clear hardware decoder reference
         Console.WriteLine($"VoiceChannelContent: Stopped watching screen share from {stream.Username}");
+    }
+
+    /// <summary>
+    /// Stop watching all active screen shares. Called when leaving voice channel.
+    /// </summary>
+    public async Task StopWatchingAllScreenSharesAsync()
+    {
+        if (Channel == null) return;
+
+        foreach (var stream in VideoStreams.Where(s => s.IsRemoteScreenShare && s.IsWatching).ToList())
+        {
+            try
+            {
+                await _signalR.StopWatchingScreenShareAsync(Channel.Id, stream.UserId);
+                stream.IsWatching = false;
+                stream.VideoBitmap = null;
+                Console.WriteLine($"VoiceChannelContent: Stopped watching screen share from {stream.Username} (cleanup)");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"VoiceChannelContent: Error stopping watch for {stream.Username}: {ex.Message}");
+            }
+        }
     }
 
     public void Dispose()
     {
+        // Stop watching all screen shares (fire and forget since Dispose is sync)
+        _ = StopWatchingAllScreenSharesAsync();
+
         _webRtc.VideoFrameReceived -= OnVideoFrameReceived;
         _webRtc.LocalVideoFrameCaptured -= OnLocalVideoFrameCaptured;
+        _webRtc.HardwareDecoderReady -= OnHardwareDecoderReady;
     }
 }

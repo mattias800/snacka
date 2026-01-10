@@ -83,15 +83,21 @@
                                 <Grid>
                                     <!-- Video content (only shown when watching) -->
                                     <Grid IsVisible="{Binding ShowVideoContent}">
-                                        <!-- Video Feed -->
+                                        <!-- Hardware-accelerated video (zero-copy GPU rendering) -->
+                                        <!-- HardwareVideoViewHost creates the native view only when decoder is available -->
+                                        <controls:HardwareVideoViewHost Decoder="{Binding HardwareDecoder}"
+                                                                        HorizontalAlignment="Stretch"
+                                                                        VerticalAlignment="Stretch"/>
+
+                                        <!-- Software-decoded video (bitmap rendering) -->
                                         <Image Source="{Binding VideoBitmap}"
                                                Stretch="UniformToFill"
                                                IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNotNull}}"/>
 
-                                        <!-- Avatar placeholder (shown when no video) -->
+                                        <!-- Avatar placeholder (shown when no video from any source) -->
                                         <StackPanel VerticalAlignment="Center"
                                                     HorizontalAlignment="Center"
-                                                    IsVisible="{Binding VideoBitmap, Converter={x:Static ObjectConverters.IsNull}}">
+                                                    IsVisible="{Binding ShowAvatarPlaceholder}">
                                             <!-- Large Avatar Circle -->
                                             <Border Width="80" Height="80"
                                                     CornerRadius="40"
@@ -173,25 +179,43 @@
                                             BorderBrush="#3ba55c"
                                             IsVisible="{Binding ShowSpeakingIndicator}"/>
 
-                                    <!-- Fullscreen button - top right corner (only for screen shares when watching) -->
-                                    <Button VerticalAlignment="Top"
-                                            HorizontalAlignment="Right"
-                                            Margin="8"
-                                            Padding="8,4"
-                                            Background="#80000000"
-                                            BorderThickness="0"
-                                            CornerRadius="4"
-                                            Cursor="Hand"
-                                            Click="OnFullscreenButtonClick"
-                                            Tag="{Binding}">
-                                        <Button.IsVisible>
+                                    <!-- Top buttons panel for screen shares when watching -->
+                                    <StackPanel VerticalAlignment="Top"
+                                                HorizontalAlignment="Right"
+                                                Orientation="Horizontal"
+                                                Margin="8"
+                                                Spacing="4">
+                                        <StackPanel.IsVisible>
                                             <MultiBinding Converter="{x:Static BoolConverters.And}">
-                                                <Binding Path="ShowVideoContent"/>
-                                                <Binding Path="StreamLabel" Converter="{x:Static StringConverters.IsNotNullOrEmpty}"/>
+                                                <Binding Path="IsRemoteScreenShare"/>
+                                                <Binding Path="IsWatching"/>
                                             </MultiBinding>
-                                        </Button.IsVisible>
-                                        <TextBlock Text="⛶" Foreground="White" FontSize="16"/>
-                                    </Button>
+                                        </StackPanel.IsVisible>
+
+                                        <!-- Stop Watching button -->
+                                        <Button Padding="8,4"
+                                                Background="#ed4245"
+                                                BorderThickness="0"
+                                                CornerRadius="4"
+                                                Cursor="Hand"
+                                                Click="OnStopWatchingClick"
+                                                Tag="{Binding}"
+                                                ToolTip.Tip="Stop Watching">
+                                            <TextBlock Text="✕" Foreground="White" FontSize="14"/>
+                                        </Button>
+
+                                        <!-- Fullscreen button -->
+                                        <Button Padding="8,4"
+                                                Background="#80000000"
+                                                BorderThickness="0"
+                                                CornerRadius="4"
+                                                Cursor="Hand"
+                                                Click="OnFullscreenButtonClick"
+                                                Tag="{Binding}"
+                                                ToolTip.Tip="Fullscreen">
+                                            <TextBlock Text="⛶" Foreground="White" FontSize="16"/>
+                                        </Button>
+                                    </StackPanel>
                                 </Grid>
                             </Border>
                         </DataTemplate>

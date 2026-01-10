@@ -10,18 +10,25 @@ using SIPSorceryMedia.Encoders;
 using Emgu.CV;
 using Emgu.CV.CvEnum;
 using Miscord.Shared.Models;
+using Miscord.Client.Services.HardwareVideo;
 
 namespace Miscord.Client.Services;
 
 public interface IWebRtcService : IAsyncDisposable
 {
     Guid? CurrentChannelId { get; }
+    Guid? CurrentUserId { get; }
     VoiceConnectionStatus ConnectionStatus { get; }
     int ConnectedPeerCount { get; }
     IReadOnlyDictionary<Guid, PeerConnectionState> PeerStates { get; }
     bool IsSpeaking { get; }
     bool IsCameraOn { get; }
     bool IsScreenSharing { get; }
+
+    /// <summary>
+    /// Sets the current user ID. Call this after login so the service knows which user is local.
+    /// </summary>
+    void SetCurrentUserId(Guid userId);
 
     Task JoinVoiceChannelAsync(Guid channelId, IEnumerable<VoiceParticipantResponse> existingParticipants);
     Task LeaveVoiceChannelAsync();
@@ -56,9 +63,40 @@ public interface IWebRtcService : IAsyncDisposable
     /// </summary>
     event Action<Guid, VideoStreamType, int, int, byte[]>? VideoFrameReceived;
     /// <summary>
+    /// Fired when an NV12 video frame is received (for GPU rendering). Args: (userId, streamType, width, height, nv12Data)
+    /// </summary>
+    event Action<Guid, VideoStreamType, int, int, byte[]>? Nv12VideoFrameReceived;
+    /// <summary>
     /// Fired when a local video frame is captured (for self-preview). Args: (streamType, width, height, rgbData)
     /// </summary>
     event Action<VideoStreamType, int, int, byte[]>? LocalVideoFrameCaptured;
+
+    /// <summary>
+    /// Fired when a hardware video decoder is ready for a stream. Args: (userId, streamType, decoder)
+    /// The UI should embed the decoder's native view for zero-copy GPU rendering.
+    /// </summary>
+    event Action<Guid, VideoStreamType, IHardwareVideoDecoder>? HardwareDecoderReady;
+
+    /// <summary>
+    /// Gets whether GPU video rendering is available.
+    /// </summary>
+    bool IsGpuRenderingAvailable { get; }
+
+    /// <summary>
+    /// Gets whether hardware video decoding is available.
+    /// </summary>
+    bool IsHardwareDecodingAvailable { get; }
+
+    /// <summary>
+    /// Adds a user to the list of screen shares we're watching.
+    /// Call this when the user starts watching a screen share so video can be properly routed.
+    /// </summary>
+    void StartWatchingScreenShare(Guid userId);
+
+    /// <summary>
+    /// Removes a user from the list of screen shares we're watching.
+    /// </summary>
+    void StopWatchingScreenShare(Guid userId);
 }
 
 public enum VoiceConnectionStatus
@@ -102,6 +140,13 @@ public class WebRtcService : IWebRtcService
     // Per-user video decoders (keyed by userId, server tells us which SSRC maps to which user)
     // Video decoders keyed by (userId, streamType) for camera and screen share
     private readonly ConcurrentDictionary<(Guid userId, VideoStreamType streamType), FfmpegProcessDecoder> _videoDecoders = new();
+    // Hardware video decoders for zero-copy GPU pipeline (keyed by userId, streamType)
+    private readonly ConcurrentDictionary<(Guid userId, VideoStreamType streamType), IHardwareVideoDecoder> _hardwareDecoders = new();
+    // SPS/PPS storage for hardware decoder initialization (stored separately as they may arrive in different frames)
+    private readonly ConcurrentDictionary<(Guid userId, VideoStreamType streamType), byte[]> _spsParams = new();
+    private readonly ConcurrentDictionary<(Guid userId, VideoStreamType streamType), byte[]> _ppsParams = new();
+    // Track streams where hardware decoder failed to avoid retrying every frame
+    private readonly ConcurrentDictionary<(Guid userId, VideoStreamType streamType), bool> _hardwareDecoderFailed = new();
     // Per-stream frame assemblers for camera and screen share video
     // These accumulate RTP payloads and assemble complete H264 frames
     private readonly H264FrameAssembler _cameraFrameAssembler = new();
@@ -110,6 +155,8 @@ public class WebRtcService : IWebRtcService
     private readonly ConcurrentDictionary<uint, Guid> _ssrcToUserMap = new();
     // SSRC to payload type mapping for detecting camera vs screen share
     private readonly ConcurrentDictionary<uint, int> _ssrcPayloadTypeMap = new();
+    // UserIds of screen shares we're currently watching (can watch multiple)
+    private readonly HashSet<Guid> _watchingScreenShareUserIds = new();
 
     // Pending SFU offer (received before JoinVoiceChannelAsync was called)
     private (Guid ChannelId, string Sdp)? _pendingSfuOffer;
@@ -130,12 +177,16 @@ public class WebRtcService : IWebRtcService
     private FfmpegProcessEncoder? _screenEncoder;
     private CancellationTokenSource? _screenCts;
     private Task? _screenCaptureTask;
+    private Task? _screenAudioTask;  // For reading audio from MiscordCapture
     private bool _isScreenSharing;
+    private bool _isUsingMiscordCapture;  // True when using native capture with audio
     private ScreenShareSettings? _currentScreenShareSettings;
     // Default screen share settings (used as fallback)
     private const int DefaultScreenWidth = 1920;
     private const int DefaultScreenHeight = 1080;
     private const int DefaultScreenFps = 30;
+    // MiscordCapture audio packet header
+    private const uint MiscordCaptureAudioMagic = 0x4D434150;  // "MCAP" in little-endian
 
     // Dual video tracks for simultaneous camera + screen share
     private MediaStreamTrack? _cameraVideoTrack;
@@ -157,12 +208,19 @@ public class WebRtcService : IWebRtcService
     private const int SpeakingCheckIntervalMs = 50;
 
     public Guid? CurrentChannelId => _currentChannelId;
+    public Guid? CurrentUserId => _localUserId == Guid.Empty ? null : _localUserId;
     public VoiceConnectionStatus ConnectionStatus => _connectionStatus;
     public int ConnectedPeerCount => _peerStates.Count(p => p.Value == PeerConnectionState.Connected);
     public IReadOnlyDictionary<Guid, PeerConnectionState> PeerStates => _peerStates;
     public bool IsSpeaking => _isSpeaking;
     public bool IsCameraOn => _isCameraOn;
     public bool IsScreenSharing => _isScreenSharing;
+
+    public void SetCurrentUserId(Guid userId)
+    {
+        _localUserId = userId;
+        Console.WriteLine($"WebRTC: Current user ID set to {userId}");
+    }
 
     public event Action<Guid>? PeerConnected;
     public event Action<Guid>? PeerDisconnected;
@@ -171,10 +229,28 @@ public class WebRtcService : IWebRtcService
     public event Action<bool>? CameraStateChanged;
     public event Action<bool>? ScreenSharingStateChanged;
     public event Action<Guid, VideoStreamType, int, int, byte[]>? VideoFrameReceived;
+    public event Action<Guid, VideoStreamType, int, int, byte[]>? Nv12VideoFrameReceived;
+    /// <summary>
+    /// Fired when a hardware video decoder is ready for a user's stream.
+    /// Args: (userId, streamType, hardwareDecoder)
+    /// The hardwareDecoder can be used to get the native view handle for embedding.
+    /// </summary>
+    public event Action<Guid, VideoStreamType, IHardwareVideoDecoder>? HardwareDecoderReady;
     /// <summary>
     /// Fired when a local video frame is captured (for self-preview). Args: (streamType, width, height, rgbData)
     /// </summary>
     public event Action<VideoStreamType, int, int, byte[]>? LocalVideoFrameCaptured;
+
+    /// <summary>
+    /// Gets whether GPU video rendering is available on this platform.
+    /// </summary>
+    public bool IsGpuRenderingAvailable => Services.GpuVideo.GpuVideoRendererFactory.IsAvailable();
+
+    /// <summary>
+    /// Gets whether hardware video decoding is available on this platform.
+    /// Hardware decoding provides zero-copy GPU pipeline: H264 → GPU Decode → GPU Render
+    /// </summary>
+    public bool IsHardwareDecodingAvailable => HardwareVideoDecoderFactory.IsAvailable();
 
     public WebRtcService(ISignalRService signalR, ISettingsStore? settingsStore = null)
     {
@@ -487,6 +563,10 @@ public class WebRtcService : IWebRtcService
         }
         _ssrcToUserMap.Clear();
         _ssrcPayloadTypeMap.Clear();
+        _spsParams.Clear();
+        _ppsParams.Clear();
+        _hardwareDecoderFailed.Clear();
+        _watchingScreenShareUserIds.Clear();
         _cameraFrameAssembler.Reset();
         _screenFrameAssembler.Reset();
         _pendingSfuOffer = null;
@@ -598,20 +678,47 @@ public class WebRtcService : IWebRtcService
 
     private void EnsureVideoDecoderForUser(Guid userId, VideoStreamType streamType)
     {
+        // Skip creating decoder for our own streams - we don't need to decode what we're sending
+        if (_localUserId != Guid.Empty && userId == _localUserId)
+        {
+            Console.WriteLine($"WebRTC: Skipping {streamType} decoder for self (user {userId})");
+            return;
+        }
+
         var key = (userId, streamType);
         if (_videoDecoders.ContainsKey(key)) return;
 
         try
         {
+            // Use NV12 output format when GPU rendering is available (hardware-accelerated path)
+            var useNv12 = IsGpuRenderingAvailable;
+            var outputFormat = useNv12 ? DecoderOutputFormat.Nv12 : DecoderOutputFormat.Rgb24;
+
             // Use 1080p to support both camera and screen share
-            var decoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264);
-            decoder.OnDecodedFrame += (width, height, rgbData) =>
+            var decoder = new FfmpegProcessDecoder(1920, 1080, VideoCodecsEnum.H264, outputFormat);
+            decoder.OnDecodedFrame += (width, height, frameData) =>
             {
-                VideoFrameReceived?.Invoke(userId, streamType, width, height, rgbData);
+                if (useNv12)
+                {
+                    // Fire NV12 event for GPU rendering (fullscreen mode)
+                    Nv12VideoFrameReceived?.Invoke(userId, streamType, width, height, frameData);
+
+                    // Also convert NV12→RGB for bitmap display (tile view) if anyone is listening
+                    if (VideoFrameReceived != null)
+                    {
+                        var rgbData = ConvertNv12ToRgb(frameData, width, height);
+                        VideoFrameReceived.Invoke(userId, streamType, width, height, rgbData);
+                    }
+                }
+                else
+                {
+                    // Software path - frame data is already RGB
+                    VideoFrameReceived?.Invoke(userId, streamType, width, height, frameData);
+                }
             };
             decoder.Start();
             _videoDecoders[key] = decoder;
-            Console.WriteLine($"WebRTC: Created {streamType} video decoder for user {userId}");
+            Console.WriteLine($"WebRTC: Created {streamType} video decoder for user {userId} (format={outputFormat})");
         }
         catch (Exception ex)
         {
@@ -619,21 +726,214 @@ public class WebRtcService : IWebRtcService
         }
     }
 
+    /// <summary>
+    /// Tries to process a complete H264 frame with the hardware decoder.
+    /// Returns true if successfully processed, false to fall back to software decoder.
+    /// </summary>
+    private static bool _loggedHardwareAvailability;
+    private bool TryProcessWithHardwareDecoder((Guid userId, VideoStreamType streamType) key, byte[] frame, VideoStreamType streamType)
+    {
+        // Skip if hardware decoding not available
+        if (!IsHardwareDecodingAvailable)
+        {
+            if (!_loggedHardwareAvailability)
+            {
+                _loggedHardwareAvailability = true;
+                Console.WriteLine($"WebRTC: Hardware decoding not available, using software decoder");
+            }
+            return false;
+        }
+
+        // Skip if hardware decoder already failed for this stream
+        if (_hardwareDecoderFailed.ContainsKey(key))
+        {
+            return false;
+        }
+
+        // Parse NAL units from the Annex B frame
+        var nalUnits = H264FrameAssembler.FindNalUnits(frame);
+        if (nalUnits.Count == 0)
+        {
+            Console.WriteLine($"WebRTC: Hardware decode - no NAL units found in frame");
+            return false;
+        }
+
+        // Check for SPS/PPS in this frame and store them separately
+        // (they may arrive in different frames from the encoder)
+        foreach (var nal in nalUnits)
+        {
+            if (nal.Length == 0) continue;
+            var nalType = nal[0] & 0x1F;
+            if (nalType == 7) // SPS
+            {
+                _spsParams[key] = nal;
+                var hex = BitConverter.ToString(nal.Take(Math.Min(16, nal.Length)).ToArray());
+                Console.WriteLine($"WebRTC: Stored SPS for {streamType} ({nal.Length} bytes): {hex}");
+            }
+            else if (nalType == 8) // PPS
+            {
+                _ppsParams[key] = nal;
+                var hex = BitConverter.ToString(nal.Take(Math.Min(16, nal.Length)).ToArray());
+                Console.WriteLine($"WebRTC: Stored PPS for {streamType} ({nal.Length} bytes): {hex}");
+            }
+        }
+
+        // Check if we have a hardware decoder for this stream
+        if (!_hardwareDecoders.TryGetValue(key, out var hwDecoder))
+        {
+            // Try to create one if we have both SPS and PPS
+            if (_spsParams.TryGetValue(key, out var sps) && _ppsParams.TryGetValue(key, out var pps))
+            {
+                Console.WriteLine($"WebRTC: Creating hardware decoder for {streamType}...");
+                hwDecoder = HardwareVideoDecoderFactory.Create();
+                if (hwDecoder != null)
+                {
+                    // Initialize with SPS/PPS (assuming 1920x1080 for now, could parse from SPS)
+                    Console.WriteLine($"WebRTC: Initializing hardware decoder with SPS/PPS...");
+                    if (hwDecoder.Initialize(1920, 1080, sps, pps))
+                    {
+                        _hardwareDecoders[key] = hwDecoder;
+                        Console.WriteLine($"WebRTC: Created hardware decoder for {streamType} (user {key.userId})");
+
+                        // Notify listeners that hardware decoder is ready
+                        HardwareDecoderReady?.Invoke(key.userId, streamType, hwDecoder);
+                    }
+                    else
+                    {
+                        hwDecoder.Dispose();
+                        hwDecoder = null;
+                        _hardwareDecoderFailed[key] = true;
+                        Console.WriteLine($"WebRTC: Failed to initialize hardware decoder for {streamType}, will use software decoder");
+                    }
+                }
+                else
+                {
+                    Console.WriteLine($"WebRTC: HardwareVideoDecoderFactory.Create() returned null");
+                }
+            }
+            else
+            {
+                var hasSps = _spsParams.ContainsKey(key);
+                var hasPps = _ppsParams.ContainsKey(key);
+                Console.WriteLine($"WebRTC: Waiting for SPS/PPS for {streamType} (have SPS={hasSps}, have PPS={hasPps})");
+            }
+        }
+
+        // If we have a hardware decoder, send NAL units to it
+        if (hwDecoder != null)
+        {
+            var nalsSent = 0;
+            foreach (var nal in nalUnits)
+            {
+                if (nal.Length == 0) continue;
+                var nalType = nal[0] & 0x1F;
+
+                // Only send VCL NAL units (coded slice data) to the decoder
+                // Type 1 = Non-IDR slice (P/B frame)
+                // Type 5 = IDR slice (keyframe)
+                // Skip all other NAL types (SPS=7, PPS=8, SEI=6, AUD=9, etc.)
+                if (nalType != 1 && nalType != 5)
+                {
+                    continue;
+                }
+
+                // Determine if this is a keyframe (IDR)
+                var isKeyframe = nalType == 5;
+
+                // Decode and render
+                hwDecoder.DecodeAndRender(nal, isKeyframe);
+                nalsSent++;
+            }
+            if (nalsSent > 0)
+            {
+                Console.WriteLine($"WebRTC: Hardware decoded {nalsSent} NAL units for {streamType}");
+            }
+            return true;
+        }
+
+        Console.WriteLine($"WebRTC: No hardware decoder available for {streamType}, falling back to software");
+        return false;
+    }
+
+    /// <summary>
+    /// Converts NV12 (YUV 4:2:0) to RGB24 for bitmap display.
+    /// </summary>
+    private static byte[] ConvertNv12ToRgb(byte[] nv12Data, int width, int height)
+    {
+        var rgbData = new byte[width * height * 3];
+        var yPlaneSize = width * height;
+
+        // Use parallel processing for speed
+        Parallel.For(0, height, y =>
+        {
+            for (var x = 0; x < width; x++)
+            {
+                // Y value (full resolution)
+                var yIndex = y * width + x;
+                var yValue = nv12Data[yIndex];
+
+                // UV values (half resolution, interleaved)
+                var uvIndex = yPlaneSize + (y / 2) * width + (x / 2) * 2;
+                var uValue = nv12Data[uvIndex];
+                var vValue = nv12Data[uvIndex + 1];
+
+                // YUV to RGB conversion (BT.601)
+                var c = yValue - 16;
+                var d = uValue - 128;
+                var e = vValue - 128;
+
+                var r = Clamp((298 * c + 409 * e + 128) >> 8);
+                var g = Clamp((298 * c - 100 * d - 208 * e + 128) >> 8);
+                var b = Clamp((298 * c + 516 * d + 128) >> 8);
+
+                var rgbIndex = (y * width + x) * 3;
+                rgbData[rgbIndex] = (byte)r;
+                rgbData[rgbIndex + 1] = (byte)g;
+                rgbData[rgbIndex + 2] = (byte)b;
+            }
+        });
+
+        return rgbData;
+    }
+
+    private static int Clamp(int value) => value < 0 ? 0 : (value > 255 ? 255 : value);
+
     private void RemoveVideoDecoderForUser(Guid userId, VideoStreamType streamType)
     {
         var key = (userId, streamType);
+
+        // Remove software decoder
         if (_videoDecoders.TryRemove(key, out var decoder))
         {
             try
             {
                 decoder.Dispose();
-                Console.WriteLine($"WebRTC: Removed {streamType} video decoder for user {userId}");
+                Console.WriteLine($"WebRTC: Removed {streamType} software decoder for user {userId}");
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"WebRTC: Error disposing video decoder: {ex.Message}");
+                Console.WriteLine($"WebRTC: Error disposing software decoder: {ex.Message}");
             }
         }
+
+        // Remove hardware decoder
+        if (_hardwareDecoders.TryRemove(key, out var hwDecoder))
+        {
+            try
+            {
+                hwDecoder.Dispose();
+                Console.WriteLine($"WebRTC: Removed {streamType} hardware decoder for user {userId}");
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Error disposing hardware decoder: {ex.Message}");
+            }
+        }
+
+        // Remove SPS/PPS storage and failure flag
+        _spsParams.TryRemove(key, out _);
+        _ppsParams.TryRemove(key, out _);
+        _hardwareDecoderFailed.TryRemove(key, out _);
     }
 
     private void RemoveAllVideoDecodersForUser(Guid userId)
@@ -775,27 +1075,59 @@ public class WebRtcService : IWebRtcService
                 var completeFrame = assembler.ProcessPacket(rtpPkt.Payload, timestamp, markerBit);
                 if (completeFrame != null)
                 {
-                    // Send complete frame to the appropriate decoder
-                    var decoder = _videoDecoders
-                        .Where(kvp => kvp.Key.streamType == streamType)
-                        .Select(kvp => kvp.Value)
-                        .FirstOrDefault();
-
-                    if (decoder != null)
+                    // Get userId from SSRC, or try to match with watched screen shares
+                    Guid userId;
+                    if (_ssrcToUserMap.TryGetValue(ssrc, out var uid))
                     {
-                        Console.WriteLine($"WebRTC: Assembled {streamType} frame, size={completeFrame.Length}, sending to decoder");
-                        try
+                        userId = uid;
+                    }
+                    else if (streamType == VideoStreamType.ScreenShare && _watchingScreenShareUserIds.Count > 0)
+                    {
+                        // For screen share with unknown SSRC, try to assign to a watched user
+                        // Find a watched user who doesn't yet have an SSRC assigned
+                        var unassignedUser = _watchingScreenShareUserIds
+                            .FirstOrDefault(watchedUserId => !_ssrcToUserMap.Values.Contains(watchedUserId));
+
+                        if (unassignedUser != Guid.Empty)
                         {
-                            decoder.DecodeFrame(completeFrame);
+                            userId = unassignedUser;
+                            _ssrcToUserMap[ssrc] = userId;
+                            Console.WriteLine($"WebRTC: Mapped screen share SSRC {ssrc} to user {userId}");
                         }
-                        catch (Exception ex)
+                        else
                         {
-                            Console.WriteLine($"WebRTC: Decode error for {streamType}: {ex.Message}");
+                            // All watched users already have SSRCs, use first one as fallback
+                            userId = _watchingScreenShareUserIds.First();
                         }
                     }
                     else
                     {
-                        Console.WriteLine($"WebRTC: No decoder found for {streamType}");
+                        userId = Guid.Empty;
+                    }
+                    var decoderKey = (userId, streamType);
+
+                    // Try to use hardware decoder first (zero-copy GPU pipeline)
+                    var handledByHardware = TryProcessWithHardwareDecoder(decoderKey, completeFrame, streamType);
+
+                    if (!handledByHardware)
+                    {
+                        // Fall back to software decoder (ffmpeg)
+                        var decoder = _videoDecoders
+                            .Where(kvp => kvp.Key.streamType == streamType)
+                            .Select(kvp => kvp.Value)
+                            .FirstOrDefault();
+
+                        if (decoder != null)
+                        {
+                            try
+                            {
+                                decoder.DecodeFrame(completeFrame);
+                            }
+                            catch (Exception ex)
+                            {
+                                Console.WriteLine($"WebRTC: Decode error for {streamType}: {ex.Message}");
+                            }
+                        }
                     }
                 }
             }
@@ -1213,6 +1545,18 @@ public class WebRtcService : IWebRtcService
         RemoveAllVideoDecodersForUser(userId);
     }
 
+    public void StartWatchingScreenShare(Guid userId)
+    {
+        _watchingScreenShareUserIds.Add(userId);
+        Console.WriteLine($"WebRTC: Started watching screen share from user {userId}");
+    }
+
+    public void StopWatchingScreenShare(Guid userId)
+    {
+        _watchingScreenShareUserIds.Remove(userId);
+        Console.WriteLine($"WebRTC: Stopped watching screen share from user {userId}");
+    }
+
     public void SetMuted(bool muted)
     {
         _isMuted = muted;
@@ -1302,54 +1646,94 @@ public class WebRtcService : IWebRtcService
         {
             Console.WriteLine($"WebRTC: Starting screen capture... (source: {source?.Name ?? "default"}, {screenWidth}x{screenHeight} @ {screenFps}fps)");
 
-            // Create encoder for screen content with selected resolution and framerate
-            _screenEncoder = new FfmpegProcessEncoder(screenWidth, screenHeight, screenFps, VideoCodecsEnum.H264);
+            // Check if we should use MiscordCapture (native ScreenCaptureKit on macOS 13+)
+            var miscordCapturePath = ShouldUseMiscordCapture() ? GetMiscordCapturePath() : null;
+            _isUsingMiscordCapture = miscordCapturePath != null;
+
+            // Create encoder with appropriate pixel format:
+            // - NV12 for MiscordCapture (hardware-accelerated, native to VideoToolbox)
+            // - BGR24 for ffmpeg fallback (software path)
+            var inputPixelFormat = _isUsingMiscordCapture ? "nv12" : "bgr24";
+            _screenEncoder = new FfmpegProcessEncoder(screenWidth, screenHeight, screenFps, VideoCodecsEnum.H264, inputPixelFormat);
             _screenEncoder.OnEncodedFrame += OnScreenVideoEncoded;
             _screenEncoder.Start();
 
-            // Build FFmpeg capture command based on platform and source
-            var ffmpegPath = "ffmpeg";
-            var (captureDevice, inputDevice, extraArgs) = GetScreenCaptureArgs(source);
-
-            // Build platform-specific capture args
-            string args;
-            if (OperatingSystem.IsMacOS())
+            if (_isUsingMiscordCapture)
             {
-                // macOS avfoundation: capture at native rate then use fps filter to get desired framerate
-                // This avoids frame duplication issues when capture rate doesn't match requested rate
-                args = $"-f avfoundation -capture_cursor 1 -pixel_format uyvy422 -i \"{inputDevice}\" " +
-                       $"-vf \"fps={screenFps},scale={screenWidth}:{screenHeight}:force_original_aspect_ratio=decrease,pad={screenWidth}:{screenHeight}:(ow-iw)/2:(oh-ih)/2,format=bgr24\" " +
-                       $"-f rawvideo -pix_fmt bgr24 pipe:1";
+                // Use MiscordCapture for native capture with audio support
+                var captureAudio = true;  // Always capture audio when available
+                var args = GetMiscordCaptureArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
+
+                Console.WriteLine($"WebRTC: Using MiscordCapture: {miscordCapturePath} {args}");
+
+                _screenCaptureProcess = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = miscordCapturePath,
+                        Arguments = args,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,  // Audio comes on stderr
+                        CreateNoWindow = true
+                    }
+                };
+
+                _screenCaptureProcess.Start();
+
+                // Start reading screen frames and audio
+                _screenCts = new CancellationTokenSource();
+                _screenCaptureTask = Task.Run(() => ScreenCaptureLoop(_screenCts.Token, screenWidth, screenHeight, screenFps));
+                _screenAudioTask = Task.Run(() => ScreenAudioLoop(_screenCts.Token));
+
+                Console.WriteLine("WebRTC: Screen capture started with MiscordCapture (audio enabled)");
             }
             else
             {
-                args = $"-f {captureDevice} {extraArgs}-framerate {screenFps} -i \"{inputDevice}\" " +
-                       $"-vf \"scale={screenWidth}:{screenHeight}:force_original_aspect_ratio=decrease,pad={screenWidth}:{screenHeight}:(ow-iw)/2:(oh-ih)/2,format=bgr24\" " +
-                       $"-f rawvideo -pix_fmt bgr24 pipe:1";
-            }
+                // Fall back to ffmpeg
+                var ffmpegPath = "ffmpeg";
+                var (captureDevice, inputDevice, extraArgs) = GetScreenCaptureArgs(source);
 
-            Console.WriteLine($"WebRTC: Screen capture command: {ffmpegPath} {args}");
-
-            _screenCaptureProcess = new Process
-            {
-                StartInfo = new ProcessStartInfo
+                // Build platform-specific capture args
+                string args;
+                if (OperatingSystem.IsMacOS())
                 {
-                    FileName = ffmpegPath,
-                    Arguments = args,
-                    UseShellExecute = false,
-                    RedirectStandardOutput = true,
-                    RedirectStandardError = true,
-                    CreateNoWindow = true
+                    // macOS avfoundation: capture at native rate then use fps filter to get desired framerate
+                    // This avoids frame duplication issues when capture rate doesn't match requested rate
+                    args = $"-f avfoundation -capture_cursor 1 -pixel_format uyvy422 -i \"{inputDevice}\" " +
+                           $"-vf \"fps={screenFps},scale={screenWidth}:{screenHeight}:force_original_aspect_ratio=decrease,pad={screenWidth}:{screenHeight}:(ow-iw)/2:(oh-ih)/2,format=bgr24\" " +
+                           $"-f rawvideo -pix_fmt bgr24 pipe:1";
                 }
-            };
+                else
+                {
+                    args = $"-f {captureDevice} {extraArgs}-framerate {screenFps} -i \"{inputDevice}\" " +
+                           $"-vf \"scale={screenWidth}:{screenHeight}:force_original_aspect_ratio=decrease,pad={screenWidth}:{screenHeight}:(ow-iw)/2:(oh-ih)/2,format=bgr24\" " +
+                           $"-f rawvideo -pix_fmt bgr24 pipe:1";
+                }
 
-            _screenCaptureProcess.Start();
+                Console.WriteLine($"WebRTC: Screen capture command: {ffmpegPath} {args}");
 
-            // Start reading screen frames
-            _screenCts = new CancellationTokenSource();
-            _screenCaptureTask = Task.Run(() => ScreenCaptureLoop(_screenCts.Token, screenWidth, screenHeight, screenFps));
+                _screenCaptureProcess = new Process
+                {
+                    StartInfo = new ProcessStartInfo
+                    {
+                        FileName = ffmpegPath,
+                        Arguments = args,
+                        UseShellExecute = false,
+                        RedirectStandardOutput = true,
+                        RedirectStandardError = true,
+                        CreateNoWindow = true
+                    }
+                };
 
-            Console.WriteLine("WebRTC: Screen capture started");
+                _screenCaptureProcess.Start();
+
+                // Start reading screen frames
+                _screenCts = new CancellationTokenSource();
+                _screenCaptureTask = Task.Run(() => ScreenCaptureLoop(_screenCts.Token, screenWidth, screenHeight, screenFps));
+
+                Console.WriteLine("WebRTC: Screen capture started with ffmpeg (no audio)");
+            }
         }
         catch (Exception ex)
         {
@@ -1412,16 +1796,195 @@ public class WebRtcService : IWebRtcService
         return ("x11grab", ":0.0", "");
     }
 
+    /// <summary>
+    /// Checks if MiscordCapture (native ScreenCaptureKit) should be used.
+    /// Returns true on macOS 13+ where we have the native capture tool.
+    /// </summary>
+    private bool ShouldUseMiscordCapture()
+    {
+        if (!OperatingSystem.IsMacOS()) return false;
+
+        // Environment.OSVersion.Version returns Darwin kernel version on macOS
+        // Darwin 22.x = macOS 13 Ventura, Darwin 23.x = macOS 14, Darwin 24.x = macOS 15
+        // We need macOS 13+ for ScreenCaptureKit audio support
+        var darwinVersion = Environment.OSVersion.Version.Major;
+        if (darwinVersion < 22)
+        {
+            Console.WriteLine($"WebRTC: macOS Darwin version {darwinVersion} < 22, MiscordCapture requires macOS 13+");
+            return false;
+        }
+
+        // Check if the binary exists
+        var miscordCapturePath = GetMiscordCapturePath();
+        if (miscordCapturePath != null && File.Exists(miscordCapturePath))
+        {
+            Console.WriteLine($"WebRTC: MiscordCapture available at {miscordCapturePath}");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the path to the MiscordCapture binary.
+    /// </summary>
+    private string? GetMiscordCapturePath()
+    {
+        // Look for MiscordCapture in several locations:
+        // 1. Same directory as the app
+        // 2. ../MiscordCapture/.build/release/MiscordCapture (development)
+        // 3. ../MiscordCapture/.build/debug/MiscordCapture (development)
+
+        var appDir = AppContext.BaseDirectory;
+
+        var candidates = new[]
+        {
+            Path.Combine(appDir, "MiscordCapture"),
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "debug", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "debug", "MiscordCapture"),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            var fullPath = Path.GetFullPath(candidate);
+            if (File.Exists(fullPath))
+            {
+                Console.WriteLine($"WebRTC: Found MiscordCapture at {fullPath}");
+                return fullPath;
+            }
+        }
+
+        Console.WriteLine("WebRTC: MiscordCapture not found, will use ffmpeg");
+        return null;
+    }
+
+    /// <summary>
+    /// Builds MiscordCapture command arguments based on source and settings.
+    /// </summary>
+    private string GetMiscordCaptureArgs(ScreenCaptureSource? source, int width, int height, int fps, bool captureAudio)
+    {
+        var args = new List<string> { "capture" };
+
+        // Source type
+        if (source == null || source.Type == ScreenCaptureSourceType.Display)
+        {
+            var displayIndex = source?.Id ?? "0";
+            args.Add($"--display {displayIndex}");
+        }
+        else if (source.Type == ScreenCaptureSourceType.Window)
+        {
+            args.Add($"--window {source.Id}");
+        }
+        // Note: Application capture (--app) is supported by MiscordCapture but not yet
+        // exposed in the UI. Would need to add ScreenCaptureSourceType.Application.
+
+        // Resolution and framerate
+        args.Add($"--width {width}");
+        args.Add($"--height {height}");
+        args.Add($"--fps {fps}");
+
+        // Audio
+        if (captureAudio)
+        {
+            args.Add("--audio");
+            args.Add("--exclude-self");  // Don't capture our own app's audio
+        }
+
+        return string.Join(" ", args);
+    }
+
+    /// <summary>
+    /// Reads audio packets from MiscordCapture's stderr.
+    /// Audio format: 16-byte header (magic + sampleCount + timestamp) followed by PCM data.
+    /// </summary>
+    private void ScreenAudioLoop(CancellationToken token)
+    {
+        Console.WriteLine("WebRTC: Screen audio loop starting");
+        var audioPacketCount = 0;
+
+        try
+        {
+            var stream = _screenCaptureProcess?.StandardError.BaseStream;
+            if (stream == null) return;
+
+            var headerBuffer = new byte[16];
+
+            while (!token.IsCancellationRequested && _screenCaptureProcess != null && !_screenCaptureProcess.HasExited)
+            {
+                // Read header (16 bytes: 4 magic + 4 sampleCount + 8 timestamp)
+                var headerRead = 0;
+                while (headerRead < 16 && !token.IsCancellationRequested)
+                {
+                    var read = stream.Read(headerBuffer, headerRead, 16 - headerRead);
+                    if (read == 0) break;
+                    headerRead += read;
+                }
+
+                if (headerRead < 16) break;
+
+                // Check magic number
+                var magic = BitConverter.ToUInt32(headerBuffer, 0);
+                if (magic != MiscordCaptureAudioMagic)
+                {
+                    // Not an audio packet - might be log output, skip this byte and try again
+                    // In practice, we should buffer and scan for the magic
+                    continue;
+                }
+
+                var sampleCount = BitConverter.ToUInt32(headerBuffer, 4);
+                var timestamp = BitConverter.ToUInt64(headerBuffer, 8);
+
+                // Read audio data (16-bit stereo = 4 bytes per sample)
+                var audioSize = (int)(sampleCount * 4);
+                var audioBuffer = new byte[audioSize];
+
+                var audioRead = 0;
+                while (audioRead < audioSize && !token.IsCancellationRequested)
+                {
+                    var read = stream.Read(audioBuffer, audioRead, audioSize - audioRead);
+                    if (read == 0) break;
+                    audioRead += read;
+                }
+
+                if (audioRead < audioSize) break;
+
+                audioPacketCount++;
+                if (audioPacketCount <= 5 || audioPacketCount % 100 == 0)
+                {
+                    Console.WriteLine($"WebRTC: Screen audio packet {audioPacketCount}, samples={sampleCount}, ts={timestamp}");
+                }
+
+                // TODO: Process the audio - either mix with mic or send separately
+                // For now, just log that we received it
+                // ProcessScreenShareAudio(audioBuffer, sampleCount, timestamp);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!token.IsCancellationRequested)
+            {
+                Console.WriteLine($"WebRTC: Screen audio loop error: {ex.Message}");
+            }
+        }
+
+        Console.WriteLine($"WebRTC: Screen audio loop ended after {audioPacketCount} packets");
+    }
+
     private void ScreenCaptureLoop(CancellationToken token, int width, int height, int fps)
     {
-        var frameSize = width * height * 3; // BGR24
+        // NV12: 1.5 bytes per pixel (Y plane + UV plane at half resolution)
+        // BGR24: 3 bytes per pixel
+        var isNv12 = _isUsingMiscordCapture;
+        var frameSize = isNv12 ? (width * height * 3 / 2) : (width * height * 3);
         var buffer = new byte[frameSize];
         var frameCount = 0;
 
         // Calculate preview skip rate based on fps (show ~15fps preview max)
         var previewSkip = Math.Max(1, fps / 15);
 
-        Console.WriteLine($"WebRTC: Screen capture loop starting - {width}x{height} @ {fps}fps");
+        Console.WriteLine($"WebRTC: Screen capture loop starting - {width}x{height} @ {fps}fps (format: {(isNv12 ? "NV12" : "BGR24")})");
 
         try
         {
@@ -1442,19 +2005,29 @@ public class WebRtcService : IWebRtcService
 
                 frameCount++;
 
-                // Send frame to encoder
+                // Send frame to encoder (NV12 or BGR24 depending on capture mode)
                 _screenEncoder?.EncodeFrame(buffer);
 
                 // Generate preview (skip frames to reduce overhead, targeting ~15fps preview)
                 if (frameCount % previewSkip == 0)
                 {
-                    // Convert BGR to RGB for preview
-                    var rgbData = new byte[frameSize];
-                    for (var i = 0; i < frameSize; i += 3)
+                    byte[] rgbData;
+                    if (isNv12)
                     {
-                        rgbData[i] = buffer[i + 2];     // R
-                        rgbData[i + 1] = buffer[i + 1]; // G
-                        rgbData[i + 2] = buffer[i];     // B
+                        // Convert NV12 to RGB for preview
+                        rgbData = ConvertNv12ToRgb(buffer, width, height);
+                    }
+                    else
+                    {
+                        // Convert BGR to RGB for preview
+                        var rgbSize = width * height * 3;
+                        rgbData = new byte[rgbSize];
+                        for (var i = 0; i < rgbSize; i += 3)
+                        {
+                            rgbData[i] = buffer[i + 2];     // R
+                            rgbData[i + 1] = buffer[i + 1]; // G
+                            rgbData[i + 2] = buffer[i];     // B
+                        }
                     }
                     LocalVideoFrameCaptured?.Invoke(VideoStreamType.ScreenShare, width, height, rgbData);
                 }
@@ -1477,6 +2050,7 @@ public class WebRtcService : IWebRtcService
 
         _screenCts?.Cancel();
 
+        // Wait for video capture task
         if (_screenCaptureTask != null)
         {
             try
@@ -1491,8 +2065,24 @@ public class WebRtcService : IWebRtcService
             _screenCaptureTask = null;
         }
 
+        // Wait for audio task (if using MiscordCapture)
+        if (_screenAudioTask != null)
+        {
+            try
+            {
+                await _screenAudioTask.WaitAsync(TimeSpan.FromSeconds(2));
+            }
+            catch (TimeoutException)
+            {
+                Console.WriteLine("WebRTC: Screen audio task did not stop in time");
+            }
+            catch (OperationCanceledException) { }
+            _screenAudioTask = null;
+        }
+
         _screenCts?.Dispose();
         _screenCts = null;
+        _isUsingMiscordCapture = false;
 
         if (_screenCaptureProcess != null)
         {

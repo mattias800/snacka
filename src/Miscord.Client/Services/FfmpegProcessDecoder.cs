@@ -4,9 +4,20 @@ using SIPSorceryMedia.Abstractions;
 namespace Miscord.Client.Services;
 
 /// <summary>
+/// Output pixel format for the decoder.
+/// </summary>
+public enum DecoderOutputFormat
+{
+    /// <summary>RGB24 format (3 bytes per pixel) - for software rendering</summary>
+    Rgb24,
+    /// <summary>NV12 format (1.5 bytes per pixel, YUV 4:2:0) - for GPU rendering</summary>
+    Nv12
+}
+
+/// <summary>
 /// Video decoder that uses FFmpeg as a subprocess for decoding.
 /// Works reliably on macOS where the native FFmpeg bindings don't work.
-/// Outputs raw RGB frames.
+/// Supports both RGB24 (software) and NV12 (GPU) output formats.
 /// </summary>
 public class FfmpegProcessDecoder : IDisposable
 {
@@ -15,49 +26,77 @@ public class FfmpegProcessDecoder : IDisposable
     private readonly int _width;
     private readonly int _height;
     private readonly VideoCodecsEnum _codec;
+    private readonly DecoderOutputFormat _outputFormat;
     private readonly object _writeLock = new();
     private bool _isRunning;
     private Task? _outputReaderTask;
     private readonly CancellationTokenSource _cts = new();
     private int _frameCount;
     private readonly int _frameSize;
+    private int _timeoutCount;
 
     /// <summary>
-    /// Fired when a decoded frame is ready. Args: (width, height, rgbData)
+    /// Fired when a decoded frame is ready.
+    /// For RGB24: rgbData is width * height * 3 bytes
+    /// For NV12: nv12Data is width * height * 1.5 bytes (Y plane + UV plane)
     /// </summary>
     public event Action<int, int, byte[]>? OnDecodedFrame;
 
-    public FfmpegProcessDecoder(int width, int height, VideoCodecsEnum codec = VideoCodecsEnum.H264)
+    /// <summary>
+    /// Gets the output format of this decoder.
+    /// </summary>
+    public DecoderOutputFormat OutputFormat => _outputFormat;
+
+    public FfmpegProcessDecoder(int width, int height, VideoCodecsEnum codec = VideoCodecsEnum.H264, DecoderOutputFormat outputFormat = DecoderOutputFormat.Rgb24)
     {
         _width = width;
         _height = height;
         _codec = codec;
-        _frameSize = width * height * 3; // RGB24
+        _outputFormat = outputFormat;
+
+        // Calculate frame size based on output format
+        _frameSize = outputFormat switch
+        {
+            DecoderOutputFormat.Rgb24 => width * height * 3,
+            DecoderOutputFormat.Nv12 => width * height * 3 / 2,
+            _ => width * height * 3
+        };
     }
 
     public void Start()
     {
         if (_isRunning) return;
 
-        var codecArg = _codec switch
+        // Output pixel format
+        var pixFmt = _outputFormat switch
         {
-            VideoCodecsEnum.VP8 => "libvpx",
-            VideoCodecsEnum.H264 => "h264",
-            _ => "h264"
+            DecoderOutputFormat.Nv12 => "nv12",
+            _ => "rgb24"
         };
 
-        // Decode H264/VP8 Annex B input to raw RGB24 output
-        // Low-latency settings: single thread, no buffering, flush immediately
-        // -framerate 30 tells FFmpeg expected input rate for better timing
-        // -vsync 0 disables frame rate conversion/buffering
+        // Build decoder arguments with hardware acceleration where available
+        var (hwAccelArgs, decoderName) = GetHardwareDecoderArgs(pixFmt);
         var inputFormat = _codec == VideoCodecsEnum.H264 ? "h264" : "ivf";
+
+        // Decode H264/VP8 to raw output
+        // Ultra low-latency settings:
+        // -probesize 32 = minimum bytes to probe for lowest latency
+        // -analyzeduration 0 = don't analyze duration
+        // -fflags nobuffer+fastseek = no buffering, fast seeking
+        // -flags low_delay = low delay decoding mode
+        // -fps_mode passthrough = no frame rate conversion
+        var ffmpegArgs = $"-probesize 32 -analyzeduration 0 " +
+                        $"-fflags nobuffer+fastseek -flags low_delay " +
+                        $"{hwAccelArgs}" +
+                        $"-f {inputFormat} -framerate 30 -i pipe:0 " +
+                        $"-fps_mode passthrough -f rawvideo -pix_fmt {pixFmt} -s {_width}x{_height} pipe:1";
+
+        Console.WriteLine($"FfmpegProcessDecoder: Command: ffmpeg {ffmpegArgs}");
 
         var startInfo = new ProcessStartInfo
         {
             FileName = "ffmpeg",
-            Arguments = $"-threads 1 -fflags nobuffer -flags low_delay -framerate 30 " +
-                       $"-f {inputFormat} -i pipe:0 " +
-                       $"-vsync 0 -threads 1 -f rawvideo -pix_fmt rgb24 -s {_width}x{_height} pipe:1",
+            Arguments = ffmpegArgs,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
             RedirectStandardError = true,
@@ -80,10 +119,27 @@ public class FfmpegProcessDecoder : IDisposable
             {
                 string? line;
                 var lineCount = 0;
+                var vtErrorCount = 0;
                 while ((line = await _ffmpegProcess.StandardError.ReadLineAsync()) != null)
                 {
                     lineCount++;
-                    // Log first 20 lines and any errors/warnings
+
+                    // Skip repetitive VideoToolbox errors (these are expected during init and at keyframes)
+                    // Just count them and log a summary
+                    if (line.Contains("vt decoder cb:") ||
+                        line.Contains("hardware accelerator failed") ||
+                        line.Contains("Error submitting packet to decoder"))
+                    {
+                        vtErrorCount++;
+                        // Log only first occurrence
+                        if (vtErrorCount == 1)
+                        {
+                            Console.WriteLine($"FfmpegProcessDecoder stderr: {line} (subsequent similar messages will be suppressed)");
+                        }
+                        continue;
+                    }
+
+                    // Log first 20 lines and any errors/warnings (excluding VT errors already handled)
                     if (lineCount <= 20 ||
                         line.Contains("error") || line.Contains("Error") ||
                         line.Contains("Invalid") || line.Contains("failed") ||
@@ -93,11 +149,90 @@ public class FfmpegProcessDecoder : IDisposable
                         Console.WriteLine($"FfmpegProcessDecoder stderr: {line}");
                     }
                 }
+
+                if (vtErrorCount > 1)
+                {
+                    Console.WriteLine($"FfmpegProcessDecoder: Suppressed {vtErrorCount - 1} additional VideoToolbox reconfig messages");
+                }
             }
             catch { }
         });
 
-        Console.WriteLine($"FfmpegProcessDecoder: Started ({_width}x{_height}, {_codec})");
+        Console.WriteLine($"FfmpegProcessDecoder: Started ({_width}x{_height}, {_codec}, decoder={decoderName}, output={_outputFormat})");
+    }
+
+    /// <summary>
+    /// Gets hardware decoder arguments based on platform.
+    /// Returns (ffmpegArgs, decoderName) tuple.
+    /// </summary>
+    private (string args, string name) GetHardwareDecoderArgs(string outputPixFmt)
+    {
+        // Note: outputPixFmt parameter reserved for future use if needed
+        _ = outputPixFmt;
+
+        if (_codec != VideoCodecsEnum.H264)
+        {
+            return ("", "software");
+        }
+
+        if (OperatingSystem.IsMacOS())
+        {
+            // VideoToolbox hardware decoder for H264
+            // Note: May fail with -12909 error on some streams and fall back to software decode
+            // This is a known ffmpeg/VideoToolbox compatibility issue
+            // GPU shader still handles YUV→RGB conversion regardless
+            return ("-hwaccel videotoolbox ", "videotoolbox");
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            // Try hardware decoders in order: CUDA (NVIDIA), D3D11VA (any GPU), DXVA2 (older)
+            if (IsHwAccelAvailable("cuda"))
+                return ("-hwaccel cuda ", "cuda");
+            if (IsHwAccelAvailable("d3d11va"))
+                return ("-hwaccel d3d11va ", "d3d11va");
+            if (IsHwAccelAvailable("dxva2"))
+                return ("-hwaccel dxva2 ", "dxva2");
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            // VAAPI for Intel/AMD, VDPAU for older NVIDIA
+            if (IsHwAccelAvailable("vaapi"))
+                return ("-hwaccel vaapi -hwaccel_device /dev/dri/renderD128 ", "vaapi");
+            if (IsHwAccelAvailable("vdpau"))
+                return ("-hwaccel vdpau ", "vdpau");
+        }
+
+        return ("", "software");
+    }
+
+    private static bool IsHwAccelAvailable(string hwaccel)
+    {
+        try
+        {
+            var psi = new ProcessStartInfo
+            {
+                FileName = "ffmpeg",
+                Arguments = "-hide_banner -hwaccels",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = Process.Start(psi);
+            if (process == null) return false;
+
+            var output = process.StandardOutput.ReadToEnd();
+            process.WaitForExit(3000);
+
+            return output.Contains(hwaccel);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private int _inputFrameCount;
@@ -149,15 +284,20 @@ public class FfmpegProcessDecoder : IDisposable
                 {
                     var bytesToRead = _frameSize - bytesInBuffer;
                     bytesRead = await stream.ReadAsync(frameBuffer, bytesInBuffer, bytesToRead, readCts.Token);
-                    if (bytesRead > 0 && (bytesInBuffer < 1000 || bytesInBuffer % 1000000 < bytesRead))
-                    {
-                        Console.WriteLine($"FfmpegProcessDecoder: Read {bytesRead} bytes, buffer={bytesInBuffer + bytesRead}/{_frameSize}");
-                    }
+                    // if (bytesRead > 0 && (bytesInBuffer < 1000 || bytesInBuffer % 1000000 < bytesRead))
+                    // {
+                    //     Console.WriteLine($"FfmpegProcessDecoder: Read {bytesRead} bytes, buffer={bytesInBuffer + bytesRead}/{_frameSize}");
+                    // }
                 }
                 catch (OperationCanceledException) when (!_cts.Token.IsCancellationRequested)
                 {
                     // Read timeout - check if process is still alive
-                    Console.WriteLine($"FfmpegProcessDecoder: Read timeout, process alive={_ffmpegProcess != null && !_ffmpegProcess.HasExited}");
+                    _timeoutCount++;
+                    // Only log first 3 timeouts and then every 100th to reduce noise
+                    if (_timeoutCount <= 3 || _timeoutCount % 100 == 0)
+                    {
+                        Console.WriteLine($"FfmpegProcessDecoder: Read timeout #{_timeoutCount}, process alive={_ffmpegProcess != null && !_ffmpegProcess.HasExited}");
+                    }
                     if (_ffmpegProcess == null || _ffmpegProcess.HasExited)
                     {
                         Console.WriteLine("FfmpegProcessDecoder: Process exited during read");
