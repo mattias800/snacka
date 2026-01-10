@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Linq;
 using Avalonia.Threading;
 using Miscord.Client.Services;
+using Miscord.Client.Services.HardwareVideo;
 using Miscord.Shared.Models;
 using ReactiveUI;
 
@@ -72,6 +73,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Video fullscreen state
     private bool _isVideoFullscreen;
     private VideoStreamViewModel? _fullscreenStream;
+    private bool _isGpuFullscreenActive;
+    private IHardwareVideoDecoder? _fullscreenHardwareDecoder;
+
+    /// <summary>
+    /// Fired when an NV12 frame should be rendered to GPU fullscreen view.
+    /// Args: (width, height, nv12Data)
+    /// </summary>
+    public event Action<int, int, byte[]>? GpuFullscreenFrameReceived;
 
     // Drawing annotation state
     private readonly AnnotationService _annotationService;
@@ -1617,24 +1626,107 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _fullscreenStream, value);
     }
 
+    /// <summary>
+    /// Whether GPU-accelerated fullscreen rendering is active.
+    /// </summary>
+    public bool IsGpuFullscreenActive
+    {
+        get => _isGpuFullscreenActive;
+        private set => this.RaiseAndSetIfChanged(ref _isGpuFullscreenActive, value);
+    }
+
+    /// <summary>
+    /// The hardware decoder for fullscreen rendering. Set when fullscreen opens, cleared when it closes.
+    /// This ensures the native view is released back to the tile when exiting fullscreen.
+    /// </summary>
+    public IHardwareVideoDecoder? FullscreenHardwareDecoder
+    {
+        get => _fullscreenHardwareDecoder;
+        private set => this.RaiseAndSetIfChanged(ref _fullscreenHardwareDecoder, value);
+    }
+
     public void OpenFullscreen(VideoStreamViewModel stream)
     {
         FullscreenStream = stream;
         IsVideoFullscreen = true;
+
+        // Check if stream is using hardware decoding (zero-copy GPU pipeline)
+        if (stream.IsUsingHardwareDecoder)
+        {
+            // Hardware decoding: frames go directly to native view, no software path needed
+            FullscreenHardwareDecoder = stream.HardwareDecoder;
+            IsGpuFullscreenActive = false;
+            Console.WriteLine("MainApp: Hardware-accelerated fullscreen rendering (VideoToolbox/Metal)");
+        }
+        else if (_webRtc.IsGpuRenderingAvailable)
+        {
+            // Software decoding with GPU rendering
+            IsGpuFullscreenActive = true;
+            _webRtc.Nv12VideoFrameReceived += OnNv12VideoFrameForFullscreen;
+            Console.WriteLine("MainApp: Software GPU fullscreen rendering enabled");
+        }
+        else
+        {
+            // Pure software rendering (bitmap)
+            IsGpuFullscreenActive = false;
+            Console.WriteLine("MainApp: Using software fullscreen rendering (bitmap)");
+        }
 
         // Load existing strokes for this screen share
         _currentStrokes = _annotationService.GetStrokes(stream.UserId).ToList();
         this.RaisePropertyChanged(nameof(CurrentAnnotationStrokes));
 
         // Check if drawing is allowed for this screen share
-        IsDrawingAllowedByHost = _annotationService.IsDrawingAllowed(stream.UserId);
+        var isDrawingAllowed = _annotationService.IsDrawingAllowed(stream.UserId);
+        Console.WriteLine($"OpenFullscreen: stream.UserId={stream.UserId}, IsDrawingAllowed={isDrawingAllowed}");
+        IsDrawingAllowedByHost = isDrawingAllowed;
     }
 
     public void CloseFullscreen()
     {
+        // Unsubscribe from NV12 frames
+        if (IsGpuFullscreenActive)
+        {
+            _webRtc.Nv12VideoFrameReceived -= OnNv12VideoFrameForFullscreen;
+            IsGpuFullscreenActive = false;
+            Console.WriteLine("MainApp: GPU fullscreen rendering disabled");
+        }
+
+        // Store reference to stream before clearing
+        var stream = FullscreenStream;
+        var decoder = stream?.HardwareDecoder;
+
+        // Clear fullscreen hardware decoder reference first - this releases the native view
+        FullscreenHardwareDecoder = null;
+
+        // Force the tile to reclaim the decoder by re-triggering its binding
+        // The native view can only be embedded in one NativeControlHost at a time,
+        // so we need to notify the tile to re-create its HardwareVideoView.
+        // IMPORTANT: We must defer the re-attachment to the next UI frame to give
+        // the native view time to be fully detached from the fullscreen parent.
+        if (stream != null && decoder != null)
+        {
+            stream.HardwareDecoder = null;
+            // Defer re-attachment to next frame so native view can be fully released
+            Dispatcher.UIThread.Post(() =>
+            {
+                stream.HardwareDecoder = decoder;
+                Console.WriteLine("MainApp: Hardware decoder re-attached to tile");
+            });
+        }
+
         IsVideoFullscreen = false;
         FullscreenStream = null;
         IsAnnotationEnabled = false; // Disable drawing when exiting fullscreen
+    }
+
+    private void OnNv12VideoFrameForFullscreen(Guid userId, VideoStreamType streamType, int width, int height, byte[] nv12Data)
+    {
+        // Only render frames from the fullscreen stream
+        if (FullscreenStream?.UserId == userId && FullscreenStream?.StreamType == streamType)
+        {
+            GpuFullscreenFrameReceived?.Invoke(width, height, nv12Data);
+        }
     }
 
     // Drawing annotation properties
@@ -2861,11 +2953,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
             Log("ShowSharerAnnotationOverlay: Step 7 - Toolbar positioned");
 
-            // Step 8: Show toolbar
-            Log("ShowSharerAnnotationOverlay: Step 8 - Showing toolbar...");
+            // Step 8: Setup toolbar event handler
+            // Note: We don't call Show() here - the toolbar manages its own visibility
+            // based on the IsDrawingAllowedForViewers subscription. It will show when
+            // the host clicks "Allow Drawing" in the voice panel.
+            Log("ShowSharerAnnotationOverlay: Step 8 - Setting up toolbar event handler...");
             _annotationToolbarWindow.CloseRequested += OnAnnotationToolbarCloseRequested;
-            _annotationToolbarWindow.Show();
-            Log("ShowSharerAnnotationOverlay: Step 8 - Toolbar shown");
+            Log("ShowSharerAnnotationOverlay: Step 8 - Toolbar ready (visibility managed by subscription)");
 
             Log($"ShowSharerAnnotationOverlay: Complete - overlay on {settings.Source.Name}");
         }

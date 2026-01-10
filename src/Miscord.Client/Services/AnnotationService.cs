@@ -155,7 +155,9 @@ public class AnnotationService
     {
         lock (_lock)
         {
-            return _drawingAllowedBySharer.TryGetValue(sharerId, out var allowed) && allowed;
+            var result = _drawingAllowedBySharer.TryGetValue(sharerId, out var allowed) && allowed;
+            Console.WriteLine($"AnnotationService.IsDrawingAllowed: sharerId={sharerId}, hasEntry={_drawingAllowedBySharer.ContainsKey(sharerId)}, result={result}");
+            return result;
         }
     }
 
@@ -242,6 +244,7 @@ public class AnnotationService
 
     private void SetDrawingAllowedInternal(Guid sharerId, bool isAllowed)
     {
+        Console.WriteLine($"AnnotationService.SetDrawingAllowedInternal: sharerId={sharerId}, isAllowed={isAllowed}");
         lock (_lock)
         {
             _drawingAllowedBySharer[sharerId] = isAllowed;

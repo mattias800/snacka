@@ -223,101 +223,129 @@
                 IsVisible="{Binding IsVideoFullscreen}"
                 HorizontalAlignment="Stretch"
                 VerticalAlignment="Stretch">
-            <Grid>
-                <!-- GPU-accelerated video (used when Metal/Vulkan is available) -->
-                <controls:GpuVideoView x:Name="FullscreenGpuVideo"
-                                       HorizontalAlignment="Stretch"
-                                       VerticalAlignment="Stretch"
-                                       IsVisible="{Binding IsGpuFullscreenActive}"/>
+            <Grid RowDefinitions="Auto,*">
+                <!-- Row 0: Top bar (rendered above video to ensure visibility) -->
+                <!-- Row 1: Video content area -->
 
-                <!-- Software fallback video (used when GPU rendering is not available) -->
-                <Image x:Name="FullscreenVideoImage"
-                       Source="{Binding FullscreenStream.VideoBitmap}"
-                       Stretch="Uniform"
-                       HorizontalAlignment="Stretch"
-                       VerticalAlignment="Stretch"
-                       IsVisible="{Binding !IsGpuFullscreenActive}"/>
+                <!-- Video content area (Row 1) - has its own internal Grid for layering -->
+                <Grid Grid.Row="1">
+                    <!-- Hardware-accelerated video (VideoToolbox/MediaFoundation/VA-API zero-copy rendering) -->
+                    <controls:HardwareVideoViewHost x:Name="FullscreenHardwareVideo"
+                                                     Decoder="{Binding FullscreenHardwareDecoder}"
+                                                     HorizontalAlignment="Stretch"
+                                                     VerticalAlignment="Stretch"
+                                                     IsVisible="{Binding FullscreenHardwareDecoder, Converter={x:Static ObjectConverters.IsNotNull}}"/>
 
-                <!-- Drawing Canvas Overlay (transparent, captures drawing input when enabled) -->
-                <Canvas x:Name="AnnotationCanvas"
-                        Background="Transparent"
-                        HorizontalAlignment="Stretch"
-                        VerticalAlignment="Stretch"
-                        IsHitTestVisible="{Binding IsAnnotationEnabled}"
-                        PointerPressed="OnAnnotationCanvasPointerPressed"
-                        PointerMoved="OnAnnotationCanvasPointerMoved"
-                        PointerReleased="OnAnnotationCanvasPointerReleased"/>
+                    <!-- GPU-accelerated software video (used when hardware decoding not available but GPU rendering is) -->
+                    <controls:GpuVideoView x:Name="FullscreenGpuVideo"
+                                           HorizontalAlignment="Stretch"
+                                           VerticalAlignment="Stretch"
+                                           IsVisible="{Binding IsGpuFullscreenActive}"/>
 
-                <!-- Drawing Toolbar - bottom center (only visible when host allows drawing) -->
-                <Border VerticalAlignment="Bottom"
-                        HorizontalAlignment="Center"
-                        Margin="0,0,0,80"
-                        Background="#E0202020"
-                        CornerRadius="8"
-                        Padding="12,8"
-                        IsVisible="{Binding IsDrawingAllowedByHost}">
-                    <StackPanel Orientation="Horizontal" Spacing="12">
-                        <!-- Draw mode toggle - only visible when host allows drawing -->
-                        <ToggleButton IsChecked="{Binding IsAnnotationEnabled}"
-                                      Padding="12,6"
-                                      Background="#40FFFFFF"
-                                      Foreground="White"
-                                      CornerRadius="4">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="✏️" VerticalAlignment="Center"/>
-                                <TextBlock Text="Draw" VerticalAlignment="Center"/>
-                            </StackPanel>
-                        </ToggleButton>
+                    <!-- Software fallback video (used when no GPU rendering is available) -->
+                    <Image x:Name="FullscreenVideoImage"
+                           Source="{Binding FullscreenStream.VideoBitmap}"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Stretch"
+                           VerticalAlignment="Stretch">
+                        <Image.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="!IsGpuFullscreenActive"/>
+                                <Binding Path="FullscreenHardwareDecoder" Converter="{x:Static ObjectConverters.IsNull}"/>
+                            </MultiBinding>
+                        </Image.IsVisible>
+                    </Image>
 
-                        <!-- Color separator -->
-                        <Border Width="1" Background="#40FFFFFF" Margin="4,0"/>
+                    <!-- Drawing Canvas Overlay (transparent, captures drawing input when enabled) -->
+                    <Canvas x:Name="AnnotationCanvas"
+                            Background="Transparent"
+                            HorizontalAlignment="Stretch"
+                            VerticalAlignment="Stretch"
+                            IsHitTestVisible="{Binding IsAnnotationEnabled}"
+                            PointerPressed="OnAnnotationCanvasPointerPressed"
+                            PointerMoved="OnAnnotationCanvasPointerMoved"
+                            PointerReleased="OnAnnotationCanvasPointerReleased"/>
 
-                        <!-- Color buttons -->
-                        <StackPanel Orientation="Horizontal" Spacing="4">
-                            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
-                                    Background="#FF0000" BorderThickness="2"
-                                    BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FF0000}"
-                                    Click="OnAnnotationColorClick" Tag="#FF0000"/>
-                            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
-                                    Background="#00FF00" BorderThickness="2"
-                                    BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#00FF00}"
-                                    Click="OnAnnotationColorClick" Tag="#00FF00"/>
-                            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
-                                    Background="#0080FF" BorderThickness="2"
-                                    BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#0080FF}"
-                                    Click="OnAnnotationColorClick" Tag="#0080FF"/>
-                            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
-                                    Background="#FFFF00" BorderThickness="2"
-                                    BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FFFF00}"
-                                    Click="OnAnnotationColorClick" Tag="#FFFF00"/>
-                            <Button Width="28" Height="28" Padding="0" CornerRadius="4"
-                                    Background="#FFFFFF" BorderThickness="2"
-                                    BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FFFFFF}"
-                                    Click="OnAnnotationColorClick" Tag="#FFFFFF"/>
-                        </StackPanel>
+                    <!-- Username label - bottom left -->
+                    <Border VerticalAlignment="Bottom"
+                            HorizontalAlignment="Left"
+                            Background="#80000000"
+                            Padding="12,6"
+                            Margin="16"
+                            CornerRadius="4">
+                        <TextBlock Text="{Binding FullscreenStream.Username}"
+                                   Foreground="White"
+                                   FontSize="14"/>
+                    </Border>
+                </Grid>
 
-                        <!-- Clear separator (only show when drawing allowed) -->
-                        <Border Width="1" Background="#40FFFFFF" Margin="4,0"
-                                IsVisible="{Binding IsDrawingAllowedByHost}"/>
-
-                        <!-- Clear button (only show when drawing allowed) -->
-                        <Button Padding="12,6"
-                                Background="#40FFFFFF"
-                                Foreground="White"
-                                CornerRadius="4"
-                                Click="OnClearAnnotationsClick"
-                                IsVisible="{Binding IsDrawingAllowedByHost}">
-                            <TextBlock Text="Clear"/>
-                        </Button>
-                    </StackPanel>
-                </Border>
-
-                <!-- Top bar with close button and escape hint -->
-                <Border VerticalAlignment="Top"
+                <!-- Top bar with drawing toolbar, escape hint, and close button (Row 0 - above video) -->
+                <Border Grid.Row="0"
                         HorizontalAlignment="Stretch"
                         Background="#80000000"
                         Padding="16,10">
                     <Grid>
+                        <!-- Drawing Toolbar - left (only visible when host allows drawing) -->
+                        <Border HorizontalAlignment="Left"
+                                VerticalAlignment="Center"
+                                Background="#E0202020"
+                                CornerRadius="6"
+                                Padding="8,4"
+                                IsVisible="{Binding IsDrawingAllowedByHost}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <!-- Draw mode toggle -->
+                                <ToggleButton IsChecked="{Binding IsAnnotationEnabled}"
+                                              Padding="8,4"
+                                              Background="#40FFFFFF"
+                                              Foreground="White"
+                                              CornerRadius="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                        <TextBlock Text="✏️" VerticalAlignment="Center" FontSize="12"/>
+                                        <TextBlock Text="Draw" VerticalAlignment="Center" FontSize="11"/>
+                                    </StackPanel>
+                                </ToggleButton>
+
+                                <!-- Color separator -->
+                                <Border Width="1" Background="#40FFFFFF" Margin="2,2"/>
+
+                                <!-- Color buttons -->
+                                <StackPanel Orientation="Horizontal" Spacing="3">
+                                    <Button Width="24" Height="24" Padding="0" CornerRadius="3"
+                                            Background="#FF0000" BorderThickness="2"
+                                            BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FF0000}"
+                                            Click="OnAnnotationColorClick" Tag="#FF0000"/>
+                                    <Button Width="24" Height="24" Padding="0" CornerRadius="3"
+                                            Background="#00FF00" BorderThickness="2"
+                                            BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#00FF00}"
+                                            Click="OnAnnotationColorClick" Tag="#00FF00"/>
+                                    <Button Width="24" Height="24" Padding="0" CornerRadius="3"
+                                            Background="#0080FF" BorderThickness="2"
+                                            BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#0080FF}"
+                                            Click="OnAnnotationColorClick" Tag="#0080FF"/>
+                                    <Button Width="24" Height="24" Padding="0" CornerRadius="3"
+                                            Background="#FFFF00" BorderThickness="2"
+                                            BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FFFF00}"
+                                            Click="OnAnnotationColorClick" Tag="#FFFF00"/>
+                                    <Button Width="24" Height="24" Padding="0" CornerRadius="3"
+                                            Background="#FFFFFF" BorderThickness="2"
+                                            BorderBrush="{Binding AnnotationColor, Converter={StaticResource ColorToBorderConverter}, ConverterParameter=#FFFFFF}"
+                                            Click="OnAnnotationColorClick" Tag="#FFFFFF"/>
+                                </StackPanel>
+
+                                <!-- Clear separator -->
+                                <Border Width="1" Background="#40FFFFFF" Margin="2,2"/>
+
+                                <!-- Clear button -->
+                                <Button Padding="8,4"
+                                        Background="#40FFFFFF"
+                                        Foreground="White"
+                                        CornerRadius="4"
+                                        Click="OnClearAnnotationsClick">
+                                    <TextBlock Text="Clear" FontSize="11"/>
+                                </Button>
+                            </StackPanel>
+                        </Border>
+
                         <!-- Escape hint - center -->
                         <StackPanel Orientation="Horizontal"
                                     HorizontalAlignment="Center"
@@ -352,18 +380,6 @@
                             </StackPanel>
                         </Button>
                     </Grid>
-                </Border>
-
-                <!-- Username label - bottom left -->
-                <Border VerticalAlignment="Bottom"
-                        HorizontalAlignment="Left"
-                        Background="#80000000"
-                        Padding="12,6"
-                        Margin="16"
-                        CornerRadius="4">
-                    <TextBlock Text="{Binding FullscreenStream.Username}"
-                               Foreground="White"
-                               FontSize="14"/>
                 </Border>
             </Grid>
         </Border>

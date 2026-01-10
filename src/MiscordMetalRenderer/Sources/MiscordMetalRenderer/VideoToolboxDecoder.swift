@@ -303,6 +303,10 @@ class MetalVideoView: MTKView, MTKViewDelegate {
     private var textureCache: CVMetalTextureCache?
     private var pipelineState: MTLRenderPipelineState?
 
+    // Video dimensions for aspect ratio calculation
+    private var videoWidth: Int = 0
+    private var videoHeight: Int = 0
+
     // Child window for overlay rendering
     private var overlayWindow: NSWindow?
     private var overlayView: MTKView?
@@ -501,6 +505,9 @@ class MetalVideoView: MTKView, MTKViewDelegate {
     /// Set the pixel buffer to render
     func setPixelBuffer(_ pixelBuffer: CVPixelBuffer) {
         pendingPixelBuffer = pixelBuffer
+        // Store video dimensions for aspect ratio calculation
+        videoWidth = CVPixelBufferGetWidth(pixelBuffer)
+        videoHeight = CVPixelBufferGetHeight(pixelBuffer)
     }
 
     override func setFrameSize(_ newSize: NSSize) {
@@ -553,10 +560,36 @@ class MetalVideoView: MTKView, MTKViewDelegate {
 
         // Convert our frame to screen coordinates
         let frameInWindow = convert(bounds, to: nil)
-        let frameInScreen = parentWindow.convertToScreen(frameInWindow)
+        let containerFrame = parentWindow.convertToScreen(frameInWindow)
+
+        // Calculate aspect-ratio-correct frame within the container
+        let overlayFrame: NSRect
+        if videoWidth > 0 && videoHeight > 0 {
+            let videoAspect = CGFloat(videoWidth) / CGFloat(videoHeight)
+            let containerAspect = containerFrame.width / containerFrame.height
+
+            var videoRect: NSRect
+            if videoAspect > containerAspect {
+                // Video is wider than container - fit to width, letterbox top/bottom
+                let width = containerFrame.width
+                let height = width / videoAspect
+                let y = containerFrame.origin.y + (containerFrame.height - height) / 2
+                videoRect = NSRect(x: containerFrame.origin.x, y: y, width: width, height: height)
+            } else {
+                // Video is taller than container - fit to height, pillarbox left/right
+                let height = containerFrame.height
+                let width = height * videoAspect
+                let x = containerFrame.origin.x + (containerFrame.width - width) / 2
+                videoRect = NSRect(x: x, y: containerFrame.origin.y, width: width, height: height)
+            }
+            overlayFrame = videoRect
+        } else {
+            // No video dimensions yet, use full container
+            overlayFrame = containerFrame
+        }
 
         // Update overlay window position and size
-        overlay.setFrame(frameInScreen, display: false)
+        overlay.setFrame(overlayFrame, display: false)
     }
 
     private func adjustFrameForSuperview() {

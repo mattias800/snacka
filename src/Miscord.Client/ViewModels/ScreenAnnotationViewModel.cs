@@ -59,8 +59,10 @@ public class ScreenAnnotationViewModel : ViewModelBase
         get => _isDrawingAllowedForViewers;
         set
         {
+            Console.WriteLine($"ScreenAnnotationViewModel.IsDrawingAllowedForViewers setter: old={_isDrawingAllowedForViewers}, new={value}");
             if (this.RaiseAndSetIfChanged(ref _isDrawingAllowedForViewers, value) != value) return;
             // Broadcast the change to all viewers
+            Console.WriteLine($"ScreenAnnotationViewModel: Broadcasting IsDrawingAllowedForViewers={value}");
             _ = SetDrawingAllowedAsync(value);
         }
     }
