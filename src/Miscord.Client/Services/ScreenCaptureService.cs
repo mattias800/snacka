@@ -141,18 +141,21 @@ public class ScreenCaptureService : IScreenCaptureService
             Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "debug", "MiscordCapture"),
         };
 
+        Console.WriteLine($"ScreenCaptureService: Looking for MiscordCapture, appDir={appDir}");
         foreach (var path in searchPaths)
         {
             var fullPath = Path.GetFullPath(path);
-            if (File.Exists(fullPath))
+            var exists = File.Exists(fullPath);
+            Console.WriteLine($"ScreenCaptureService:   Checking {fullPath} -> {(exists ? "FOUND" : "not found")}");
+            if (exists)
             {
-                Console.WriteLine($"ScreenCaptureService: Found MiscordCapture at {fullPath}");
+                Console.WriteLine($"ScreenCaptureService: Using MiscordCapture at {fullPath}");
                 _miscordCapturePath = fullPath;
                 return fullPath;
             }
         }
 
-        Console.WriteLine("ScreenCaptureService: MiscordCapture not found");
+        Console.WriteLine("ScreenCaptureService: MiscordCapture not found in any search path!");
         return null;
     }
 

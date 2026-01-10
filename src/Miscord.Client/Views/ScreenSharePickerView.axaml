@@ -25,42 +25,101 @@
                        Foreground="#ffffff"
                        Margin="0,0,0,16"/>
 
-            <!-- Tab Buttons -->
+            <!-- Tab Buttons - only show when there are multiple source types -->
             <StackPanel Grid.Row="1"
                         Orientation="Horizontal"
                         Spacing="8"
-                        Margin="0,0,0,16">
-                <ToggleButton IsChecked="{Binding ShowDisplays}"
-                              Background="Transparent"
-                              Foreground="{Binding ShowDisplays, Converter={StaticResource BoolToForegroundConverter}}"
-                              Padding="16,8"
-                              CornerRadius="4"
-                              BorderThickness="0"
-                              Cursor="Hand">
-                    <TextBlock Text="Screens" FontWeight="Medium"/>
-                </ToggleButton>
+                        Margin="0,0,0,16"
+                        IsVisible="{Binding HasMultipleSourceTypes}">
+                <RadioButton GroupName="SourceType"
+                             IsChecked="{Binding ShowDisplays}"
+                             Background="Transparent"
+                             Foreground="{Binding ShowDisplays, Converter={StaticResource BoolToForegroundConverter}}"
+                             Padding="16,8"
+                             CornerRadius="4"
+                             BorderThickness="0"
+                             Cursor="Hand">
+                    <RadioButton.Styles>
+                        <Style Selector="RadioButton">
+                            <Setter Property="Template">
+                                <ControlTemplate>
+                                    <Border Background="{TemplateBinding Background}"
+                                            Padding="{TemplateBinding Padding}"
+                                            CornerRadius="4">
+                                        <ContentPresenter Content="{TemplateBinding Content}"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter>
+                        </Style>
+                        <Style Selector="RadioButton:checked">
+                            <Setter Property="Background" Value="#40444b"/>
+                        </Style>
+                        <Style Selector="RadioButton:pointerover">
+                            <Setter Property="Background" Value="#36393f"/>
+                        </Style>
+                    </RadioButton.Styles>
+                    <TextBlock Text="Screens" FontWeight="Medium" Foreground="{Binding ShowDisplays, Converter={StaticResource BoolToForegroundConverter}}"/>
+                </RadioButton>
 
-                <ToggleButton IsChecked="{Binding ShowWindows}"
-                              Background="Transparent"
-                              Foreground="{Binding ShowWindows, Converter={StaticResource BoolToForegroundConverter}}"
-                              Padding="16,8"
-                              CornerRadius="4"
-                              BorderThickness="0"
-                              Cursor="Hand"
-                              IsVisible="{Binding HasWindows}">
-                    <TextBlock Text="Windows" FontWeight="Medium"/>
-                </ToggleButton>
+                <RadioButton GroupName="SourceType"
+                             IsChecked="{Binding ShowWindows}"
+                             Background="Transparent"
+                             Padding="16,8"
+                             CornerRadius="4"
+                             BorderThickness="0"
+                             Cursor="Hand"
+                             IsVisible="{Binding HasWindows}">
+                    <RadioButton.Styles>
+                        <Style Selector="RadioButton">
+                            <Setter Property="Template">
+                                <ControlTemplate>
+                                    <Border Background="{TemplateBinding Background}"
+                                            Padding="{TemplateBinding Padding}"
+                                            CornerRadius="4">
+                                        <ContentPresenter Content="{TemplateBinding Content}"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter>
+                        </Style>
+                        <Style Selector="RadioButton:checked">
+                            <Setter Property="Background" Value="#40444b"/>
+                        </Style>
+                        <Style Selector="RadioButton:pointerover">
+                            <Setter Property="Background" Value="#36393f"/>
+                        </Style>
+                    </RadioButton.Styles>
+                    <TextBlock Text="Windows" FontWeight="Medium" Foreground="{Binding ShowWindows, Converter={StaticResource BoolToForegroundConverter}}"/>
+                </RadioButton>
 
-                <ToggleButton IsChecked="{Binding ShowApplications}"
-                              Background="Transparent"
-                              Foreground="{Binding ShowApplications, Converter={StaticResource BoolToForegroundConverter}}"
-                              Padding="16,8"
-                              CornerRadius="4"
-                              BorderThickness="0"
-                              Cursor="Hand"
-                              IsVisible="{Binding HasApplications}">
-                    <TextBlock Text="Apps" FontWeight="Medium"/>
-                </ToggleButton>
+                <RadioButton GroupName="SourceType"
+                             IsChecked="{Binding ShowApplications}"
+                             Background="Transparent"
+                             Padding="16,8"
+                             CornerRadius="4"
+                             BorderThickness="0"
+                             Cursor="Hand"
+                             IsVisible="{Binding HasApplications}">
+                    <RadioButton.Styles>
+                        <Style Selector="RadioButton">
+                            <Setter Property="Template">
+                                <ControlTemplate>
+                                    <Border Background="{TemplateBinding Background}"
+                                            Padding="{TemplateBinding Padding}"
+                                            CornerRadius="4">
+                                        <ContentPresenter Content="{TemplateBinding Content}"/>
+                                    </Border>
+                                </ControlTemplate>
+                            </Setter>
+                        </Style>
+                        <Style Selector="RadioButton:checked">
+                            <Setter Property="Background" Value="#40444b"/>
+                        </Style>
+                        <Style Selector="RadioButton:pointerover">
+                            <Setter Property="Background" Value="#36393f"/>
+                        </Style>
+                    </RadioButton.Styles>
+                    <TextBlock Text="Apps" FontWeight="Medium" Foreground="{Binding ShowApplications, Converter={StaticResource BoolToForegroundConverter}}"/>
+                </RadioButton>
 
                 <Button Command="{Binding RefreshCommand}"
                         Background="Transparent"

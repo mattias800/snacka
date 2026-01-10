@@ -115,6 +115,7 @@ public class ScreenSharePickerViewModel : ViewModelBase
 
     public bool HasWindows => Windows.Count > 0;
     public bool HasApplications => Applications.Count > 0;
+    public bool HasMultipleSourceTypes => HasWindows || HasApplications;
 
     public bool IncludeAudio
     {
@@ -161,6 +162,7 @@ public class ScreenSharePickerViewModel : ViewModelBase
 
         this.RaisePropertyChanged(nameof(HasWindows));
         this.RaisePropertyChanged(nameof(HasApplications));
+        this.RaisePropertyChanged(nameof(HasMultipleSourceTypes));
     }
 
     private void OnShare()
