@@ -127,7 +127,14 @@ public class ScreenCaptureService : IScreenCaptureService
 
         var searchPaths = new[]
         {
+            // Bundled with app
             Path.Combine(appDir, "MiscordCapture"),
+            // Swift 6+ architecture-specific build paths (arm64-apple-macosx)
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "arm64-apple-macosx", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "arm64-apple-macosx", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "arm64-apple-macosx", "debug", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "arm64-apple-macosx", "debug", "MiscordCapture"),
+            // Legacy Swift build paths (fallback)
             Path.Combine(appDir, "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
             Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
             Path.Combine(appDir, "..", "MiscordCapture", ".build", "debug", "MiscordCapture"),

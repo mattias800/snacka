@@ -1969,15 +1969,22 @@ public class WebRtcService : IWebRtcService
     private string? GetMiscordCapturePath()
     {
         // Look for MiscordCapture in several locations:
-        // 1. Same directory as the app
-        // 2. ../MiscordCapture/.build/release/MiscordCapture (development)
-        // 3. ../MiscordCapture/.build/debug/MiscordCapture (development)
+        // 1. Same directory as the app (bundled)
+        // 2. Swift 6+ architecture-specific build paths (arm64-apple-macosx)
+        // 3. Legacy Swift build paths (fallback)
 
         var appDir = AppContext.BaseDirectory;
 
         var candidates = new[]
         {
+            // Bundled with app
             Path.Combine(appDir, "MiscordCapture"),
+            // Swift 6+ architecture-specific build paths (arm64-apple-macosx)
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "arm64-apple-macosx", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "arm64-apple-macosx", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "arm64-apple-macosx", "debug", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "arm64-apple-macosx", "debug", "MiscordCapture"),
+            // Legacy Swift build paths (fallback)
             Path.Combine(appDir, "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
             Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
             Path.Combine(appDir, "..", "MiscordCapture", ".build", "debug", "MiscordCapture"),
