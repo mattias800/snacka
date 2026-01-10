@@ -113,6 +113,16 @@ public class VideoToolboxDecoder {
         }
     }
 
+    /// Detaches the Metal view from its current superview.
+    /// This must be called before re-embedding the view in a different parent.
+    public func detachView() {
+        DispatchQueue.main.async {
+            if self.metalView.superview != nil {
+                self.metalView.removeFromSuperview()
+            }
+        }
+    }
+
     // MARK: - Private Methods
 
     private func createFormatDescription(sps: Data, pps: Data) -> CMVideoFormatDescription? {

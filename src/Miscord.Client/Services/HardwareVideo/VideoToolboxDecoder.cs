@@ -51,6 +51,9 @@ public class VideoToolboxDecoder : IHardwareVideoDecoder
     [DllImport(LibraryName)]
     private static extern bool vt_decoder_is_available();
 
+    [DllImport(LibraryName)]
+    private static extern void vt_decoder_detach_view(nint decoder);
+
     #endregion
 
     public bool IsInitialized => _isInitialized;
@@ -132,6 +135,15 @@ public class VideoToolboxDecoder : IHardwareVideoDecoder
         if (_handle != nint.Zero)
         {
             vt_decoder_set_display_size(_handle, width, height);
+        }
+    }
+
+    public void DetachView()
+    {
+        if (_handle != nint.Zero)
+        {
+            Console.WriteLine("VideoToolboxDecoder: DetachView called");
+            vt_decoder_detach_view(_handle);
         }
     }
 

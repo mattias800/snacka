@@ -48,6 +48,12 @@ public interface IHardwareVideoDecoder : IDisposable
     /// Sets the display size for the renderer (for scaling).
     /// </summary>
     void SetDisplaySize(int width, int height);
+
+    /// <summary>
+    /// Detaches the native view from its current parent.
+    /// This must be called before re-embedding the view in a different parent.
+    /// </summary>
+    void DetachView();
 }
 
 /// <summary>

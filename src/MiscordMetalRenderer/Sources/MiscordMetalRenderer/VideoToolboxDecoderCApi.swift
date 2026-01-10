@@ -108,6 +108,17 @@ public func vt_decoder_set_display_size(
     decoderInstance?.setDisplaySize(width: Int(width), height: Int(height))
 }
 
+@_cdecl("vt_decoder_detach_view")
+public func vt_decoder_detach_view(_ decoder: UnsafeMutableRawPointer?) {
+    guard let pointer = decoder else { return }
+
+    decoderLock.lock()
+    let decoderInstance = decoderInstances[pointer]
+    decoderLock.unlock()
+
+    decoderInstance?.detachView()
+}
+
 @_cdecl("vt_decoder_is_available")
 public func vt_decoder_is_available() -> Bool {
     // VideoToolbox is always available on macOS 10.8+

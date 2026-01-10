@@ -1701,17 +1701,27 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         // Force the tile to reclaim the decoder by re-triggering its binding
         // The native view can only be embedded in one NativeControlHost at a time,
-        // so we need to notify the tile to re-create its HardwareVideoView.
-        // IMPORTANT: We must defer the re-attachment to the next UI frame to give
-        // the native view time to be fully detached from the fullscreen parent.
+        // so we need to explicitly detach it from the fullscreen parent first.
         if (stream != null && decoder != null)
         {
+            Console.WriteLine("MainApp: Clearing hardware decoder from stream before re-attachment");
             stream.HardwareDecoder = null;
-            // Defer re-attachment to next frame so native view can be fully released
-            Dispatcher.UIThread.Post(() =>
+
+            // Explicitly detach the native view from its current parent (fullscreen)
+            Console.WriteLine("MainApp: Detaching native view from fullscreen parent");
+            decoder.DetachView();
+
+            // Use a delay to ensure the native view is fully released from fullscreen
+            // The NativeControlHost needs time to process the removal
+            _ = Task.Run(async () =>
             {
-                stream.HardwareDecoder = decoder;
-                Console.WriteLine("MainApp: Hardware decoder re-attached to tile");
+                await Task.Delay(150); // Give native view time to be fully released
+                await Dispatcher.UIThread.InvokeAsync(() =>
+                {
+                    Console.WriteLine("MainApp: Re-attaching hardware decoder to tile");
+                    stream.HardwareDecoder = decoder;
+                    Console.WriteLine("MainApp: Hardware decoder re-attached to tile");
+                });
             });
         }
 

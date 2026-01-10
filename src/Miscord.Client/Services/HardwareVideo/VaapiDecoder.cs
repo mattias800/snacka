@@ -151,6 +151,12 @@ public class VaapiDecoder : IHardwareVideoDecoder
         }
     }
 
+    public void DetachView()
+    {
+        // Linux native view re-parenting is handled by the system
+        // No explicit detach needed
+    }
+
     public void Dispose()
     {
         if (_isDisposed)

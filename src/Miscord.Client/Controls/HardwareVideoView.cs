@@ -29,16 +29,22 @@ public class HardwareVideoViewHost : ContentControl
         if (change.Property == DecoderProperty)
         {
             var decoder = change.NewValue as IHardwareVideoDecoder;
+            var oldDecoder = change.OldValue as IHardwareVideoDecoder;
+
+            Console.WriteLine($"HardwareVideoViewHost: Decoder changed from {(oldDecoder != null ? "decoder" : "null")} to {(decoder != null ? "decoder" : "null")}");
 
             if (decoder != null && decoder.NativeViewHandle != nint.Zero)
             {
+                Console.WriteLine($"HardwareVideoViewHost: Creating new HardwareVideoView, handle=0x{decoder.NativeViewHandle:X}");
                 // Create new HardwareVideoView with the decoder
                 _currentView = new HardwareVideoView();
                 _currentView.SetDecoder(decoder);
                 Content = _currentView;
+                Console.WriteLine("HardwareVideoViewHost: Content set to new view");
             }
             else
             {
+                Console.WriteLine("HardwareVideoViewHost: Clearing content (no decoder or invalid handle)");
                 // No decoder - clear content
                 _currentView = null;
                 Content = null;
@@ -89,6 +95,8 @@ public class HardwareVideoView : NativeControlHost
 
     protected override IPlatformHandle CreateNativeControlCore(IPlatformHandle parent)
     {
+        Console.WriteLine($"HardwareVideoView.CreateNativeControlCore: decoder={(_decoder != null ? "set" : "null")}, handle={(_decoder?.NativeViewHandle ?? 0):X}");
+
         if (_decoder != null && _decoder.NativeViewHandle != nint.Zero)
         {
             // Update display size to match control bounds
@@ -99,6 +107,7 @@ public class HardwareVideoView : NativeControlHost
             }
 
             var handle = _decoder.NativeViewHandle;
+            Console.WriteLine($"HardwareVideoView.CreateNativeControlCore: Returning handle 0x{handle:X}");
 
             // Return the native view handle with platform-specific descriptor
             if (OperatingSystem.IsMacOS())
@@ -115,12 +124,15 @@ public class HardwareVideoView : NativeControlHost
             }
         }
 
+        Console.WriteLine("HardwareVideoView.CreateNativeControlCore: No decoder, returning base");
         return base.CreateNativeControlCore(parent);
     }
 
     protected override void DestroyNativeControlCore(IPlatformHandle control)
     {
+        Console.WriteLine($"HardwareVideoView.DestroyNativeControlCore: control.Handle=0x{control.Handle:X}");
         // Don't destroy the handle - the WebRtcService owns the decoder and its view
+        // The native view will be re-parented when needed
     }
 
     protected override void OnPropertyChanged(AvaloniaPropertyChangedEventArgs change)
