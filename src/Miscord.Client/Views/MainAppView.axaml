@@ -312,18 +312,47 @@
                     </StackPanel>
                 </Border>
 
-                <!-- Close button - top right -->
-                <Button VerticalAlignment="Top"
-                        HorizontalAlignment="Right"
-                        Margin="16"
-                        Padding="8,4"
-                        Background="#60000000"
-                        BorderThickness="0"
-                        CornerRadius="4"
-                        Cursor="Hand"
-                        Click="OnCloseFullscreenClick">
-                    <TextBlock Text="✕" Foreground="White" FontSize="20"/>
-                </Button>
+                <!-- Top bar with close button and escape hint -->
+                <Border VerticalAlignment="Top"
+                        HorizontalAlignment="Stretch"
+                        Background="#80000000"
+                        Padding="16,10">
+                    <Grid>
+                        <!-- Escape hint - center -->
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    VerticalAlignment="Center"
+                                    Spacing="6">
+                            <Border Background="#40ffffff"
+                                    CornerRadius="3"
+                                    Padding="6,2">
+                                <TextBlock Text="ESC"
+                                           Foreground="White"
+                                           FontSize="11"
+                                           FontWeight="SemiBold"/>
+                            </Border>
+                            <TextBlock Text="to exit fullscreen"
+                                       Foreground="#b0b0b0"
+                                       FontSize="12"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Close button - right -->
+                        <Button HorizontalAlignment="Right"
+                                VerticalAlignment="Center"
+                                Padding="10,6"
+                                Background="#ed4245"
+                                BorderThickness="0"
+                                CornerRadius="4"
+                                Cursor="Hand"
+                                Click="OnCloseFullscreenClick">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <TextBlock Text="✕" Foreground="White" FontSize="14" VerticalAlignment="Center"/>
+                                <TextBlock Text="Close" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
+                    </Grid>
+                </Border>
 
                 <!-- Username label - bottom left -->
                 <Border VerticalAlignment="Bottom"
