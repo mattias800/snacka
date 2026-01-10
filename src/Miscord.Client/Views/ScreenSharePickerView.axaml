@@ -5,8 +5,8 @@
              xmlns:conv="using:Miscord.Client.Converters"
              x:Class="Miscord.Client.Views.ScreenSharePickerView"
              x:DataType="vm:ScreenSharePickerViewModel"
-             MaxWidth="500"
-             MaxHeight="400">
+             Width="560"
+             MaxHeight="600">
 
     <UserControl.Resources>
         <conv:BoolToForegroundConverter x:Key="BoolToForegroundConverter"/>
@@ -188,152 +188,158 @@
             </Grid>
 
             <!-- Source Lists -->
-            <ScrollViewer Grid.Row="3"
-                          VerticalScrollBarVisibility="Auto"
-                          Margin="0,0,0,16">
-                <Panel>
-                    <!-- Displays List -->
-                    <ListBox ItemsSource="{Binding Displays}"
-                             SelectedItem="{Binding SelectedSource}"
-                             IsVisible="{Binding ShowDisplays}"
-                             Background="Transparent"
-                             BorderThickness="0">
-                        <ListBox.Styles>
-                            <Style Selector="ListBoxItem">
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="Margin" Value="0,0,0,8"/>
-                                <Setter Property="Background" Value="#40444b"/>
-                                <Setter Property="CornerRadius" Value="4"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                                <Setter Property="Background" Value="#5865f2"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                                <Setter Property="Background" Value="#4752c4"/>
-                            </Style>
-                        </ListBox.Styles>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="services:ScreenCaptureSource">
-                                <Border Padding="12">
-                                    <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <Border Background="#5865f2"
-                                                CornerRadius="4"
-                                                Width="48"
-                                                Height="32">
-                                            <TextBlock Text="🖥️"
-                                                       FontSize="16"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                        </Border>
+            <Panel Grid.Row="3" Margin="0,0,0,16">
+                <!-- Displays List -->
+                <ListBox ItemsSource="{Binding Displays}"
+                         SelectedItem="{Binding SelectedSource}"
+                         IsVisible="{Binding ShowDisplays}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,0,8"/>
+                            <Setter Property="Background" Value="#40444b"/>
+                            <Setter Property="CornerRadius" Value="4"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#5865f2"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#4752c4"/>
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="services:ScreenCaptureSource">
+                            <Border Padding="12">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <Border Background="#5865f2"
+                                            CornerRadius="4"
+                                            Width="48"
+                                            Height="32">
+                                        <TextBlock Text="🖥️"
+                                                   FontSize="16"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="#ffffff"
+                                               VerticalAlignment="Center"
+                                               FontSize="14"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
+
+                <!-- Windows List -->
+                <ListBox ItemsSource="{Binding Windows}"
+                         SelectedItem="{Binding SelectedSource}"
+                         IsVisible="{Binding ShowWindows}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,0,8"/>
+                            <Setter Property="Background" Value="#40444b"/>
+                            <Setter Property="CornerRadius" Value="4"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#5865f2"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#4752c4"/>
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="services:ScreenCaptureSource">
+                            <Border Padding="12">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <Border Background="#43b581"
+                                            CornerRadius="4"
+                                            Width="48"
+                                            Height="32">
+                                        <TextBlock Text="📱"
+                                                   FontSize="16"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                    <StackPanel VerticalAlignment="Center">
                                         <TextBlock Text="{Binding Name}"
                                                    Foreground="#ffffff"
-                                                   VerticalAlignment="Center"
-                                                   FontSize="14"/>
+                                                   FontSize="14"
+                                                   TextTrimming="CharacterEllipsis"/>
+                                        <TextBlock Text="{Binding AppName}"
+                                                   Foreground="#72767d"
+                                                   FontSize="11"
+                                                   TextTrimming="CharacterEllipsis"
+                                                   IsVisible="{Binding AppName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                     </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
 
-                    <!-- Windows List -->
-                    <ListBox ItemsSource="{Binding Windows}"
-                             SelectedItem="{Binding SelectedSource}"
-                             IsVisible="{Binding ShowWindows}"
-                             Background="Transparent"
-                             BorderThickness="0">
-                        <ListBox.Styles>
-                            <Style Selector="ListBoxItem">
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="Margin" Value="0,0,0,8"/>
-                                <Setter Property="Background" Value="#40444b"/>
-                                <Setter Property="CornerRadius" Value="4"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                                <Setter Property="Background" Value="#5865f2"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                                <Setter Property="Background" Value="#4752c4"/>
-                            </Style>
-                        </ListBox.Styles>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="services:ScreenCaptureSource">
-                                <Border Padding="12">
-                                    <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <Border Background="#43b581"
-                                                CornerRadius="4"
-                                                Width="48"
-                                                Height="32">
-                                            <TextBlock Text="📱"
-                                                       FontSize="16"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                        </Border>
-                                        <StackPanel>
-                                            <TextBlock Text="{Binding Name}"
-                                                       Foreground="#ffffff"
-                                                       FontSize="14"/>
-                                            <TextBlock Text="{Binding AppName}"
-                                                       Foreground="#72767d"
-                                                       FontSize="11"
-                                                       IsVisible="{Binding AppName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                        </StackPanel>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
+                <!-- Applications List -->
+                <ListBox ItemsSource="{Binding Applications}"
+                         SelectedItem="{Binding SelectedSource}"
+                         IsVisible="{Binding ShowApplications}"
+                         Background="Transparent"
+                         BorderThickness="0"
+                         ScrollViewer.HorizontalScrollBarVisibility="Disabled">
+                    <ListBox.Styles>
+                        <Style Selector="ListBoxItem">
+                            <Setter Property="Padding" Value="0"/>
+                            <Setter Property="Margin" Value="0,0,0,8"/>
+                            <Setter Property="Background" Value="#40444b"/>
+                            <Setter Property="CornerRadius" Value="4"/>
+                            <Setter Property="HorizontalContentAlignment" Value="Stretch"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#5865f2"/>
+                        </Style>
+                        <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                            <Setter Property="Background" Value="#4752c4"/>
+                        </Style>
+                    </ListBox.Styles>
+                    <ListBox.ItemTemplate>
+                        <DataTemplate x:DataType="services:ScreenCaptureSource">
+                            <Border Padding="12">
+                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                    <Border Background="#faa61a"
+                                            CornerRadius="4"
+                                            Width="48"
+                                            Height="32">
+                                        <TextBlock Text="📦"
+                                                   FontSize="16"
+                                                   HorizontalAlignment="Center"
+                                                   VerticalAlignment="Center"/>
+                                    </Border>
+                                    <TextBlock Text="{Binding Name}"
+                                               Foreground="#ffffff"
+                                               VerticalAlignment="Center"
+                                               FontSize="14"
+                                               TextTrimming="CharacterEllipsis"/>
+                                </StackPanel>
+                            </Border>
+                        </DataTemplate>
+                    </ListBox.ItemTemplate>
+                </ListBox>
 
-                    <!-- Applications List -->
-                    <ListBox ItemsSource="{Binding Applications}"
-                             SelectedItem="{Binding SelectedSource}"
-                             IsVisible="{Binding ShowApplications}"
-                             Background="Transparent"
-                             BorderThickness="0">
-                        <ListBox.Styles>
-                            <Style Selector="ListBoxItem">
-                                <Setter Property="Padding" Value="0"/>
-                                <Setter Property="Margin" Value="0,0,0,8"/>
-                                <Setter Property="Background" Value="#40444b"/>
-                                <Setter Property="CornerRadius" Value="4"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
-                                <Setter Property="Background" Value="#5865f2"/>
-                            </Style>
-                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
-                                <Setter Property="Background" Value="#4752c4"/>
-                            </Style>
-                        </ListBox.Styles>
-                        <ListBox.ItemTemplate>
-                            <DataTemplate x:DataType="services:ScreenCaptureSource">
-                                <Border Padding="12">
-                                    <StackPanel Orientation="Horizontal" Spacing="12">
-                                        <Border Background="#faa61a"
-                                                CornerRadius="4"
-                                                Width="48"
-                                                Height="32">
-                                            <TextBlock Text="📦"
-                                                       FontSize="16"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                        </Border>
-                                        <TextBlock Text="{Binding Name}"
-                                                   Foreground="#ffffff"
-                                                   VerticalAlignment="Center"
-                                                   FontSize="14"/>
-                                    </StackPanel>
-                                </Border>
-                            </DataTemplate>
-                        </ListBox.ItemTemplate>
-                    </ListBox>
-
-                    <!-- Empty State -->
-                    <TextBlock Text="No sources available"
-                               Foreground="#72767d"
-                               HorizontalAlignment="Center"
-                               VerticalAlignment="Center"
-                               IsVisible="{Binding !Displays.Count}"/>
-                </Panel>
-            </ScrollViewer>
+                <!-- Empty State -->
+                <TextBlock Text="No sources available"
+                           Foreground="#72767d"
+                           HorizontalAlignment="Center"
+                           VerticalAlignment="Center"
+                           IsVisible="{Binding !Displays.Count}"/>
+            </Panel>
 
             <!-- Action Buttons -->
             <StackPanel Grid.Row="4"
