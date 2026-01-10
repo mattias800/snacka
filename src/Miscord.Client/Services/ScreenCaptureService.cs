@@ -44,7 +44,21 @@ internal record MiscordCaptureApplication(
 public class ScreenCaptureService : IScreenCaptureService
 {
     private MiscordCaptureSourceList? _cachedMacOSSources;
+    private bool _macOSSourcesCacheAttempted;
     private string? _miscordCapturePath;
+
+    /// <summary>
+    /// Ensures we've attempted to load macOS sources via MiscordCapture.
+    /// Call this before checking _cachedMacOSSources.
+    /// </summary>
+    private void EnsureMacOSSourcesCached()
+    {
+        if (!_macOSSourcesCacheAttempted)
+        {
+            RefreshMacOSSources();
+            _macOSSourcesCacheAttempted = true;
+        }
+    }
     public IReadOnlyList<ScreenCaptureSource> GetAvailableSources()
     {
         // On macOS, try to get all sources at once via MiscordCapture
@@ -164,12 +178,15 @@ public class ScreenCaptureService : IScreenCaptureService
     /// </summary>
     private void RefreshMacOSSources()
     {
+        Console.WriteLine("ScreenCaptureService: RefreshMacOSSources() called");
         var miscordPath = GetMiscordCapturePath();
         if (miscordPath == null)
         {
+            Console.WriteLine("ScreenCaptureService: MiscordCapture not found, cannot enumerate windows/apps");
             _cachedMacOSSources = null;
             return;
         }
+        Console.WriteLine($"ScreenCaptureService: Using MiscordCapture at: {miscordPath}");
 
         try
         {
@@ -220,6 +237,9 @@ public class ScreenCaptureService : IScreenCaptureService
 
     private IReadOnlyList<ScreenCaptureSource> GetDisplaysMacOS()
     {
+        // Ensure we've tried to load sources via MiscordCapture
+        EnsureMacOSSourcesCached();
+
         // Try to use MiscordCapture if available
         if (_cachedMacOSSources != null)
         {
@@ -243,6 +263,9 @@ public class ScreenCaptureService : IScreenCaptureService
 
     private IReadOnlyList<ScreenCaptureSource> GetWindowsMacOS()
     {
+        // Ensure we've tried to load sources via MiscordCapture
+        EnsureMacOSSourcesCached();
+
         // Use MiscordCapture if available
         if (_cachedMacOSSources != null)
         {
@@ -276,6 +299,9 @@ public class ScreenCaptureService : IScreenCaptureService
 
     private IReadOnlyList<ScreenCaptureSource> GetApplicationsMacOS()
     {
+        // Ensure we've tried to load sources via MiscordCapture
+        EnsureMacOSSourcesCached();
+
         // Use MiscordCapture if available
         if (_cachedMacOSSources != null)
         {
