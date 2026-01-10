@@ -16,6 +16,7 @@ public class FfmpegProcessEncoder : IDisposable
     private readonly int _height;
     private readonly int _fps;
     private readonly VideoCodecsEnum _codec;
+    private readonly string _inputPixelFormat;
     private readonly object _lock = new();
     private bool _isRunning;
     private Task? _outputReaderTask;
@@ -30,12 +31,21 @@ public class FfmpegProcessEncoder : IDisposable
     /// </summary>
     public event Action<uint, byte[]>? OnEncodedFrame;
 
-    public FfmpegProcessEncoder(int width, int height, int fps = 15, VideoCodecsEnum codec = VideoCodecsEnum.VP8)
+    /// <summary>
+    /// Creates a new FFmpeg encoder.
+    /// </summary>
+    /// <param name="width">Video width</param>
+    /// <param name="height">Video height</param>
+    /// <param name="fps">Frames per second</param>
+    /// <param name="codec">Output codec (VP8 or H264)</param>
+    /// <param name="inputPixelFormat">Input pixel format: "nv12" for hardware path, "bgr24" for software</param>
+    public FfmpegProcessEncoder(int width, int height, int fps = 15, VideoCodecsEnum codec = VideoCodecsEnum.VP8, string inputPixelFormat = "bgr24")
     {
         _width = width;
         _height = height;
         _fps = fps;
         _codec = codec;
+        _inputPixelFormat = inputPixelFormat;
     }
 
     private static string? _detectedEncoder;
@@ -49,11 +59,12 @@ public class FfmpegProcessEncoder : IDisposable
         if (OperatingSystem.IsMacOS())
         {
             // macOS: VideoToolbox is always available
-            // -g 30 = keyframe every 30 frames (~1s at 30fps) so new viewers get a keyframe quickly
+            // -g 10 = keyframe every 10 frames (~0.33s at 30fps) for fast stream start when viewers join
             // -bf 0 = no B-frames (critical for low-latency streaming - B-frames require reordering)
             // -profile:v baseline = baseline profile doesn't support B-frames
-            // -bufsize 500k = smaller buffer for lower latency
-            _detectedEncoder = "-c:v h264_videotoolbox -realtime 1 -profile:v baseline -g 30 -bf 0 -b:v 3000k -maxrate 3000k -bufsize 500k";
+            // -b:v 6000k = higher bitrate for screen share text clarity
+            // -bufsize 500k = buffer for smoother streaming
+            _detectedEncoder = "-c:v h264_videotoolbox -realtime 1 -profile:v baseline -g 10 -bf 0 -b:v 6000k -maxrate 8000k -bufsize 500k";
             Console.WriteLine("FfmpegProcessEncoder: Using h264_videotoolbox (Apple Silicon/Intel)");
             return _detectedEncoder;
         }
@@ -149,8 +160,9 @@ public class FfmpegProcessEncoder : IDisposable
         {
             FileName = "ffmpeg",
             // Ultra low-latency: no buffering, flush packets immediately
+            // NV12 is native to VideoToolbox - zero conversion overhead
             Arguments = $"-fflags nobuffer -flags low_delay -strict experimental " +
-                       $"-f rawvideo -pixel_format bgr24 -video_size {_width}x{_height} -framerate {_fps} -i pipe:0 " +
+                       $"-f rawvideo -pixel_format {_inputPixelFormat} -video_size {_width}x{_height} -framerate {_fps} -i pipe:0 " +
                        $"{codecArg} -flush_packets 1 -f {outputFormat} pipe:1",
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -185,7 +197,7 @@ public class FfmpegProcessEncoder : IDisposable
             catch { }
         });
 
-        Console.WriteLine($"FfmpegProcessEncoder: Started ({_width}x{_height} @ {_fps}fps, {_codec})");
+        Console.WriteLine($"FfmpegProcessEncoder: Started ({_width}x{_height} @ {_fps}fps, {_codec}, input={_inputPixelFormat})");
     }
 
     public void EncodeFrame(byte[] bgrData)

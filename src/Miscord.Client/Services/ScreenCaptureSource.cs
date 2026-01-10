@@ -2,15 +2,17 @@ namespace Miscord.Client.Services;
 
 public enum ScreenCaptureSourceType
 {
-    Display,   // Full screen/monitor
-    Window     // Individual application window
+    Display,      // Full screen/monitor
+    Window,       // Individual application window
+    Application   // All windows of an application (macOS only)
 }
 
 public record ScreenCaptureSource(
     ScreenCaptureSourceType Type,
-    string Id,              // Platform-specific ID (display index or window ID)
+    string Id,              // Platform-specific ID (display index, window ID, or bundle ID)
     string Name,            // Human-readable name ("Display 1", "Safari - Google")
-    string? AppName = null  // For windows: application name
+    string? AppName = null, // For windows: application name
+    string? BundleId = null // For applications/windows on macOS: bundle identifier
 );
 
 /// <summary>
@@ -49,10 +51,11 @@ public record ScreenShareFramerate(int Fps, string Label)
 }
 
 /// <summary>
-/// Settings for screen sharing including source, resolution and framerate.
+/// Settings for screen sharing including source, resolution, framerate, and audio options.
 /// </summary>
 public record ScreenShareSettings(
     ScreenCaptureSource Source,
     ScreenShareResolution Resolution,
-    ScreenShareFramerate Framerate
+    ScreenShareFramerate Framerate,
+    bool IncludeAudio = false  // Whether to capture and share audio from the source
 );

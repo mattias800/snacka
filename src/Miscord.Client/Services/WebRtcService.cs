@@ -133,8 +133,10 @@ public class WebRtcService : IWebRtcService
     private SDL2AudioSource? _audioSource;
     // Audio mixer with per-user volume control (replaces SDL2AudioEndPoint)
     private IUserAudioMixer? _audioMixer;
-    // Audio SSRC to UserId mapping for per-user volume control
+    // Microphone audio SSRC to UserId mapping for per-user volume control
     private readonly ConcurrentDictionary<uint, Guid> _audioSsrcToUserMap = new();
+    // Screen audio SSRC to UserId mapping - used to filter screen audio when not watching
+    private readonly ConcurrentDictionary<uint, Guid> _screenAudioSsrcToUserMap = new();
     // Legacy P2P: per-peer audio sinks
     private readonly ConcurrentDictionary<Guid, SDL2AudioEndPoint> _audioSinks = new();
     // Per-user video decoders (keyed by userId, server tells us which SSRC maps to which user)
@@ -187,12 +189,26 @@ public class WebRtcService : IWebRtcService
     private const int DefaultScreenFps = 30;
     // MiscordCapture audio packet header
     private const uint MiscordCaptureAudioMagic = 0x4D434150;  // "MCAP" in little-endian
+    // Screen audio encoding - Opus at 48kHz stereo
+    private uint _screenAudioTimestamp;
+    private AudioEncoder? _screenAudioEncoder;
+    private AudioFormat? _screenAudioFormat;
+    private const int ScreenAudioSampleRate = 48000;  // MiscordCapture outputs 48kHz
+    private const int ScreenAudioChannels = 2;        // Stereo for screen share (music, videos, games)
+    private const int AudioPacketDurationMs = 20;     // 20ms audio packets
+    // Opus at 48kHz stereo: 48000 * 0.020 * 2 = 1920 samples per packet (960 per channel)
+    private const int OpusSamplesPerPacket = ScreenAudioSampleRate * AudioPacketDurationMs / 1000 * ScreenAudioChannels;
 
     // Dual video tracks for simultaneous camera + screen share
     private MediaStreamTrack? _cameraVideoTrack;
     private MediaStreamTrack? _screenVideoTrack;
     private uint _cameraVideoSsrc;
     private uint _screenVideoSsrc;
+
+    // Separate audio track for screen share audio (distinct from microphone audio)
+    // The track's SSRC is detected by the server via payload type 112
+    private MediaStreamTrack? _screenAudioTrack;
+    private uint _screenAudioSsrc;
 
     private Guid? _currentChannelId;
     private Guid _localUserId;
@@ -267,7 +283,17 @@ public class WebRtcService : IWebRtcService
             if (_currentChannelId == e.ChannelId)
             {
                 _audioSsrcToUserMap[e.AudioSsrc] = e.UserId;
-                Console.WriteLine($"WebRTC: Mapped audio SSRC {e.AudioSsrc} to user {e.UserId}");
+                Console.WriteLine($"WebRTC: Mapped mic audio SSRC {e.AudioSsrc} to user {e.UserId}");
+            }
+        };
+
+        // Subscribe to screen audio SSRC mapping events
+        _signalR.UserScreenAudioSsrcMapped += e =>
+        {
+            if (_currentChannelId == e.ChannelId)
+            {
+                _screenAudioSsrcToUserMap[e.ScreenAudioSsrc] = e.UserId;
+                Console.WriteLine($"WebRTC: Mapped screen audio SSRC {e.ScreenAudioSsrc} to user {e.UserId}");
             }
         };
 
@@ -279,7 +305,11 @@ public class WebRtcService : IWebRtcService
                 {
                     _audioSsrcToUserMap[mapping.AudioSsrc!.Value] = mapping.UserId;
                 }
-                Console.WriteLine($"WebRTC: Loaded {e.Mappings.Count(m => m.AudioSsrc.HasValue)} audio SSRC mappings");
+                foreach (var mapping in e.Mappings.Where(m => m.ScreenAudioSsrc.HasValue))
+                {
+                    _screenAudioSsrcToUserMap[mapping.ScreenAudioSsrc!.Value] = mapping.UserId;
+                }
+                Console.WriteLine($"WebRTC: Loaded {e.Mappings.Count(m => m.AudioSsrc.HasValue)} mic SSRC + {e.Mappings.Count(m => m.ScreenAudioSsrc.HasValue)} screen audio SSRC mappings");
             }
         };
 
@@ -352,7 +382,8 @@ public class WebRtcService : IWebRtcService
             NativeLibraryInitializer.EnsureSdl2AudioInitialized();
 
             // Use selected audio input device from settings
-            var audioEncoder = new AudioEncoder();
+            // Enable Opus for high-quality 48kHz audio
+            var audioEncoder = new AudioEncoder(includeOpus: true);
             var inputDevice = _settingsStore?.Settings.AudioInputDevice ?? string.Empty;
             _audioSource = new SDL2AudioSource(inputDevice, audioEncoder);
 
@@ -365,14 +396,18 @@ public class WebRtcService : IWebRtcService
                 Console.WriteLine($"WebRTC: Audio source error: {error}");
             };
 
-            // Set audio format before starting - required for SDL2AudioSource to work
+            // Set audio format before starting - prefer Opus for high quality (48kHz)
+            // Fall back to PCMU if Opus not available (shouldn't happen with SDL2)
             var formats = _audioSource.GetAudioSourceFormats();
             if (formats.Count > 0)
             {
-                var selectedFormat = formats.FirstOrDefault(f => f.FormatName == "PCMU");
+                var selectedFormat = formats.FirstOrDefault(f => f.FormatName == "OPUS");
+                if (selectedFormat.FormatName == null)
+                    selectedFormat = formats.FirstOrDefault(f => f.FormatName == "PCMU");
                 if (selectedFormat.FormatName == null)
                     selectedFormat = formats[0];
                 _audioSource.SetAudioSourceFormat(selectedFormat);
+                Console.WriteLine($"WebRTC: Selected audio format: {selectedFormat.FormatName} ({selectedFormat.ClockRate}Hz)");
             }
 
             // Start the speaking check timer
@@ -602,6 +637,7 @@ public class WebRtcService : IWebRtcService
 
         // Clear audio SSRC mappings
         _audioSsrcToUserMap.Clear();
+        _screenAudioSsrcToUserMap.Clear();
 
         _currentChannelId = null;
         UpdateConnectionStatus(VoiceConnectionStatus.Disconnected);
@@ -1024,6 +1060,16 @@ public class WebRtcService : IWebRtcService
         _screenVideoTrack = new MediaStreamTrack(screenVideoFormats, MediaStreamStatusEnum.SendRecv);
         _serverConnection.addTrack(_screenVideoTrack);
 
+        // Screen share audio track (separate from microphone audio for clean separation)
+        // This allows viewers to control screen audio independently
+        if (_audioSource != null)
+        {
+            var screenAudioFormats = _audioSource.GetAudioSourceFormats();
+            _screenAudioTrack = new MediaStreamTrack(screenAudioFormats, MediaStreamStatusEnum.SendRecv);
+            _serverConnection.addTrack(_screenAudioTrack);
+            Console.WriteLine("WebRTC SFU: Added separate screen audio track");
+        }
+
         // Handle audio format negotiation - log only, mixer handles all formats
         _serverConnection.OnAudioFormatsNegotiated += formats =>
         {
@@ -1044,8 +1090,38 @@ public class WebRtcService : IWebRtcService
         {
             if (media == SDPMediaTypesEnum.audio && !_isDeafened && _audioMixer != null)
             {
-                // Look up the user ID for this SSRC (for per-user volume control)
                 var ssrc = rtpPkt.Header.SyncSource;
+                var payloadType = rtpPkt.Header.PayloadType;
+
+                // Check if this is screen audio (PT 112) - only play if watching the user's screen share
+                if (payloadType == 112)
+                {
+                    // Screen audio - check if we're watching this user's screen share
+                    if (_screenAudioSsrcToUserMap.TryGetValue(ssrc, out var screenUserId))
+                    {
+                        lock (_watchingScreenShareUserIds)
+                        {
+                            if (!_watchingScreenShareUserIds.Contains(screenUserId))
+                            {
+                                // Not watching this user's screen share, skip the audio
+                                return;
+                            }
+                        }
+                        // We're watching - play the screen audio with user's volume
+                        _audioMixer.ProcessAudioPacket(
+                            ssrc,
+                            screenUserId,
+                            rtpPkt.Header.SequenceNumber,
+                            rtpPkt.Header.Timestamp,
+                            payloadType,
+                            rtpPkt.Header.MarkerBit == 1,
+                            rtpPkt.Payload);
+                    }
+                    // Unknown screen audio SSRC - skip until we get the mapping
+                    return;
+                }
+
+                // Microphone audio - always play (with per-user volume control)
                 Guid? userId = _audioSsrcToUserMap.TryGetValue(ssrc, out var uid) ? uid : null;
 
                 _audioMixer.ProcessAudioPacket(
@@ -1053,7 +1129,7 @@ public class WebRtcService : IWebRtcService
                     userId,
                     rtpPkt.Header.SequenceNumber,
                     rtpPkt.Header.Timestamp,
-                    rtpPkt.Header.PayloadType,
+                    payloadType,
                     rtpPkt.Header.MarkerBit == 1,
                     rtpPkt.Payload);
             }
@@ -1194,9 +1270,9 @@ public class WebRtcService : IWebRtcService
     }
 
     /// <summary>
-    /// Captures the SSRCs assigned to our video tracks after connection is established.
-    /// This is needed for dual-track video sending - camera uses default SendVideo,
-    /// screen share uses SendRtpRaw with its specific SSRC.
+    /// Captures the SSRCs assigned to our video and audio tracks after connection is established.
+    /// This is needed for dual-track sending - camera/mic use default Send methods,
+    /// screen share video/audio use SendRtpRaw with specific SSRCs.
     /// </summary>
     private void CaptureVideoTrackSsrcs()
     {
@@ -1207,32 +1283,47 @@ public class WebRtcService : IWebRtcService
             if (videoTracks == null || videoTracks.Count == 0)
             {
                 Console.WriteLine("WebRTC: No video tracks found to capture SSRCs");
-                return;
-            }
-
-            // Camera track is first, screen track is second
-            if (videoTracks.Count >= 1 && videoTracks[0].LocalTrack != null)
-            {
-                _cameraVideoSsrc = videoTracks[0].LocalTrack.Ssrc;
-                Console.WriteLine($"WebRTC: Camera video track SSRC = {_cameraVideoSsrc}");
-            }
-
-            if (videoTracks.Count >= 2 && videoTracks[1].LocalTrack != null)
-            {
-                _screenVideoSsrc = videoTracks[1].LocalTrack.Ssrc;
-                Console.WriteLine($"WebRTC: Screen video track SSRC = {_screenVideoSsrc}");
             }
             else
             {
-                // If we only have one video stream but two tracks were added,
-                // generate a unique SSRC for the screen track
-                _screenVideoSsrc = (uint)new Random().Next(100000, int.MaxValue);
-                Console.WriteLine($"WebRTC: Generated screen video track SSRC = {_screenVideoSsrc}");
+                // Camera track is first, screen track is second
+                if (videoTracks.Count >= 1 && videoTracks[0].LocalTrack != null)
+                {
+                    _cameraVideoSsrc = videoTracks[0].LocalTrack.Ssrc;
+                    Console.WriteLine($"WebRTC: Camera video track SSRC = {_cameraVideoSsrc}");
+                }
+
+                if (videoTracks.Count >= 2 && videoTracks[1].LocalTrack != null)
+                {
+                    _screenVideoSsrc = videoTracks[1].LocalTrack.Ssrc;
+                    Console.WriteLine($"WebRTC: Screen video track SSRC = {_screenVideoSsrc}");
+                }
+                else
+                {
+                    // If we only have one video stream but two tracks were added,
+                    // generate a unique SSRC for the screen track
+                    _screenVideoSsrc = (uint)new Random().Next(100000, int.MaxValue);
+                    Console.WriteLine($"WebRTC: Generated screen video track SSRC = {_screenVideoSsrc}");
+                }
+            }
+
+            // Get audio tracks - mic audio track is first, screen audio track is second
+            var audioTracks = _serverConnection?.AudioStreamList;
+            if (audioTracks != null && audioTracks.Count >= 2 && audioTracks[1].LocalTrack != null)
+            {
+                _screenAudioSsrc = audioTracks[1].LocalTrack.Ssrc;
+                Console.WriteLine($"WebRTC: Screen audio track SSRC = {_screenAudioSsrc}");
+            }
+            else
+            {
+                // Generate a unique SSRC for screen audio
+                _screenAudioSsrc = (uint)new Random().Next(100000, int.MaxValue);
+                Console.WriteLine($"WebRTC: Generated screen audio track SSRC = {_screenAudioSsrc}");
             }
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"WebRTC: Error capturing video track SSRCs: {ex.Message}");
+            Console.WriteLine($"WebRTC: Error capturing track SSRCs: {ex.Message}");
         }
     }
 
@@ -1287,7 +1378,8 @@ public class WebRtcService : IWebRtcService
         SDL2AudioEndPoint? audioSink = null;
         try
         {
-            var audioEncoder = new AudioEncoder();
+            // Enable Opus for high-quality 48kHz audio
+            var audioEncoder = new AudioEncoder(includeOpus: true);
             // Use selected audio output device from settings (empty string = default)
             var outputDevice = _settingsStore?.Settings.AudioOutputDevice ?? string.Empty;
             audioSink = new SDL2AudioEndPoint(outputDevice, audioEncoder);
@@ -1661,8 +1753,26 @@ public class WebRtcService : IWebRtcService
             if (_isUsingMiscordCapture)
             {
                 // Use MiscordCapture for native capture with audio support
-                var captureAudio = true;  // Always capture audio when available
+                var captureAudio = settings?.IncludeAudio ?? false;
                 var args = GetMiscordCaptureArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
+
+                // Initialize Opus encoder for screen audio if audio capture is enabled
+                if (captureAudio)
+                {
+                    _screenAudioEncoder = new AudioEncoder(includeOpus: true);
+                    // Get Opus format from encoder's supported formats
+                    var opusFormat = _screenAudioEncoder.SupportedFormats.FirstOrDefault(f => f.FormatName == "OPUS");
+                    _screenAudioTimestamp = 0;
+                    if (!string.IsNullOrEmpty(opusFormat.FormatName))
+                    {
+                        _screenAudioFormat = opusFormat;
+                        Console.WriteLine($"WebRTC: Screen audio encoder initialized ({opusFormat.FormatName} {opusFormat.ClockRate}Hz)");
+                    }
+                    else
+                    {
+                        Console.WriteLine("WebRTC: Warning - Opus format not available for screen audio");
+                    }
+                }
 
                 Console.WriteLine($"WebRTC: Using MiscordCapture: {miscordCapturePath} {args}");
 
@@ -1877,8 +1987,12 @@ public class WebRtcService : IWebRtcService
         {
             args.Add($"--window {source.Id}");
         }
-        // Note: Application capture (--app) is supported by MiscordCapture but not yet
-        // exposed in the UI. Would need to add ScreenCaptureSourceType.Application.
+        else if (source.Type == ScreenCaptureSourceType.Application)
+        {
+            // Use bundleId for application capture (captures all windows of the app)
+            var bundleId = source.BundleId ?? source.Id;
+            args.Add($"--app {bundleId}");
+        }
 
         // Resolution and framerate
         args.Add($"--width {width}");
@@ -1956,9 +2070,8 @@ public class WebRtcService : IWebRtcService
                     Console.WriteLine($"WebRTC: Screen audio packet {audioPacketCount}, samples={sampleCount}, ts={timestamp}");
                 }
 
-                // TODO: Process the audio - either mix with mic or send separately
-                // For now, just log that we received it
-                // ProcessScreenShareAudio(audioBuffer, sampleCount, timestamp);
+                // Process and send screen audio (resample, encode, transmit)
+                ProcessScreenShareAudio(audioBuffer, sampleCount);
             }
         }
         catch (Exception ex)
@@ -1970,6 +2083,80 @@ public class WebRtcService : IWebRtcService
         }
 
         Console.WriteLine($"WebRTC: Screen audio loop ended after {audioPacketCount} packets");
+    }
+
+    /// <summary>
+    /// Processes screen share audio: encodes 48kHz stereo PCM to Opus and sends via dedicated screen audio track.
+    /// Uses SendRtpRaw with screen audio SSRC to keep it separate from microphone audio.
+    /// </summary>
+    private void ProcessScreenShareAudio(byte[] pcmData, uint sampleCount)
+    {
+        if (_serverConnection == null || _screenAudioEncoder == null || !_screenAudioFormat.HasValue || pcmData.Length == 0) return;
+        if (_screenAudioSsrc == 0)
+        {
+            Console.WriteLine("WebRTC: Screen audio SSRC not initialized, skipping audio packet");
+            return;
+        }
+
+        var format = _screenAudioFormat.Value;
+
+        // Input: 48kHz stereo 16-bit PCM (4 bytes per frame: 2 channels × 2 bytes per sample)
+        // Output: Opus at 48kHz stereo
+
+        // Convert byte array to short array for Opus encoder
+        // Each stereo frame = 4 bytes (2 bytes left + 2 bytes right)
+        int totalSamples = (int)(sampleCount * ScreenAudioChannels); // Interleaved stereo samples
+        var pcmSamples = new short[totalSamples];
+
+        for (int i = 0; i < totalSamples && i * 2 + 1 < pcmData.Length; i++)
+        {
+            // Read as little-endian 16-bit
+            pcmSamples[i] = (short)(pcmData[i * 2] | (pcmData[i * 2 + 1] << 8));
+        }
+
+        // Process in 20ms chunks (960 samples per channel at 48kHz = 1920 interleaved samples)
+        const int samplesPerChannel = ScreenAudioSampleRate * AudioPacketDurationMs / 1000;  // 960
+        const int samplesPerPacket = samplesPerChannel * ScreenAudioChannels;                // 1920
+
+        // Screen audio uses payload type 112 to distinguish from microphone audio (PT 111)
+        // Both use Opus codec but server routes them differently
+        const int ScreenAudioPayloadType = 112;
+
+        int offset = 0;
+        while (offset + samplesPerPacket <= pcmSamples.Length)
+        {
+            // Extract one packet's worth of samples
+            var packetSamples = new short[samplesPerPacket];
+            Array.Copy(pcmSamples, offset, packetSamples, 0, samplesPerPacket);
+
+            try
+            {
+                // Encode to Opus
+                var opusData = _screenAudioEncoder.EncodeAudio(packetSamples, format);
+
+                if (opusData != null && opusData.Length > 0)
+                {
+                    // Send screen audio with payload type 112 to distinguish from mic audio (PT 111)
+                    // The server will detect PT 112 and track it as screen audio SSRC
+                    _serverConnection.SendRtpRaw(
+                        SDPMediaTypesEnum.audio,
+                        opusData,
+                        _screenAudioTimestamp,
+                        1,  // Marker bit (1 for each audio packet)
+                        ScreenAudioPayloadType);
+
+                    // RTP timestamp increments by samples-per-channel at 48kHz
+                    // For 20ms at 48kHz: 960 samples
+                    _screenAudioTimestamp += (uint)samplesPerChannel;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"WebRTC: Error encoding/sending screen audio: {ex.Message}");
+            }
+
+            offset += samplesPerPacket;
+        }
     }
 
     private void ScreenCaptureLoop(CancellationToken token, int width, int height, int fps)
@@ -2105,6 +2292,10 @@ public class WebRtcService : IWebRtcService
             _screenEncoder.Dispose();
             _screenEncoder = null;
         }
+
+        // Clean up screen audio encoder
+        _screenAudioEncoder = null;
+        _screenAudioFormat = null;
 
         Console.WriteLine("WebRTC: Screen capture stopped");
     }

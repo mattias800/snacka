@@ -180,7 +180,7 @@ public class AudioDeviceService : IAudioDeviceService
         {
             EnsureSdl2Initialized();
 
-            var audioEncoder = new AudioEncoder();
+            var audioEncoder = new AudioEncoder(includeOpus: true);
             _testAudioSource = new SDL2AudioSource(deviceName ?? string.Empty, audioEncoder);
 
             // Subscribe to raw audio samples for RMS calculation
@@ -192,11 +192,13 @@ public class AudioDeviceService : IAudioDeviceService
                 Console.WriteLine($"AudioDeviceService: Audio source error: {error}");
             };
 
-            // Set audio format before starting - required for SDL2AudioSource to work
+            // Set audio format before starting - prefer Opus for high quality (48kHz)
             var formats = _testAudioSource.GetAudioSourceFormats();
             if (formats.Count > 0)
             {
-                var selectedFormat = formats.FirstOrDefault(f => f.FormatName == "PCMU");
+                var selectedFormat = formats.FirstOrDefault(f => f.FormatName == "OPUS");
+                if (selectedFormat.FormatName == null)
+                    selectedFormat = formats.FirstOrDefault(f => f.FormatName == "PCMU");
                 if (selectedFormat.FormatName == null)
                     selectedFormat = formats[0];
                 _testAudioSource.SetAudioSourceFormat(selectedFormat);
@@ -223,7 +225,7 @@ public class AudioDeviceService : IAudioDeviceService
             {
                 if (_testAudioSink == null)
                 {
-                    var audioEncoder = new AudioEncoder();
+                    var audioEncoder = new AudioEncoder(includeOpus: true);
                     _testAudioSink = new SDL2AudioEndPoint(outputDevice ?? string.Empty, audioEncoder);
 
                     // Set same format as source

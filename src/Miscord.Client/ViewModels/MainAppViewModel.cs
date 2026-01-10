@@ -2773,10 +2773,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             IsCameraOn = false;
             _currentScreenShareSettings = settings;
 
-            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: true, IsCameraOn: false));
+            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: true, ScreenShareHasAudio: settings.IncludeAudio, IsCameraOn: false));
 
             // Update our own state in the local view models
-            var state = new VoiceStateUpdate(IsScreenSharing: true, IsCameraOn: false);
+            var state = new VoiceStateUpdate(IsScreenSharing: true, ScreenShareHasAudio: settings.IncludeAudio, IsCameraOn: false);
             var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
             voiceChannel?.UpdateParticipantState(_auth.UserId, state);
             _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
@@ -2808,10 +2808,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             IsScreenSharing = false;
             _currentScreenShareSettings = null;
 
-            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: false));
+            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: false, ScreenShareHasAudio: false));
 
             // Update our own state in the local view models
-            var state = new VoiceStateUpdate(IsScreenSharing: false);
+            var state = new VoiceStateUpdate(IsScreenSharing: false, ScreenShareHasAudio: false);
             var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
             voiceChannel?.UpdateParticipantState(_auth.UserId, state);
             _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);

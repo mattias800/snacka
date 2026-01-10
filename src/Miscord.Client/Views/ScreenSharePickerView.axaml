@@ -51,6 +51,17 @@
                     <TextBlock Text="Windows" FontWeight="Medium"/>
                 </ToggleButton>
 
+                <ToggleButton IsChecked="{Binding ShowApplications}"
+                              Background="Transparent"
+                              Foreground="{Binding ShowApplications, Converter={StaticResource BoolToForegroundConverter}}"
+                              Padding="16,8"
+                              CornerRadius="4"
+                              BorderThickness="0"
+                              Cursor="Hand"
+                              IsVisible="{Binding HasApplications}">
+                    <TextBlock Text="Apps" FontWeight="Medium"/>
+                </ToggleButton>
+
                 <Button Command="{Binding RefreshCommand}"
                         Background="Transparent"
                         Padding="8"
@@ -63,7 +74,7 @@
             </StackPanel>
 
             <!-- Quality Settings -->
-            <Grid Grid.Row="2" ColumnDefinitions="*,16,*" Margin="0,0,0,16">
+            <Grid Grid.Row="2" ColumnDefinitions="*,16,*,16,Auto" Margin="0,0,0,16">
                 <StackPanel Grid.Column="0">
                     <TextBlock Text="Resolution"
                                Foreground="#b9bbbe"
@@ -104,6 +115,16 @@
                             </DataTemplate>
                         </ComboBox.ItemTemplate>
                     </ComboBox>
+                </StackPanel>
+
+                <!-- Audio checkbox (macOS only) -->
+                <StackPanel Grid.Column="4" VerticalAlignment="Bottom"
+                            IsVisible="{Binding CanCaptureAudio}">
+                    <CheckBox IsChecked="{Binding IncludeAudio}"
+                              Foreground="#b9bbbe"
+                              Cursor="Hand">
+                        <TextBlock Text="Share audio" Foreground="#b9bbbe" FontSize="13"/>
+                    </CheckBox>
                 </StackPanel>
             </Grid>
 
@@ -197,6 +218,49 @@
                                                        FontSize="11"
                                                        IsVisible="{Binding AppName, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
                                         </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ListBox.ItemTemplate>
+                    </ListBox>
+
+                    <!-- Applications List -->
+                    <ListBox ItemsSource="{Binding Applications}"
+                             SelectedItem="{Binding SelectedSource}"
+                             IsVisible="{Binding ShowApplications}"
+                             Background="Transparent"
+                             BorderThickness="0">
+                        <ListBox.Styles>
+                            <Style Selector="ListBoxItem">
+                                <Setter Property="Padding" Value="0"/>
+                                <Setter Property="Margin" Value="0,0,0,8"/>
+                                <Setter Property="Background" Value="#40444b"/>
+                                <Setter Property="CornerRadius" Value="4"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:selected /template/ ContentPresenter">
+                                <Setter Property="Background" Value="#5865f2"/>
+                            </Style>
+                            <Style Selector="ListBoxItem:pointerover /template/ ContentPresenter">
+                                <Setter Property="Background" Value="#4752c4"/>
+                            </Style>
+                        </ListBox.Styles>
+                        <ListBox.ItemTemplate>
+                            <DataTemplate x:DataType="services:ScreenCaptureSource">
+                                <Border Padding="12">
+                                    <StackPanel Orientation="Horizontal" Spacing="12">
+                                        <Border Background="#faa61a"
+                                                CornerRadius="4"
+                                                Width="48"
+                                                Height="32">
+                                            <TextBlock Text="📦"
+                                                       FontSize="16"
+                                                       HorizontalAlignment="Center"
+                                                       VerticalAlignment="Center"/>
+                                        </Border>
+                                        <TextBlock Text="{Binding Name}"
+                                                   Foreground="#ffffff"
+                                                   VerticalAlignment="Center"
+                                                   FontSize="14"/>
                                     </StackPanel>
                                 </Border>
                             </DataTemplate>

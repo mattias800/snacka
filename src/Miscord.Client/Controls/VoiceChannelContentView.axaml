@@ -161,7 +161,7 @@
                                             Background="#2f3136"
                                             Padding="10,8"
                                             CornerRadius="0,0,8,8">
-                                        <Grid ColumnDefinitions="*,Auto">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
                                             <!-- Left: Username and stream label -->
                                             <StackPanel Grid.Column="0"
                                                         Orientation="Horizontal"
@@ -172,7 +172,7 @@
                                                            FontSize="13"
                                                            FontWeight="SemiBold"
                                                            VerticalAlignment="Center"
-                                                           MaxWidth="160"
+                                                           MaxWidth="100"
                                                            TextTrimming="CharacterEllipsis"/>
                                                 <Border Background="#5865f2"
                                                         CornerRadius="3"
@@ -186,8 +186,31 @@
                                                 </Border>
                                             </StackPanel>
 
-                                            <!-- Right: Action buttons (only for screen shares when watching) -->
+                                            <!-- Center: Volume slider for streams with audio -->
                                             <StackPanel Grid.Column="1"
+                                                        Orientation="Horizontal"
+                                                        Spacing="4"
+                                                        HorizontalAlignment="Center"
+                                                        VerticalAlignment="Center"
+                                                        IsVisible="{Binding HasAudio}">
+                                                <TextBlock Text="🔊"
+                                                           Foreground="#b9bbbe"
+                                                           FontSize="11"
+                                                           VerticalAlignment="Center"/>
+                                                <Slider Width="70"
+                                                        Minimum="0"
+                                                        Maximum="200"
+                                                        Value="{Binding VolumePercent}"
+                                                        VerticalAlignment="Center"/>
+                                                <TextBlock Text="{Binding VolumePercent, StringFormat={}{0}%}"
+                                                           Foreground="#b9bbbe"
+                                                           FontSize="10"
+                                                           Width="30"
+                                                           VerticalAlignment="Center"/>
+                                            </StackPanel>
+
+                                            <!-- Right: Action buttons (only for screen shares when watching) -->
+                                            <StackPanel Grid.Column="2"
                                                         Orientation="Horizontal"
                                                         Spacing="4"
                                                         VerticalAlignment="Center">

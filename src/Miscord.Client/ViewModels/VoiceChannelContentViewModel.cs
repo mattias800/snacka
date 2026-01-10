@@ -22,13 +22,23 @@ public class VideoStreamViewModel : ReactiveObject
     private bool _isWatching;
     private IHardwareVideoDecoder? _hardwareDecoder;
     private readonly Guid _localUserId;
+    private bool _hasAudio;
+    private float _volume = 1.0f;
+    private Action<Guid, VideoStreamType, float>? _onVolumeChanged;
 
     public VideoStreamViewModel(Guid userId, string username, VideoStreamType streamType, Guid localUserId)
+        : this(userId, username, streamType, localUserId, null)
+    {
+    }
+
+    public VideoStreamViewModel(Guid userId, string username, VideoStreamType streamType, Guid localUserId,
+        Action<Guid, VideoStreamType, float>? onVolumeChanged)
     {
         UserId = userId;
         Username = username;
         StreamType = streamType;
         _localUserId = localUserId;
+        _onVolumeChanged = onVolumeChanged;
 
         // Local user's streams are always "watching" (they see their own preview)
         // Camera streams from remote users are auto-watched (no opt-in needed)
@@ -124,6 +134,44 @@ public class VideoStreamViewModel : ReactiveObject
         }
     }
 
+    /// <summary>
+    /// Whether this stream has audio that can be heard by viewers.
+    /// True for screen shares with audio enabled.
+    /// </summary>
+    public bool HasAudio
+    {
+        get => _hasAudio;
+        set => this.RaiseAndSetIfChanged(ref _hasAudio, value);
+    }
+
+    /// <summary>
+    /// Volume level for this stream's audio (0.0 to 2.0, where 1.0 = 100%).
+    /// Only relevant when HasAudio is true.
+    /// </summary>
+    public float Volume
+    {
+        get => _volume;
+        set
+        {
+            var clamped = Math.Clamp(value, 0f, 2f);
+            if (Math.Abs(_volume - clamped) > 0.001f)
+            {
+                this.RaiseAndSetIfChanged(ref _volume, clamped);
+                this.RaisePropertyChanged(nameof(VolumePercent));
+                _onVolumeChanged?.Invoke(UserId, StreamType, clamped);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Volume as a percentage (0-200%) for UI binding.
+    /// </summary>
+    public int VolumePercent
+    {
+        get => (int)(_volume * 100);
+        set => Volume = value / 100f;
+    }
+
     public WriteableBitmap? VideoBitmap
     {
         get => _videoBitmap;
@@ -198,6 +246,7 @@ public class ParticipantInfo
     public bool IsDeafened { get; set; }
     public bool IsCameraOn { get; set; }
     public bool IsScreenSharing { get; set; }
+    public bool ScreenShareHasAudio { get; set; }
     public bool IsSpeaking { get; set; }
 }
 
@@ -224,6 +273,30 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         _webRtc.VideoFrameReceived += OnVideoFrameReceived;
         _webRtc.LocalVideoFrameCaptured += OnLocalVideoFrameCaptured;
         _webRtc.HardwareDecoderReady += OnHardwareDecoderReady;
+    }
+
+    /// <summary>
+    /// Callback for when a video stream's volume is changed by the user.
+    /// </summary>
+    private void OnStreamVolumeChanged(Guid userId, VideoStreamType streamType, float volume)
+    {
+        // All audio from a user goes through the same mixer, so we just set the user volume
+        // (both mic and screen share audio use the same per-user volume setting)
+        _webRtc.SetUserVolume(userId, volume);
+        Console.WriteLine($"VoiceChannelContent: Set volume for user {userId} ({streamType}) to {volume:P0}");
+    }
+
+    /// <summary>
+    /// Creates a VideoStreamViewModel with the volume callback wired up.
+    /// </summary>
+    private VideoStreamViewModel CreateVideoStream(Guid userId, string username, VideoStreamType streamType)
+    {
+        var stream = new VideoStreamViewModel(userId, username, streamType, _localUserId, OnStreamVolumeChanged);
+
+        // Set initial volume from saved settings
+        stream.Volume = _webRtc.GetUserVolume(userId);
+
+        return stream;
     }
 
     public ChannelResponse? Channel
@@ -266,17 +339,20 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
                     IsMuted = p.IsMuted,
                     IsDeafened = p.IsDeafened,
                     IsCameraOn = p.IsCameraOn,
-                    IsScreenSharing = p.IsScreenSharing
+                    IsScreenSharing = p.IsScreenSharing,
+                    ScreenShareHasAudio = p.ScreenShareHasAudio
                 };
                 _participants[p.UserId] = info;
 
                 // Every participant always has a camera stream (shows avatar when camera off, video when on)
-                VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.Camera, _localUserId));
+                VideoStreams.Add(CreateVideoStream(p.UserId, p.Username, VideoStreamType.Camera));
 
                 // Screen share adds a second stream
                 if (p.IsScreenSharing)
                 {
-                    VideoStreams.Add(new VideoStreamViewModel(p.UserId, p.Username, VideoStreamType.ScreenShare, _localUserId));
+                    var screenStream = CreateVideoStream(p.UserId, p.Username, VideoStreamType.ScreenShare);
+                    screenStream.HasAudio = p.ScreenShareHasAudio;
+                    VideoStreams.Add(screenStream);
                 }
             }
         });
@@ -296,17 +372,20 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
                 IsMuted = participant.IsMuted,
                 IsDeafened = participant.IsDeafened,
                 IsCameraOn = participant.IsCameraOn,
-                IsScreenSharing = participant.IsScreenSharing
+                IsScreenSharing = participant.IsScreenSharing,
+                ScreenShareHasAudio = participant.ScreenShareHasAudio
             };
             _participants[participant.UserId] = info;
 
             // Every participant always has a camera stream (shows avatar when camera off, video when on)
-            VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.Camera, _localUserId));
+            VideoStreams.Add(CreateVideoStream(participant.UserId, participant.Username, VideoStreamType.Camera));
 
             // Screen share adds a second stream
             if (participant.IsScreenSharing)
             {
-                VideoStreams.Add(new VideoStreamViewModel(participant.UserId, participant.Username, VideoStreamType.ScreenShare, _localUserId));
+                var screenStream = CreateVideoStream(participant.UserId, participant.Username, VideoStreamType.ScreenShare);
+                screenStream.HasAudio = participant.ScreenShareHasAudio;
+                VideoStreams.Add(screenStream);
             }
         });
     }
@@ -351,6 +430,12 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
                 }
             }
 
+            // Track audio flag if provided
+            if (state.ScreenShareHasAudio.HasValue)
+            {
+                info.ScreenShareHasAudio = state.ScreenShareHasAudio.Value;
+            }
+
             // Handle screen share state change - add/remove the screen share stream
             if (state.IsScreenSharing.HasValue)
             {
@@ -362,8 +447,10 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
                     // Screen share turned on - add stream
                     if (!VideoStreams.Any(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare))
                     {
-                        Console.WriteLine($"VoiceChannelContent: Adding ScreenShare stream for user {userId} ({username})");
-                        VideoStreams.Add(new VideoStreamViewModel(userId, username, VideoStreamType.ScreenShare, _localUserId));
+                        Console.WriteLine($"VoiceChannelContent: Adding ScreenShare stream for user {userId} ({username}), HasAudio={info.ScreenShareHasAudio}");
+                        var screenStream = CreateVideoStream(userId, username, VideoStreamType.ScreenShare);
+                        screenStream.HasAudio = info.ScreenShareHasAudio;
+                        VideoStreams.Add(screenStream);
                     }
                 }
                 else if (!state.IsScreenSharing.Value && wasScreenSharing)
@@ -374,6 +461,16 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
                     {
                         VideoStreams.Remove(stream);
                     }
+                }
+            }
+
+            // Update HasAudio on existing screen share stream if audio flag changed
+            if (state.ScreenShareHasAudio.HasValue)
+            {
+                var screenStream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare);
+                if (screenStream != null)
+                {
+                    screenStream.HasAudio = state.ScreenShareHasAudio.Value;
                 }
             }
 

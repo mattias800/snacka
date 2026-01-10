@@ -1,23 +1,76 @@
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.Json;
+using System.Text.Json.Serialization;
 using System.Text.RegularExpressions;
 
 namespace Miscord.Client.Services;
 
+#region MiscordCapture JSON Models
+
+internal record MiscordCaptureSourceList(
+    [property: JsonPropertyName("displays")] List<MiscordCaptureDisplay> Displays,
+    [property: JsonPropertyName("windows")] List<MiscordCaptureWindow> Windows,
+    [property: JsonPropertyName("applications")] List<MiscordCaptureApplication> Applications
+);
+
+internal record MiscordCaptureDisplay(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("width")] int Width,
+    [property: JsonPropertyName("height")] int Height
+);
+
+internal record MiscordCaptureWindow(
+    [property: JsonPropertyName("id")] string Id,
+    [property: JsonPropertyName("name")] string Name,
+    [property: JsonPropertyName("appName")] string AppName,
+    [property: JsonPropertyName("bundleId")] string? BundleId
+);
+
+internal record MiscordCaptureApplication(
+    [property: JsonPropertyName("bundleId")] string BundleId,
+    [property: JsonPropertyName("name")] string Name
+);
+
+#endregion
+
 /// <summary>
-/// Cross-platform service for enumerating screen capture sources (displays and windows).
-/// - macOS: Displays only (window capture requires complex CGDisplayStream API)
+/// Cross-platform service for enumerating screen capture sources (displays, windows, and applications).
+/// - macOS: Displays, windows, and applications via MiscordCapture (ScreenCaptureKit)
 /// - Windows: Displays and windows
 /// - Linux: Displays and windows
 /// </summary>
 public class ScreenCaptureService : IScreenCaptureService
 {
+    private MiscordCaptureSourceList? _cachedMacOSSources;
+    private string? _miscordCapturePath;
     public IReadOnlyList<ScreenCaptureSource> GetAvailableSources()
     {
+        // On macOS, try to get all sources at once via MiscordCapture
+        if (OperatingSystem.IsMacOS())
+        {
+            RefreshMacOSSources();
+        }
+
         var sources = new List<ScreenCaptureSource>();
         sources.AddRange(GetDisplays());
         sources.AddRange(GetWindows());
+        sources.AddRange(GetApplications());
         return sources;
+    }
+
+    public IReadOnlyList<ScreenCaptureSource> GetApplications()
+    {
+        Console.WriteLine("ScreenCaptureService: Enumerating applications...");
+
+        if (OperatingSystem.IsMacOS())
+        {
+            return GetApplicationsMacOS();
+        }
+
+        // Application capture is currently macOS only via ScreenCaptureKit
+        return Array.Empty<ScreenCaptureSource>();
     }
 
     public IReadOnlyList<ScreenCaptureSource> GetDisplays()
@@ -44,13 +97,10 @@ public class ScreenCaptureService : IScreenCaptureService
     {
         Console.WriteLine("ScreenCaptureService: Enumerating windows...");
 
-        // Skip window enumeration on macOS (complex API, most games are on Windows)
         if (OperatingSystem.IsMacOS())
         {
-            Console.WriteLine("ScreenCaptureService: Window capture not supported on macOS");
-            return Array.Empty<ScreenCaptureSource>();
+            return GetWindowsMacOS();
         }
-
         if (OperatingSystem.IsWindows())
         {
             return GetWindowsWindows();
@@ -65,11 +115,186 @@ public class ScreenCaptureService : IScreenCaptureService
 
     #region macOS Implementation
 
-    private IReadOnlyList<ScreenCaptureSource> GetDisplaysMacOS()
+    /// <summary>
+    /// Gets the path to MiscordCapture binary if available.
+    /// </summary>
+    private string? GetMiscordCapturePath()
     {
+        if (_miscordCapturePath != null)
+            return _miscordCapturePath;
+
+        var appDir = AppDomain.CurrentDomain.BaseDirectory;
+
+        var searchPaths = new[]
+        {
+            Path.Combine(appDir, "MiscordCapture"),
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "release", "MiscordCapture"),
+            Path.Combine(appDir, "..", "MiscordCapture", ".build", "debug", "MiscordCapture"),
+            Path.Combine(appDir, "..", "..", "..", "..", "MiscordCapture", ".build", "debug", "MiscordCapture"),
+        };
+
+        foreach (var path in searchPaths)
+        {
+            var fullPath = Path.GetFullPath(path);
+            if (File.Exists(fullPath))
+            {
+                Console.WriteLine($"ScreenCaptureService: Found MiscordCapture at {fullPath}");
+                _miscordCapturePath = fullPath;
+                return fullPath;
+            }
+        }
+
+        Console.WriteLine("ScreenCaptureService: MiscordCapture not found");
+        return null;
+    }
+
+    /// <summary>
+    /// Refreshes the cached macOS sources by running MiscordCapture list --json.
+    /// </summary>
+    private void RefreshMacOSSources()
+    {
+        var miscordPath = GetMiscordCapturePath();
+        if (miscordPath == null)
+        {
+            _cachedMacOSSources = null;
+            return;
+        }
+
         try
         {
-            // Use Swift to enumerate displays via CoreGraphics
+            var psi = new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = miscordPath,
+                Arguments = "list --json",
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                UseShellExecute = false,
+                CreateNoWindow = true
+            };
+
+            using var process = System.Diagnostics.Process.Start(psi);
+            if (process == null)
+            {
+                _cachedMacOSSources = null;
+                return;
+            }
+
+            var output = process.StandardOutput.ReadToEnd();
+            var stderr = process.StandardError.ReadToEnd();
+            process.WaitForExit(10000);
+
+            if (!string.IsNullOrEmpty(stderr))
+            {
+                Console.WriteLine($"ScreenCaptureService: MiscordCapture stderr: {stderr}");
+            }
+
+            if (process.ExitCode != 0)
+            {
+                Console.WriteLine($"ScreenCaptureService: MiscordCapture exited with code {process.ExitCode}");
+                _cachedMacOSSources = null;
+                return;
+            }
+
+            _cachedMacOSSources = JsonSerializer.Deserialize<MiscordCaptureSourceList>(output);
+            Console.WriteLine($"ScreenCaptureService: MiscordCapture found {_cachedMacOSSources?.Displays.Count ?? 0} displays, " +
+                              $"{_cachedMacOSSources?.Windows.Count ?? 0} windows, " +
+                              $"{_cachedMacOSSources?.Applications.Count ?? 0} applications");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"ScreenCaptureService: Failed to get sources via MiscordCapture - {ex.Message}");
+            _cachedMacOSSources = null;
+        }
+    }
+
+    private IReadOnlyList<ScreenCaptureSource> GetDisplaysMacOS()
+    {
+        // Try to use MiscordCapture if available
+        if (_cachedMacOSSources != null)
+        {
+            var displays = _cachedMacOSSources.Displays.Select(d =>
+                new ScreenCaptureSource(
+                    ScreenCaptureSourceType.Display,
+                    d.Id,
+                    $"{d.Name} ({d.Width}x{d.Height})"
+                )).ToList();
+
+            foreach (var d in displays)
+                Console.WriteLine($"  - {d.Name}");
+
+            Console.WriteLine($"ScreenCaptureService: Found {displays.Count} displays via MiscordCapture (macOS)");
+            return displays;
+        }
+
+        // Fallback to Swift/CoreGraphics
+        return GetDisplaysMacOSFallback();
+    }
+
+    private IReadOnlyList<ScreenCaptureSource> GetWindowsMacOS()
+    {
+        // Use MiscordCapture if available
+        if (_cachedMacOSSources != null)
+        {
+            var windows = _cachedMacOSSources.Windows.Select(w =>
+            {
+                var displayName = string.IsNullOrEmpty(w.AppName)
+                    ? w.Name
+                    : $"{w.AppName}: {w.Name}";
+
+                // Truncate long titles
+                if (displayName.Length > 60)
+                    displayName = displayName.Substring(0, 57) + "...";
+
+                return new ScreenCaptureSource(
+                    ScreenCaptureSourceType.Window,
+                    w.Id,
+                    displayName,
+                    w.AppName,
+                    w.BundleId
+                );
+            }).ToList();
+
+            Console.WriteLine($"ScreenCaptureService: Found {windows.Count} windows via MiscordCapture (macOS)");
+            return windows;
+        }
+
+        // Window enumeration without MiscordCapture is not supported on macOS
+        Console.WriteLine("ScreenCaptureService: Window enumeration requires MiscordCapture on macOS");
+        return Array.Empty<ScreenCaptureSource>();
+    }
+
+    private IReadOnlyList<ScreenCaptureSource> GetApplicationsMacOS()
+    {
+        // Use MiscordCapture if available
+        if (_cachedMacOSSources != null)
+        {
+            var apps = _cachedMacOSSources.Applications
+                .Where(a => !string.IsNullOrEmpty(a.Name))
+                .Select(a => new ScreenCaptureSource(
+                    ScreenCaptureSourceType.Application,
+                    a.BundleId,  // Use bundleId as the ID for application capture
+                    a.Name,
+                    a.Name,
+                    a.BundleId
+                ))
+                .OrderBy(a => a.Name)
+                .ToList();
+
+            Console.WriteLine($"ScreenCaptureService: Found {apps.Count} applications via MiscordCapture (macOS)");
+            return apps;
+        }
+
+        // Application enumeration without MiscordCapture is not supported
+        Console.WriteLine("ScreenCaptureService: Application enumeration requires MiscordCapture on macOS");
+        return Array.Empty<ScreenCaptureSource>();
+    }
+
+    private IReadOnlyList<ScreenCaptureSource> GetDisplaysMacOSFallback()
+    {
+        // Try Swift/CoreGraphics
+        try
+        {
             var swiftCode = @"import CoreGraphics
 var displayCount: UInt32 = 0
 CGGetActiveDisplayList(0, nil, &displayCount)
@@ -99,23 +324,16 @@ for (i, display) in displays.enumerated() {
                 };
 
                 using var process = System.Diagnostics.Process.Start(psi);
-                if (process == null) return GetDisplaysMacOSFallback();
+                if (process == null) return GetDisplaysMacOSSimpleFallback();
 
                 var output = process.StandardOutput.ReadToEnd();
-                var stderr = process.StandardError.ReadToEnd();
                 process.WaitForExit(15000);
-
-                if (!string.IsNullOrEmpty(stderr))
-                {
-                    Console.WriteLine($"ScreenCaptureService: Swift stderr: {stderr}");
-                }
 
                 var displays = new List<ScreenCaptureSource>();
                 var lines = output.Split('\n', StringSplitOptions.RemoveEmptyEntries);
 
                 foreach (var line in lines)
                 {
-                    // Format: index:displayId:widthxheight (Main)
                     var parts = line.Split(':', 3);
                     if (parts.Length >= 3 && int.TryParse(parts[0], out var index))
                     {
@@ -141,13 +359,13 @@ for (i, display) in displays.enumerated() {
         catch (Exception ex)
         {
             Console.WriteLine($"ScreenCaptureService: macOS display enumeration failed - {ex.Message}");
-            return GetDisplaysMacOSFallback();
+            return GetDisplaysMacOSSimpleFallback();
         }
     }
 
-    private IReadOnlyList<ScreenCaptureSource> GetDisplaysMacOSFallback()
+    private IReadOnlyList<ScreenCaptureSource> GetDisplaysMacOSSimpleFallback()
     {
-        // Fallback: assume at least one display exists
+        // Simple fallback: assume at least one display exists
         Console.WriteLine("ScreenCaptureService: Using fallback (1 display)");
         return new[]
         {

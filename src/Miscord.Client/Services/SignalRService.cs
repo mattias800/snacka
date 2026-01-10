@@ -102,6 +102,7 @@ public interface ISignalRService : IAsyncDisposable
 
     // SSRC mapping events (for per-user volume control)
     event Action<SsrcMappingEvent>? UserAudioSsrcMapped;
+    event Action<ScreenAudioSsrcMappingEvent>? UserScreenAudioSsrcMapped;
     event Action<SsrcMappingBatchEvent>? SsrcMappingsBatchReceived;
 
     // Thread events
@@ -175,6 +176,7 @@ public class SignalRService : ISignalRService
 
     // SSRC mapping events (for per-user volume control)
     public event Action<SsrcMappingEvent>? UserAudioSsrcMapped;
+    public event Action<ScreenAudioSsrcMappingEvent>? UserScreenAudioSsrcMapped;
     public event Action<SsrcMappingBatchEvent>? SsrcMappingsBatchReceived;
 
     // Thread events
@@ -624,8 +626,14 @@ public class SignalRService : ISignalRService
         // SSRC mapping events (for per-user volume control)
         _hubConnection.On<SsrcMappingEvent>("UserAudioSsrcMapped", e =>
         {
-            Console.WriteLine($"SignalR: UserAudioSsrcMapped - user {e.UserId} has SSRC {e.AudioSsrc} in channel {e.ChannelId}");
+            Console.WriteLine($"SignalR: UserAudioSsrcMapped - user {e.UserId} has mic SSRC {e.AudioSsrc} in channel {e.ChannelId}");
             UserAudioSsrcMapped?.Invoke(e);
+        });
+
+        _hubConnection.On<ScreenAudioSsrcMappingEvent>("UserScreenAudioSsrcMapped", e =>
+        {
+            Console.WriteLine($"SignalR: UserScreenAudioSsrcMapped - user {e.UserId} has screen audio SSRC {e.ScreenAudioSsrc} in channel {e.ChannelId}");
+            UserScreenAudioSsrcMapped?.Invoke(e);
         });
 
         _hubConnection.On<SsrcMappingBatchEvent>("SsrcMappingsBatch", e =>

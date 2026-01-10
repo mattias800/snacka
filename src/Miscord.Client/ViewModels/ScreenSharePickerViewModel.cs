@@ -12,9 +12,11 @@ public class ScreenSharePickerViewModel : ViewModelBase
 
     private bool _showDisplays = true;
     private bool _showWindows;
+    private bool _showApplications;
     private ScreenCaptureSource? _selectedSource;
     private ScreenShareResolution _selectedResolution;
     private ScreenShareFramerate _selectedFramerate;
+    private bool _includeAudio;
 
     public ScreenSharePickerViewModel(IScreenCaptureService screenCaptureService, Action<ScreenShareSettings?> onComplete)
     {
@@ -23,6 +25,7 @@ public class ScreenSharePickerViewModel : ViewModelBase
 
         Displays = new ObservableCollection<ScreenCaptureSource>();
         Windows = new ObservableCollection<ScreenCaptureSource>();
+        Applications = new ObservableCollection<ScreenCaptureSource>();
 
         // Default to 1080p @ 30fps (good balance for most use cases)
         _selectedResolution = ScreenShareResolution.HD1080;
@@ -38,6 +41,7 @@ public class ScreenSharePickerViewModel : ViewModelBase
 
     public ObservableCollection<ScreenCaptureSource> Displays { get; }
     public ObservableCollection<ScreenCaptureSource> Windows { get; }
+    public ObservableCollection<ScreenCaptureSource> Applications { get; }
 
     // Resolution and framerate options
     public IReadOnlyList<ScreenShareResolution> Resolutions => ScreenShareResolution.All;
@@ -63,7 +67,10 @@ public class ScreenSharePickerViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _showDisplays, value);
             if (value)
             {
-                ShowWindows = false;
+                _showWindows = false;
+                _showApplications = false;
+                this.RaisePropertyChanged(nameof(ShowWindows));
+                this.RaisePropertyChanged(nameof(ShowApplications));
             }
         }
     }
@@ -76,7 +83,26 @@ public class ScreenSharePickerViewModel : ViewModelBase
             this.RaiseAndSetIfChanged(ref _showWindows, value);
             if (value)
             {
-                ShowDisplays = false;
+                _showDisplays = false;
+                _showApplications = false;
+                this.RaisePropertyChanged(nameof(ShowDisplays));
+                this.RaisePropertyChanged(nameof(ShowApplications));
+            }
+        }
+    }
+
+    public bool ShowApplications
+    {
+        get => _showApplications;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _showApplications, value);
+            if (value)
+            {
+                _showDisplays = false;
+                _showWindows = false;
+                this.RaisePropertyChanged(nameof(ShowDisplays));
+                this.RaisePropertyChanged(nameof(ShowWindows));
             }
         }
     }
@@ -88,6 +114,19 @@ public class ScreenSharePickerViewModel : ViewModelBase
     }
 
     public bool HasWindows => Windows.Count > 0;
+    public bool HasApplications => Applications.Count > 0;
+
+    public bool IncludeAudio
+    {
+        get => _includeAudio;
+        set => this.RaiseAndSetIfChanged(ref _includeAudio, value);
+    }
+
+    /// <summary>
+    /// Whether audio capture is available on the current platform.
+    /// Currently only macOS supports audio capture via ScreenCaptureKit.
+    /// </summary>
+    public bool CanCaptureAudio => OperatingSystem.IsMacOS();
 
     public ICommand ShareCommand { get; }
     public ICommand CancelCommand { get; }
@@ -97,6 +136,7 @@ public class ScreenSharePickerViewModel : ViewModelBase
     {
         Displays.Clear();
         Windows.Clear();
+        Applications.Clear();
 
         foreach (var display in _screenCaptureService.GetDisplays())
         {
@@ -108,6 +148,11 @@ public class ScreenSharePickerViewModel : ViewModelBase
             Windows.Add(window);
         }
 
+        foreach (var app in _screenCaptureService.GetApplications())
+        {
+            Applications.Add(app);
+        }
+
         // Select first display by default
         if (Displays.Count > 0)
         {
@@ -115,13 +160,18 @@ public class ScreenSharePickerViewModel : ViewModelBase
         }
 
         this.RaisePropertyChanged(nameof(HasWindows));
+        this.RaisePropertyChanged(nameof(HasApplications));
     }
 
     private void OnShare()
     {
         if (SelectedSource != null)
         {
-            var settings = new ScreenShareSettings(SelectedSource, SelectedResolution, SelectedFramerate);
+            var settings = new ScreenShareSettings(
+                SelectedSource,
+                SelectedResolution,
+                SelectedFramerate,
+                IncludeAudio && CanCaptureAudio);
             _onComplete(settings);
         }
         else

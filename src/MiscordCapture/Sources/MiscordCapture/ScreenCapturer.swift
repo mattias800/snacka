@@ -70,8 +70,10 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
         streamConfig.width = config.width
         streamConfig.height = config.height
         streamConfig.minimumFrameInterval = CMTime(value: 1, timescale: CMTimeScale(config.fps))
-        streamConfig.pixelFormat = kCVPixelFormatType_32BGRA  // We'll convert to BGR24
+        // Use NV12 (YUV 4:2:0) - native format for H264 encoding, no conversion needed
+        streamConfig.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         streamConfig.showsCursor = true
+        fputs("MiscordCapture: Using NV12 pixel format (hardware-accelerated path)\n", stderr)
 
         // Audio settings
         if config.captureAudio {
@@ -153,48 +155,57 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
 
         let width = CVPixelBufferGetWidth(pixelBuffer)
         let height = CVPixelBufferGetHeight(pixelBuffer)
-        let bytesPerRow = CVPixelBufferGetBytesPerRow(pixelBuffer)
 
-        guard let baseAddress = CVPixelBufferGetBaseAddress(pixelBuffer) else { return }
+        // NV12 is bi-planar: Y plane (full res) + UV plane (half res interleaved)
+        // Total size: width * height * 1.5 bytes
+        guard CVPixelBufferGetPlaneCount(pixelBuffer) == 2 else {
+            fputs("MiscordCapture: Unexpected plane count: \(CVPixelBufferGetPlaneCount(pixelBuffer))\n", stderr)
+            return
+        }
 
-        // Convert BGRA to BGR24
-        // Input: BGRA (4 bytes per pixel)
-        // Output: BGR (3 bytes per pixel)
-        let outputSize = config.width * config.height * 3
-        var bgrData = Data(capacity: outputSize)
+        // Get Y plane (plane 0)
+        guard let yPlaneBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return }
+        let yBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
 
-        let srcPtr = baseAddress.assumingMemoryBound(to: UInt8.self)
+        // Get UV plane (plane 1)
+        guard let uvPlaneBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else { return }
+        let uvBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
 
-        // Handle potential scaling (if capture size differs from requested size)
-        // For now, assume sizes match or we need simple conversion
-        for y in 0..<min(height, config.height) {
-            for x in 0..<min(width, config.width) {
-                let srcOffset = y * bytesPerRow + x * 4
-                // BGRA -> BGR (skip alpha)
-                bgrData.append(srcPtr[srcOffset])     // B
-                bgrData.append(srcPtr[srcOffset + 1]) // G
-                bgrData.append(srcPtr[srcOffset + 2]) // R
+        // Calculate output size for packed NV12 (no padding)
+        let yPlaneSize = width * height
+        let uvPlaneSize = width * (height / 2)
+        let totalSize = yPlaneSize + uvPlaneSize
+
+        // Pre-allocate output buffer
+        var nv12Data = Data(count: totalSize)
+
+        nv12Data.withUnsafeMutableBytes { destBuffer in
+            let destPtr = destBuffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
+            let yPtr = yPlaneBase.assumingMemoryBound(to: UInt8.self)
+            let uvPtr = uvPlaneBase.assumingMemoryBound(to: UInt8.self)
+
+            // Copy Y plane row by row (handles stride/padding)
+            for row in 0..<height {
+                let srcOffset = row * yBytesPerRow
+                let destOffset = row * width
+                memcpy(destPtr + destOffset, yPtr + srcOffset, width)
             }
-            // Pad row if needed
-            if width < config.width {
-                let padding = (config.width - width) * 3
-                bgrData.append(contentsOf: [UInt8](repeating: 0, count: padding))
+
+            // Copy UV plane row by row (handles stride/padding)
+            let uvDestStart = yPlaneSize
+            for row in 0..<(height / 2) {
+                let srcOffset = row * uvBytesPerRow
+                let destOffset = uvDestStart + row * width
+                memcpy(destPtr + destOffset, uvPtr + srcOffset, width)
             }
         }
 
-        // Pad remaining rows if needed
-        if height < config.height {
-            let remainingRows = config.height - height
-            let rowSize = config.width * 3
-            bgrData.append(contentsOf: [UInt8](repeating: 0, count: remainingRows * rowSize))
-        }
-
-        // Write to stdout
+        // Write NV12 data to stdout - no conversion, just pass through
         do {
-            try videoOutput.write(contentsOf: bgrData)
+            try videoOutput.write(contentsOf: nv12Data)
             frameCount += 1
             if frameCount <= 5 || frameCount % 100 == 0 {
-                fputs("MiscordCapture: Video frame \(frameCount) (\(width)x\(height) -> \(config.width)x\(config.height))\n", stderr)
+                fputs("MiscordCapture: Video frame \(frameCount) (\(width)x\(height) NV12, \(totalSize) bytes)\n", stderr)
             }
         } catch {
             fputs("MiscordCapture: Error writing video frame: \(error)\n", stderr)

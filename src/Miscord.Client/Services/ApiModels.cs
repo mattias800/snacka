@@ -302,6 +302,7 @@ public record VoiceParticipantResponse(
     bool IsServerMuted,
     bool IsServerDeafened,
     bool IsScreenSharing,
+    bool ScreenShareHasAudio,
     bool IsCameraOn,
     DateTime JoinedAt
 );
@@ -310,6 +311,7 @@ public record VoiceStateUpdate(
     bool? IsMuted = null,
     bool? IsDeafened = null,
     bool? IsScreenSharing = null,
+    bool? ScreenShareHasAudio = null,
     bool? IsCameraOn = null
 );
 

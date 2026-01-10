@@ -95,8 +95,8 @@ MiscordCapture capture --window 12345 --width 1920 --height 1080 --fps 30 --audi
 ```
 
 **Integration Tasks**:
-- [ ] Update WebRtcService to detect macOS 13+ and use MiscordCapture
-- [ ] Parse audio packets from stderr
+- [x] Update WebRtcService to detect macOS 13+ and use MiscordCapture
+- [x] Parse audio packets from stderr
 - [ ] Encode and transmit screen share audio
 - [ ] Update ScreenCaptureService to use MiscordCapture for source listing
 
@@ -305,7 +305,7 @@ Compare to current: ~150-200ms (not playable for fast games)
 
 ### High Priority (Current)
 1. ✅ macOS MiscordCapture with ScreenCaptureKit
-2. ⬜ Integrate MiscordCapture with WebRtcService
+2. ✅ Integrate MiscordCapture with WebRtcService
 3. ⬜ Screen share audio transmission
 
 ### Medium Priority

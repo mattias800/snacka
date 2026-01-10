@@ -125,7 +125,7 @@ public class SfuService : ISfuService, IDisposable
         }
 
         return channelManager.GetAllSessions()
-            .Select(s => new UserSsrcMapping(s.UserId, usernameResolver(s.UserId), s.AudioSsrc))
+            .Select(s => new UserSsrcMapping(s.UserId, usernameResolver(s.UserId), s.AudioSsrc, s.ScreenAudioSsrc))
             .ToList();
     }
 

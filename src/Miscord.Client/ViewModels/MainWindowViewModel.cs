@@ -375,6 +375,9 @@ public class MainWindowViewModel : ViewModelBase
         CurrentUser = auth;
         this.RaisePropertyChanged(nameof(IsLoggedIn));
 
+        // Set the current user ID on WebRTC service so it can skip creating decoders for own streams
+        _webRtc.SetCurrentUserId(auth.UserId);
+
         // Save the credentials to the server connection
         if (CurrentServer is not null)
         {

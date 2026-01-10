@@ -12,6 +12,7 @@ public class VoiceParticipant
     public bool IsServerMuted { get; set; }     // Admin muted - user cannot unmute themselves
     public bool IsServerDeafened { get; set; }  // Admin deafened - user cannot undeafen themselves
     public bool IsScreenSharing { get; set; }
+    public bool ScreenShareHasAudio { get; set; }  // Whether the screen share includes audio
     public bool IsCameraOn { get; set; }
     public DateTime JoinedAt { get; set; } = DateTime.UtcNow;
 }

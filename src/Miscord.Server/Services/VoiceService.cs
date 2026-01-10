@@ -77,6 +77,7 @@ public class VoiceService : IVoiceService
             participant.IsServerMuted,
             participant.IsServerDeafened,
             participant.IsScreenSharing,
+            participant.ScreenShareHasAudio,
             participant.IsCameraOn,
             participant.JoinedAt
         );
@@ -124,6 +125,8 @@ public class VoiceService : IVoiceService
             participant.IsDeafened = update.IsDeafened.Value;
         if (update.IsScreenSharing.HasValue)
             participant.IsScreenSharing = update.IsScreenSharing.Value;
+        if (update.ScreenShareHasAudio.HasValue)
+            participant.ScreenShareHasAudio = update.ScreenShareHasAudio.Value;
         if (update.IsCameraOn.HasValue)
             participant.IsCameraOn = update.IsCameraOn.Value;
 
@@ -139,6 +142,7 @@ public class VoiceService : IVoiceService
             participant.IsServerMuted,
             participant.IsServerDeafened,
             participant.IsScreenSharing,
+            participant.ScreenShareHasAudio,
             participant.IsCameraOn,
             participant.JoinedAt
         );
@@ -159,6 +163,7 @@ public class VoiceService : IVoiceService
                 p.IsServerMuted,
                 p.IsServerDeafened,
                 p.IsScreenSharing,
+                p.ScreenShareHasAudio,
                 p.IsCameraOn,
                 p.JoinedAt
             ))
@@ -180,6 +185,7 @@ public class VoiceService : IVoiceService
                 p.IsServerMuted,
                 p.IsServerDeafened,
                 p.IsScreenSharing,
+                p.ScreenShareHasAudio,
                 p.IsCameraOn,
                 p.JoinedAt
             ))
@@ -225,6 +231,7 @@ public class VoiceService : IVoiceService
             participant.IsServerMuted,
             participant.IsServerDeafened,
             participant.IsScreenSharing,
+            participant.ScreenShareHasAudio,
             participant.IsCameraOn,
             participant.JoinedAt
         );
@@ -267,6 +274,7 @@ public class VoiceService : IVoiceService
             participant.IsServerMuted,
             participant.IsServerDeafened,
             participant.IsScreenSharing,
+            participant.ScreenShareHasAudio,
             participant.IsCameraOn,
             participant.JoinedAt
         );
@@ -312,6 +320,7 @@ public class VoiceService : IVoiceService
             participant.IsServerMuted,
             participant.IsServerDeafened,
             participant.IsScreenSharing,
+            participant.ScreenShareHasAudio,
             participant.IsCameraOn,
             participant.JoinedAt
         );

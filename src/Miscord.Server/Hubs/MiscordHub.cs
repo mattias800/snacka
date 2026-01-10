@@ -290,12 +290,32 @@ public class MiscordHub : Hub
                         // Broadcast to all participants in the voice channel
                         await hubContext.Clients.Group($"voice:{channelId}")
                             .SendAsync("UserAudioSsrcMapped", new SsrcMappingEvent(channelId, sess.UserId, audioSsrc));
-                        _logger.LogDebug("Broadcast audio SSRC {Ssrc} for user {UserId} in channel {ChannelId}",
+                        _logger.LogDebug("Broadcast mic audio SSRC {Ssrc} for user {UserId} in channel {ChannelId}",
                             audioSsrc, sess.UserId, channelId);
                     }
                     catch (Exception ex)
                     {
-                        _logger.LogWarning(ex, "Failed to broadcast audio SSRC for user {UserId}", sess.UserId);
+                        _logger.LogWarning(ex, "Failed to broadcast mic audio SSRC for user {UserId}", sess.UserId);
+                    }
+                });
+            };
+
+            // Subscribe to screen audio SSRC discovery - client will filter based on watching status
+            session.OnScreenAudioSsrcDiscovered += (sess, screenAudioSsrc) =>
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Broadcast to all participants in the voice channel
+                        await hubContext.Clients.Group($"voice:{channelId}")
+                            .SendAsync("UserScreenAudioSsrcMapped", new ScreenAudioSsrcMappingEvent(channelId, sess.UserId, screenAudioSsrc));
+                        _logger.LogDebug("Broadcast screen audio SSRC {Ssrc} for user {UserId} in channel {ChannelId}",
+                            screenAudioSsrc, sess.UserId, channelId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to broadcast screen audio SSRC for user {UserId}", sess.UserId);
                     }
                 });
             };

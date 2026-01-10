@@ -3,7 +3,7 @@ namespace Miscord.Client.Services;
 public interface IScreenCaptureService
 {
     /// <summary>
-    /// Gets all available screen capture sources (displays and windows).
+    /// Gets all available screen capture sources (displays, windows, and applications).
     /// </summary>
     IReadOnlyList<ScreenCaptureSource> GetAvailableSources();
 
@@ -16,4 +16,9 @@ public interface IScreenCaptureService
     /// Gets only window sources.
     /// </summary>
     IReadOnlyList<ScreenCaptureSource> GetWindows();
+
+    /// <summary>
+    /// Gets only application sources (macOS only, via ScreenCaptureKit).
+    /// </summary>
+    IReadOnlyList<ScreenCaptureSource> GetApplications();
 }

@@ -16,7 +16,8 @@ public class SfuSession : IDisposable
     private bool _disposed;
 
     // SSRC tracking for audio and dual video streams
-    private uint? _audioSsrc;
+    private uint? _audioSsrc;           // Microphone audio
+    private uint? _screenAudioSsrc;      // Screen share audio (separate from mic)
     private uint? _cameraVideoSsrc;
     private uint? _screenVideoSsrc;
 
@@ -25,9 +26,15 @@ public class SfuSession : IDisposable
     public RTCPeerConnection PeerConnection => _peerConnection;
 
     /// <summary>
-    /// The SSRC used by this client for audio.
+    /// The SSRC used by this client for microphone audio.
     /// </summary>
     public uint? AudioSsrc => _audioSsrc;
+
+    /// <summary>
+    /// The SSRC used by this client for screen share audio.
+    /// Screen audio is sent with payload type 112 to distinguish from mic audio (PT 111).
+    /// </summary>
+    public uint? ScreenAudioSsrc => _screenAudioSsrc;
 
     /// <summary>
     /// The SSRC used by this client for camera video.
@@ -75,11 +82,18 @@ public class SfuSession : IDisposable
     public event Action<RTCPeerConnectionState>? OnConnectionStateChanged;
 
     /// <summary>
-    /// Fired when the audio SSRC is discovered for this client.
+    /// Fired when the microphone audio SSRC is discovered for this client.
     /// Used for per-user volume control on clients.
     /// Args: (session, audioSsrc)
     /// </summary>
     public event Action<SfuSession, uint>? OnAudioSsrcDiscovered;
+
+    /// <summary>
+    /// Fired when the screen share audio SSRC is discovered for this client.
+    /// Screen audio should only be played when watching the user's screen share.
+    /// Args: (session, screenAudioSsrc)
+    /// </summary>
+    public event Action<SfuSession, uint>? OnScreenAudioSsrcDiscovered;
 
     public SfuSession(
         Guid userId,
@@ -125,14 +139,35 @@ public class SfuSession : IDisposable
         {
             if (media == SDPMediaTypesEnum.audio)
             {
-                // Track audio SSRC for per-user volume control
                 var ssrc = rtpPkt.Header.SyncSource;
-                if (_audioSsrc != ssrc)
+                var payloadType = rtpPkt.Header.PayloadType;
+
+                // Distinguish microphone audio (PT 111) from screen share audio (PT 112)
+                // Both use Opus codec but are sent on different payload types
+                if (payloadType == 112)
                 {
-                    _audioSsrc = ssrc;
-                    _logger.LogInformation("SFU session {UserId}: Detected audio SSRC={Ssrc}", UserId, ssrc);
-                    OnAudioSsrcDiscovered?.Invoke(this, ssrc);
+                    // Screen share audio - track separately
+                    if (_screenAudioSsrc != ssrc)
+                    {
+                        _screenAudioSsrc = ssrc;
+                        _logger.LogInformation("SFU session {UserId}: Detected screen audio SSRC={Ssrc} (PT={PayloadType})",
+                            UserId, ssrc, payloadType);
+                        OnScreenAudioSsrcDiscovered?.Invoke(this, ssrc);
+                    }
                 }
+                else
+                {
+                    // Microphone audio - track for per-user volume control
+                    if (_audioSsrc != ssrc)
+                    {
+                        _audioSsrc = ssrc;
+                        _logger.LogInformation("SFU session {UserId}: Detected mic audio SSRC={Ssrc} (PT={PayloadType})",
+                            UserId, ssrc, payloadType);
+                        OnAudioSsrcDiscovered?.Invoke(this, ssrc);
+                    }
+                }
+
+                // Forward all audio (both mic and screen) - client will filter based on watching
                 OnAudioRtpReceived?.Invoke(this, rtpPkt);
             }
             else if (media == SDPMediaTypesEnum.video)

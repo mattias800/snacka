@@ -7,7 +7,8 @@ namespace Miscord.Client.Services;
 
 /// <summary>
 /// Audio mixer that supports per-user volume control.
-/// Decodes incoming G.711 audio, applies per-user volume, and sends to audio output.
+/// Decodes incoming audio (Opus, G.711), applies per-user volume, and sends to audio output.
+/// Supports high-quality Opus at 48kHz and legacy G.711 at 8kHz.
 /// </summary>
 public interface IUserAudioMixer : IAsyncDisposable
 {
@@ -51,7 +52,7 @@ public interface IUserAudioMixer : IAsyncDisposable
 public class UserAudioMixer : IUserAudioMixer
 {
     private readonly ConcurrentDictionary<Guid, float> _userVolumes = new();
-    private readonly AudioEncoder _audioEncoder = new();
+    private readonly AudioEncoder _audioEncoder = new(includeOpus: true);  // Enable Opus support
     private SDL2AudioEndPoint? _audioOutput;
     private float _masterVolume = 1.0f;
     private const float DefaultVolume = 1.0f;
@@ -62,6 +63,9 @@ public class UserAudioMixer : IUserAudioMixer
 
     // G.711 a-law decode table (256 entries)
     private static readonly short[] ALawDecodeTable = GenerateALawDecodeTable();
+
+    // Opus format for high-quality 48kHz audio
+    private AudioFormat? _currentFormat;
 
     public async Task StartAsync(string? outputDevice = null)
     {
@@ -75,11 +79,31 @@ public class UserAudioMixer : IUserAudioMixer
             _audioOutput = new SDL2AudioEndPoint(outputDevice ?? string.Empty, _audioEncoder);
             await _audioOutput.StartAudioSink();
 
-            // Set audio format (PCMU is most common)
-            var formats = new List<AudioFormat> { new AudioFormat(SDPWellKnownMediaFormatsEnum.PCMU) };
-            _audioOutput.SetAudioSinkFormat(formats.First());
+            // Get Opus format from encoder's supported formats (48kHz)
+            // Fall back to PCMU if Opus not available
+            var supportedFormats = _audioEncoder.SupportedFormats;
+            var opusFormat = supportedFormats.FirstOrDefault(f => f.FormatName == "OPUS");
+            var pcmuFormat = supportedFormats.FirstOrDefault(f => f.FormatName == "PCMU");
 
-            Console.WriteLine($"UserAudioMixer: Started with output device '{outputDevice ?? "(default)"}'");
+            // AudioFormat is a struct, so check FormatName to see if it's valid
+            if (!string.IsNullOrEmpty(opusFormat.FormatName))
+            {
+                _currentFormat = opusFormat;
+            }
+            else if (!string.IsNullOrEmpty(pcmuFormat.FormatName))
+            {
+                _currentFormat = pcmuFormat;
+            }
+
+            if (_currentFormat.HasValue)
+            {
+                _audioOutput.SetAudioSinkFormat(_currentFormat.Value);
+                Console.WriteLine($"UserAudioMixer: Started with output device '{outputDevice ?? "(default)"}', format: {_currentFormat.Value.FormatName} ({_currentFormat.Value.ClockRate}Hz)");
+            }
+            else
+            {
+                Console.WriteLine($"UserAudioMixer: Started with output device '{outputDevice ?? "(default)"}', no format set");
+            }
         }
         catch (Exception ex)
         {
@@ -88,10 +112,18 @@ public class UserAudioMixer : IUserAudioMixer
         }
     }
 
+    // Opus payload types
+    private const int OpusMicPayloadType = 111;     // Microphone audio
+    private const int OpusScreenPayloadType = 112;  // Screen share audio
+
     public void ProcessAudioPacket(uint ssrc, Guid? userId, ushort seqNum, uint timestamp,
                                    int payloadType, bool marker, byte[] payload)
     {
         if (_audioOutput == null) return;
+
+        // Screen audio (PT 112) and mic audio (PT 111) both use Opus codec
+        // Remap PT 112 to PT 111 so the audio sink can decode it
+        var outputPayloadType = payloadType == OpusScreenPayloadType ? OpusMicPayloadType : payloadType;
 
         // Determine volume to apply
         float volume = _masterVolume;
@@ -104,37 +136,80 @@ public class UserAudioMixer : IUserAudioMixer
         if (Math.Abs(volume - 1.0f) < 0.001f)
         {
             // Pass through directly (null endpoint is OK for audio playback)
-            _audioOutput.GotAudioRtp(null!, ssrc, seqNum, timestamp, payloadType, marker, payload);
+            _audioOutput.GotAudioRtp(null!, ssrc, seqNum, timestamp, outputPayloadType, marker, payload);
             return;
         }
 
         // Apply volume by decoding, scaling, and re-encoding
         var processedPayload = ApplyVolumeToPayload(payload, payloadType, volume);
-        _audioOutput.GotAudioRtp(null!, ssrc, seqNum, timestamp, payloadType, marker, processedPayload);
+        _audioOutput.GotAudioRtp(null!, ssrc, seqNum, timestamp, outputPayloadType, marker, processedPayload);
     }
 
     private byte[] ApplyVolumeToPayload(byte[] payload, int payloadType, float volume)
     {
-        var result = new byte[payload.Length];
-
         // Payload type 0 = PCMU (mu-law), 8 = PCMA (a-law)
-        bool isMuLaw = payloadType == 0;
-        var decodeTable = isMuLaw ? MuLawDecodeTable : ALawDecodeTable;
+        // Opus payload types: 111 = microphone audio, 112 = screen audio (both use Opus codec)
+        bool isG711 = payloadType == 0 || payloadType == 8;
 
-        for (int i = 0; i < payload.Length; i++)
+        if (isG711)
         {
-            // Decode to linear PCM
-            short sample = decodeTable[payload[i]];
+            // G.711: Use fast table-based decode/encode
+            var result = new byte[payload.Length];
+            bool isMuLaw = payloadType == 0;
+            var decodeTable = isMuLaw ? MuLawDecodeTable : ALawDecodeTable;
 
-            // Apply volume with clamping
-            float scaled = sample * volume;
-            short clamped = (short)Math.Clamp(scaled, short.MinValue, short.MaxValue);
+            for (int i = 0; i < payload.Length; i++)
+            {
+                // Decode to linear PCM
+                short sample = decodeTable[payload[i]];
 
-            // Encode back
-            result[i] = isMuLaw ? MuLawEncode(clamped) : ALawEncode(clamped);
+                // Apply volume with clamping
+                float scaled = sample * volume;
+                short clamped = (short)Math.Clamp(scaled, short.MinValue, short.MaxValue);
+
+                // Encode back
+                result[i] = isMuLaw ? MuLawEncode(clamped) : ALawEncode(clamped);
+            }
+
+            return result;
         }
+        else
+        {
+            // Opus or other codec: Use AudioEncoder to decode/encode
+            // Use the current format (should be Opus if configured)
+            if (!_currentFormat.HasValue)
+            {
+                // No format configured, pass through unchanged
+                return payload;
+            }
+            var format = _currentFormat.Value;
 
-        return result;
+            try
+            {
+                // Decode to PCM
+                var pcmSamples = _audioEncoder.DecodeAudio(payload, format);
+                if (pcmSamples == null || pcmSamples.Length == 0)
+                {
+                    return payload; // Decoding failed, pass through unchanged
+                }
+
+                // Apply volume to PCM samples
+                for (int i = 0; i < pcmSamples.Length; i++)
+                {
+                    float scaled = pcmSamples[i] * volume;
+                    pcmSamples[i] = (short)Math.Clamp(scaled, short.MinValue, short.MaxValue);
+                }
+
+                // Encode back to Opus
+                var encoded = _audioEncoder.EncodeAudio(pcmSamples, format);
+                return encoded;
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"UserAudioMixer: Failed to apply volume to Opus packet: {ex.Message}");
+                return payload; // Return unchanged on error
+            }
+        }
     }
 
     public void SetUserVolume(Guid userId, float volume)

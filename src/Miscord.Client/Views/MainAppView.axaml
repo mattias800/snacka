@@ -365,20 +365,45 @@
                                        VerticalAlignment="Center"/>
                         </StackPanel>
 
-                        <!-- Close button - right -->
-                        <Button HorizontalAlignment="Right"
-                                VerticalAlignment="Center"
-                                Padding="10,6"
-                                Background="#ed4245"
-                                BorderThickness="0"
-                                CornerRadius="4"
-                                Cursor="Hand"
-                                Click="OnCloseFullscreenClick">
-                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                <TextBlock Text="✕" Foreground="White" FontSize="14" VerticalAlignment="Center"/>
-                                <TextBlock Text="Close" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
+                        <!-- Right side: Volume slider and Close button -->
+                        <StackPanel HorizontalAlignment="Right"
+                                    VerticalAlignment="Center"
+                                    Orientation="Horizontal"
+                                    Spacing="16">
+                            <!-- Volume slider for stream audio -->
+                            <StackPanel Orientation="Horizontal"
+                                        Spacing="8"
+                                        VerticalAlignment="Center"
+                                        IsVisible="{Binding FullscreenStream.HasAudio}">
+                                <TextBlock Text="🔊"
+                                           Foreground="White"
+                                           FontSize="14"
+                                           VerticalAlignment="Center"/>
+                                <Slider Width="100"
+                                        Minimum="0"
+                                        Maximum="200"
+                                        Value="{Binding FullscreenStream.VolumePercent}"
+                                        VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding FullscreenStream.VolumePercent, StringFormat={}{0}%}"
+                                           Foreground="White"
+                                           FontSize="12"
+                                           Width="35"
+                                           VerticalAlignment="Center"/>
                             </StackPanel>
-                        </Button>
+
+                            <!-- Close button -->
+                            <Button Padding="10,6"
+                                    Background="#ed4245"
+                                    BorderThickness="0"
+                                    CornerRadius="4"
+                                    Cursor="Hand"
+                                    Click="OnCloseFullscreenClick">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <TextBlock Text="✕" Foreground="White" FontSize="14" VerticalAlignment="Center"/>
+                                    <TextBlock Text="Close" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
                     </Grid>
                 </Border>
             </Grid>
