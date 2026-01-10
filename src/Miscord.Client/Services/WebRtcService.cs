@@ -1779,13 +1779,21 @@ public class WebRtcService : IWebRtcService
                     _screenAudioFirstPacket = true;  // Reset for new stream
                     if (!string.IsNullOrEmpty(opusFormat.FormatName))
                     {
-                        _screenAudioFormat = opusFormat;
-                        Console.WriteLine($"WebRTC: Screen audio encoder initialized ({opusFormat.FormatName} {opusFormat.ClockRate}Hz, {opusFormat.ChannelCount} ch)");
+                        // Create stereo version of Opus format for screen audio (music, videos, games)
+                        // Microphone uses mono, but screen share benefits from stereo
+                        var stereoOpusFormat = new AudioFormat(
+                            opusFormat.Codec,
+                            opusFormat.FormatID,
+                            opusFormat.ClockRate,
+                            ScreenAudioChannels,  // 2 channels for stereo
+                            opusFormat.Parameters);
+                        _screenAudioFormat = stereoOpusFormat;
+                        Console.WriteLine($"WebRTC: Screen audio encoder initialized ({stereoOpusFormat.FormatName} {stereoOpusFormat.ClockRate}Hz, {stereoOpusFormat.ChannelCount} ch stereo)");
 
                         // Verify we're encoding at 48kHz (standard for Opus)
-                        if (opusFormat.ClockRate != 48000)
+                        if (stereoOpusFormat.ClockRate != 48000)
                         {
-                            Console.WriteLine($"WebRTC: WARNING - Screen audio encoder is {opusFormat.ClockRate}Hz, expected 48000Hz!");
+                            Console.WriteLine($"WebRTC: WARNING - Screen audio encoder is {stereoOpusFormat.ClockRate}Hz, expected 48000Hz!");
                         }
                     }
                     else
@@ -2268,19 +2276,20 @@ public class WebRtcService : IWebRtcService
         var format = _screenAudioFormat.Value;
 
         // Input: 48kHz 16-bit stereo from MiscordCapture (normalized at capture stage)
-        // Output: Opus at 48kHz MONO for compatibility with the standard voice codec path
+        // Output: Opus at 48kHz STEREO for high-quality screen share audio (music, videos, games)
 
-        // Mix stereo to mono
-        int frameCount = (int)sampleCount;
-        var monoSamples = new short[frameCount];
+        // Read stereo samples directly (interleaved L,R,L,R,...)
+        int frameCount = (int)sampleCount;  // Number of stereo frames
+        var stereoSamples = new short[frameCount * 2];  // 2 samples per frame (L,R)
 
         for (int i = 0; i < frameCount && (i * 4 + 3) < pcmData.Length; i++)
         {
             // Read stereo pair (little-endian Int16)
             short left = (short)(pcmData[i * 4] | (pcmData[i * 4 + 1] << 8));
             short right = (short)(pcmData[i * 4 + 2] | (pcmData[i * 4 + 3] << 8));
-            // Mix to mono
-            monoSamples[i] = (short)((left + right) / 2);
+            // Keep as stereo (interleaved)
+            stereoSamples[i * 2] = left;
+            stereoSamples[i * 2 + 1] = right;
         }
 
         // Diagnostic: Log sample values and peak level for first few packets
@@ -2289,30 +2298,32 @@ public class WebRtcService : IWebRtcService
         {
             // Find peak sample value
             short peak = 0;
-            for (int i = 0; i < Math.Min(100, monoSamples.Length); i++)
+            for (int i = 0; i < Math.Min(200, stereoSamples.Length); i++)
             {
-                if (Math.Abs(monoSamples[i]) > Math.Abs(peak)) peak = monoSamples[i];
+                if (Math.Abs(stereoSamples[i]) > Math.Abs(peak)) peak = stereoSamples[i];
             }
-            Console.WriteLine($"WebRTC: Screen audio diag #{_screenAudioDiagCount}: {frameCount} frames @ {sampleRate}Hz {bitsPerSample}-bit {channelCount}ch -> {frameCount} mono, peak={peak}");
+            Console.WriteLine($"WebRTC: Screen audio diag #{_screenAudioDiagCount}: {frameCount} stereo frames @ {sampleRate}Hz {bitsPerSample}-bit -> {stereoSamples.Length} samples stereo, peak={peak}");
         }
 
-        // Process in 20ms chunks (960 mono samples at 48kHz)
-        const int samplesPerPacket = ScreenAudioSampleRate * AudioPacketDurationMs / 1000;  // 960
+        // Process in 20ms chunks
+        // For stereo at 48kHz: 960 frames * 2 channels = 1920 samples per packet
+        const int framesPerPacket = ScreenAudioSampleRate * AudioPacketDurationMs / 1000;  // 960 frames
+        const int samplesPerPacket = framesPerPacket * ScreenAudioChannels;  // 1920 samples (stereo)
 
         // Screen audio uses payload type 112 to distinguish from microphone audio (PT 111)
         // Both use Opus codec but server routes them differently
         const int ScreenAudioPayloadType = 112;
 
         int offset = 0;
-        while (offset + samplesPerPacket <= monoSamples.Length)
+        while (offset + samplesPerPacket <= stereoSamples.Length)
         {
-            // Extract one packet's worth of mono samples
+            // Extract one packet's worth of stereo samples
             var packetSamples = new short[samplesPerPacket];
-            Array.Copy(monoSamples, offset, packetSamples, 0, samplesPerPacket);
+            Array.Copy(stereoSamples, offset, packetSamples, 0, samplesPerPacket);
 
             try
             {
-                // Encode to Opus (mono)
+                // Encode to Opus (stereo)
                 var opusData = _screenAudioEncoder.EncodeAudio(packetSamples, format);
 
                 if (opusData != null && opusData.Length > 0)
@@ -2321,7 +2332,7 @@ public class WebRtcService : IWebRtcService
                     _screenAudioEncodeCount++;
                     if (_screenAudioEncodeCount <= 5)
                     {
-                        Console.WriteLine($"WebRTC: Screen audio encode #{_screenAudioEncodeCount}: 960 samples -> {opusData.Length} bytes Opus");
+                        Console.WriteLine($"WebRTC: Screen audio encode #{_screenAudioEncodeCount}: {samplesPerPacket} stereo samples -> {opusData.Length} bytes Opus");
                     }
 
                     // Send screen audio with payload type 112 to distinguish from mic audio (PT 111)
@@ -2337,9 +2348,9 @@ public class WebRtcService : IWebRtcService
                         markerBit,
                         ScreenAudioPayloadType);
 
-                    // RTP timestamp increments by samples at 48kHz
-                    // For 20ms at 48kHz: 960 samples
-                    _screenAudioTimestamp += (uint)samplesPerPacket;
+                    // RTP timestamp increments by frames (not samples) at 48kHz
+                    // For 20ms at 48kHz: 960 frames
+                    _screenAudioTimestamp += (uint)framesPerPacket;
                 }
             }
             catch (Exception ex)
