@@ -12,13 +12,15 @@ public class HealthController : ControllerBase
     private readonly IServerInviteService _inviteService;
     private readonly IWebHostEnvironment _environment;
     private readonly TenorSettings _tenorSettings;
+    private readonly KlipySettings _klipySettings;
 
-    public HealthController(IConfiguration configuration, IServerInviteService inviteService, IWebHostEnvironment environment, IOptions<TenorSettings> tenorSettings)
+    public HealthController(IConfiguration configuration, IServerInviteService inviteService, IWebHostEnvironment environment, IOptions<TenorSettings> tenorSettings, IOptions<KlipySettings> klipySettings)
     {
         _configuration = configuration;
         _inviteService = inviteService;
         _environment = environment;
         _tenorSettings = tenorSettings.Value;
+        _klipySettings = klipySettings.Value;
     }
 
     [HttpGet]
@@ -34,6 +36,10 @@ public class HealthController : ControllerBase
             bootstrapInviteCode = await _inviteService.GetOrCreateBootstrapInviteAsync(cancellationToken);
         }
 
+        // GIFs are enabled if either Tenor or Klipy API key is configured
+        var gifsEnabled = !string.IsNullOrWhiteSpace(_tenorSettings.ApiKey) ||
+                          !string.IsNullOrWhiteSpace(_klipySettings.ApiKey);
+
         return Ok(new ServerInfoResponse(
             Name: _configuration["ServerInfo:Name"] ?? "Snacka Server",
             Description: _configuration["ServerInfo:Description"],
@@ -41,7 +47,7 @@ public class HealthController : ControllerBase
             AllowRegistration: _configuration.GetValue("ServerInfo:AllowRegistration", true),
             HasUsers: hasUsers,
             BootstrapInviteCode: bootstrapInviteCode,
-            GifsEnabled: !string.IsNullOrWhiteSpace(_tenorSettings.ApiKey)
+            GifsEnabled: gifsEnabled
         ));
     }
 }
@@ -53,5 +59,5 @@ public record ServerInfoResponse(
     bool AllowRegistration,
     bool HasUsers,
     string? BootstrapInviteCode,  // Only returned if no users exist
-    bool GifsEnabled  // True if Tenor API key is configured
+    bool GifsEnabled  // True if Tenor or Klipy API key is configured
 );

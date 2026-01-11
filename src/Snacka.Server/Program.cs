@@ -13,10 +13,10 @@ using Snacka.Server.Services.Sfu;
 var builder = WebApplication.CreateBuilder(args);
 
 // Configure forwarded headers for reverse proxy support (NGINX, etc.)
-// This must be configured before other middleware to get correct client IPs
+// This must be configured before other middleware to get correct client IPs and hostnames
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
-    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
     // Clear default restrictions to trust any proxy (configure KnownProxies/KnownNetworks in production if needed)
     options.KnownNetworks.Clear();
     options.KnownProxies.Clear();
@@ -171,10 +171,20 @@ builder.Services.AddScoped<IReactionService, ReactionService>();
 // Add link preview service with HttpClient
 builder.Services.AddHttpClient<ILinkPreviewService, LinkPreviewService>();
 
-// Add Tenor GIF service
-builder.Services.Configure<TenorSettings>(
-    builder.Configuration.GetSection(TenorSettings.SectionName));
-builder.Services.AddHttpClient<ITenorService, TenorService>();
+// Add GIF service (Tenor or Klipy based on configuration)
+builder.Services.Configure<GifSettings>(builder.Configuration.GetSection("Gif"));
+builder.Services.Configure<TenorSettings>(builder.Configuration.GetSection("Tenor"));
+builder.Services.Configure<KlipySettings>(builder.Configuration.GetSection("Klipy"));
+
+var gifProvider = builder.Configuration.GetValue<string>("Gif:Provider") ?? "Tenor";
+if (gifProvider.Equals("Klipy", StringComparison.OrdinalIgnoreCase))
+{
+    builder.Services.AddHttpClient<IGifService, KlipyService>();
+}
+else
+{
+    builder.Services.AddHttpClient<IGifService, TenorService>();
+}
 
 // Add SFU service (Singleton to maintain WebRTC connections across requests)
 builder.Services.AddSingleton<ISfuService, SfuService>();

@@ -2,7 +2,10 @@ using Snacka.Server.DTOs;
 
 namespace Snacka.Server.Services;
 
-public interface ITenorService
+/// <summary>
+/// Generic interface for GIF search services (Tenor, Klipy, etc.)
+/// </summary>
+public interface IGifService
 {
     /// <summary>
     /// Search for GIFs matching the query

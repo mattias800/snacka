@@ -10,11 +10,11 @@ namespace Snacka.Server.Controllers;
 [Authorize]
 public class GifController : ControllerBase
 {
-    private readonly ITenorService _tenorService;
+    private readonly IGifService _gifService;
 
-    public GifController(ITenorService tenorService)
+    public GifController(IGifService gifService)
     {
-        _tenorService = tenorService;
+        _gifService = gifService;
     }
 
     /// <summary>
@@ -34,7 +34,7 @@ public class GifController : ControllerBase
 
         limit = Math.Clamp(limit, 1, 50);
 
-        var result = await _tenorService.SearchGifsAsync(q, limit, pos);
+        var result = await _gifService.SearchGifsAsync(q, limit, pos);
         return Ok(result);
     }
 
@@ -50,7 +50,7 @@ public class GifController : ControllerBase
     {
         limit = Math.Clamp(limit, 1, 50);
 
-        var result = await _tenorService.GetTrendingGifsAsync(limit, pos);
+        var result = await _gifService.GetTrendingGifsAsync(limit, pos);
         return Ok(result);
     }
 }

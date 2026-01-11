@@ -23,9 +23,13 @@ services:
       - ServerInfo__Name=${SERVER_NAME:-Snacka Server}
       - ServerInfo__Description=${SERVER_DESCRIPTION:-A self-hosted Discord alternative}
       - ServerInfo__AllowRegistration=${ALLOW_REGISTRATION:-true}
-      # Tenor GIF API (optional - enables GIF picker)
+      # GIF Provider - "Tenor" or "Klipy" (default: Tenor)
+      - Gif__Provider=${GIF_PROVIDER:-Tenor}
+      # Tenor GIF API (optional - enables GIF picker when Provider=Tenor)
       - Tenor__ApiKey=${TENOR_API_KEY:-}
       - Tenor__ClientKey=snacka
+      # Klipy GIF API (optional - enables GIF picker when Provider=Klipy)
+      - Klipy__ApiKey=${KLIPY_API_KEY:-}
       # CORS - REQUIRED: Set ALLOWED_ORIGIN in .env to your domain
       - AllowedOrigins__0=${ALLOWED_ORIGIN}
       # Logging - suppress SQL query logging in production

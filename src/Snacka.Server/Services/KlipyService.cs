@@ -4,20 +4,20 @@ using Snacka.Server.DTOs;
 
 namespace Snacka.Server.Services;
 
-public class TenorService : IGifService
+public class KlipyService : IGifService
 {
     private readonly HttpClient _httpClient;
-    private readonly TenorSettings _settings;
-    private readonly ILogger<TenorService> _logger;
+    private readonly KlipySettings _settings;
+    private readonly ILogger<KlipyService> _logger;
 
     // Cache for search results
     private readonly Dictionary<string, (GifSearchResponse Response, DateTime FetchedAt)> _cache = new();
     private readonly object _cacheLock = new();
     private TimeSpan CacheDuration => TimeSpan.FromMinutes(_settings.CacheDurationMinutes);
 
-    private const string TenorApiBaseUrl = "https://tenor.googleapis.com/v2";
+    private const string KlipyApiBaseUrl = "https://api.klipy.com/api/v1";
 
-    public TenorService(HttpClient httpClient, IOptions<TenorSettings> settings, ILogger<TenorService> logger)
+    public KlipyService(HttpClient httpClient, IOptions<KlipySettings> settings, ILogger<KlipyService> logger)
     {
         _httpClient = httpClient;
         _settings = settings.Value;
@@ -30,7 +30,7 @@ public class TenorService : IGifService
     {
         if (string.IsNullOrWhiteSpace(_settings.ApiKey))
         {
-            _logger.LogWarning("Tenor API key not configured");
+            _logger.LogWarning("Klipy API key not configured");
             return new GifSearchResponse(new List<GifResult>(), null);
         }
 
@@ -47,22 +47,24 @@ public class TenorService : IGifService
 
         try
         {
-            var url = $"{TenorApiBaseUrl}/search?key={_settings.ApiKey}&client_key={_settings.ClientKey}&q={Uri.EscapeDataString(query)}&limit={limit}&media_filter=gif,tinygif";
-            if (!string.IsNullOrEmpty(pos))
+            var page = 1;
+            if (!string.IsNullOrEmpty(pos) && int.TryParse(pos, out var parsedPage))
             {
-                url += $"&pos={Uri.EscapeDataString(pos)}";
+                page = parsedPage;
             }
+
+            var url = $"{KlipyApiBaseUrl}/{_settings.ApiKey}/gifs/search?q={Uri.EscapeDataString(query)}&per_page={limit}&page={page}";
 
             var response = await _httpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadAsStringAsync();
-            var tenorResponse = JsonSerializer.Deserialize<TenorApiResponse>(json, new JsonSerializerOptions
+            var klipyResponse = JsonSerializer.Deserialize<KlipyApiResponse>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
 
-            var result = MapToGifSearchResponse(tenorResponse);
+            var result = MapToGifSearchResponse(klipyResponse);
 
             // Cache the result
             lock (_cacheLock)
@@ -75,7 +77,7 @@ public class TenorService : IGifService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to search Tenor GIFs for query: {Query}", query);
+            _logger.LogError(ex, "Failed to search Klipy GIFs for query: {Query}", query);
             return new GifSearchResponse(new List<GifResult>(), null);
         }
     }
@@ -84,7 +86,7 @@ public class TenorService : IGifService
     {
         if (string.IsNullOrWhiteSpace(_settings.ApiKey))
         {
-            _logger.LogWarning("Tenor API key not configured");
+            _logger.LogWarning("Klipy API key not configured");
             return new GifSearchResponse(new List<GifResult>(), null);
         }
 
@@ -101,22 +103,24 @@ public class TenorService : IGifService
 
         try
         {
-            var url = $"{TenorApiBaseUrl}/featured?key={_settings.ApiKey}&client_key={_settings.ClientKey}&limit={limit}&media_filter=gif,tinygif";
-            if (!string.IsNullOrEmpty(pos))
+            var page = 1;
+            if (!string.IsNullOrEmpty(pos) && int.TryParse(pos, out var parsedPage))
             {
-                url += $"&pos={Uri.EscapeDataString(pos)}";
+                page = parsedPage;
             }
+
+            var url = $"{KlipyApiBaseUrl}/{_settings.ApiKey}/gifs/trending?per_page={limit}&page={page}";
 
             var response = await _httpClient.GetAsync(url);
             response.EnsureSuccessStatusCode();
 
             var json = await response.Content.ReadAsStringAsync();
-            var tenorResponse = JsonSerializer.Deserialize<TenorApiResponse>(json, new JsonSerializerOptions
+            var klipyResponse = JsonSerializer.Deserialize<KlipyApiResponse>(json, new JsonSerializerOptions
             {
                 PropertyNameCaseInsensitive = true
             });
 
-            var result = MapToGifSearchResponse(tenorResponse);
+            var result = MapToGifSearchResponse(klipyResponse);
 
             // Cache the result
             lock (_cacheLock)
@@ -129,46 +133,40 @@ public class TenorService : IGifService
         }
         catch (Exception ex)
         {
-            _logger.LogError(ex, "Failed to fetch trending Tenor GIFs");
+            _logger.LogError(ex, "Failed to fetch trending Klipy GIFs");
             return new GifSearchResponse(new List<GifResult>(), null);
         }
     }
 
-    private static GifSearchResponse MapToGifSearchResponse(TenorApiResponse? tenorResponse)
+    private static GifSearchResponse MapToGifSearchResponse(KlipyApiResponse? klipyResponse)
     {
-        if (tenorResponse?.Results == null)
+        if (klipyResponse?.Data?.Data == null)
         {
             return new GifSearchResponse(new List<GifResult>(), null);
         }
 
-        var results = tenorResponse.Results.Select(r =>
+        var results = klipyResponse.Data.Data.Select(r =>
         {
-            // Get the preview (tinygif) and full GIF URLs
-            var previewUrl = r.Media_Formats?.TryGetValue("tinygif", out var tinyGif) == true
-                ? tinyGif.Url
-                : r.Media_Formats?.TryGetValue("gif", out var gif) == true
-                    ? gif.Url
-                    : "";
-
-            var fullUrl = r.Media_Formats?.TryGetValue("gif", out var fullGif) == true
-                ? fullGif.Url
-                : previewUrl;
-
-            var dims = r.Media_Formats?.TryGetValue("gif", out var gifMedia) == true
-                ? gifMedia.Dims
-                : null;
+            // Get preview and full GIF URLs from files object
+            var previewUrl = r.Files?.Preview?.Url ?? r.Files?.Original?.Url ?? "";
+            var fullUrl = r.Files?.Original?.Url ?? previewUrl;
 
             return new GifResult(
-                Id: r.Id ?? "",
-                Title: r.Title ?? r.Content_Description ?? "",
-                PreviewUrl: previewUrl ?? "",
-                Url: fullUrl ?? "",
-                Width: dims?.Count > 0 ? dims[0] : 0,
-                Height: dims?.Count > 1 ? dims[1] : 0
+                Id: r.Slug ?? r.Id?.ToString() ?? "",
+                Title: r.Title ?? "",
+                PreviewUrl: previewUrl,
+                Url: fullUrl,
+                Width: r.Files?.Original?.Width ?? 0,
+                Height: r.Files?.Original?.Height ?? 0
             );
         }).Where(r => !string.IsNullOrEmpty(r.Url)).ToList();
 
-        return new GifSearchResponse(results, tenorResponse.Next);
+        // Use page number as position for pagination
+        var nextPos = klipyResponse.Data.Has_Next == true
+            ? (klipyResponse.Data.Current_Page + 1).ToString()
+            : null;
+
+        return new GifSearchResponse(results, nextPos);
     }
 
     private void CleanCacheIfNeeded()
@@ -187,23 +185,34 @@ public class TenorService : IGifService
         }
     }
 
-    // Tenor API response models
-    private record TenorApiResponse(
-        List<TenorResult>? Results,
-        string? Next
+    // Klipy API response models
+    private record KlipyApiResponse(
+        bool Result,
+        KlipyDataContainer? Data
     );
 
-    private record TenorResult(
-        string? Id,
+    private record KlipyDataContainer(
+        List<KlipyGif>? Data,
+        int Current_Page,
+        int Per_Page,
+        bool? Has_Next
+    );
+
+    private record KlipyGif(
+        int? Id,
+        string? Slug,
         string? Title,
-        string? Content_Description,
-        Dictionary<string, TenorMediaFormat>? Media_Formats
+        KlipyFiles? Files
     );
 
-    private record TenorMediaFormat(
+    private record KlipyFiles(
+        KlipyMedia? Original,
+        KlipyMedia? Preview
+    );
+
+    private record KlipyMedia(
         string? Url,
-        List<int>? Dims,
-        int? Duration,
-        int? Size
+        int Width,
+        int Height
     );
 }
