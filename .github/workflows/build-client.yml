@@ -15,7 +15,7 @@ on:
 
 jobs:
   build-macos-arm64:
-    runs-on: macos-14
+    runs-on: macos-15
     steps:
       - uses: actions/checkout@v4
 
@@ -53,47 +53,6 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: Snacka-macOS-arm64
-          path: publish/
-
-  build-macos-x64:
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '9.0.x'
-
-      - name: Install Homebrew dependencies
-        run: |
-          brew install ffmpeg@6 libvpx
-          echo "$(brew --prefix ffmpeg@6)/lib" >> $GITHUB_PATH
-
-      - name: Build SnackaCapture
-        run: |
-          cd src/SnackaCapture
-          swift build -c release
-
-      - name: Build SnackaMetalRenderer
-        run: |
-          cd src/SnackaMetalRenderer
-          swift build -c release
-
-      - name: Publish Snacka.Client
-        run: |
-          dotnet publish src/Snacka.Client -c Release -r osx-x64 \
-            --self-contained -o publish
-
-      - name: Copy native binaries
-        run: |
-          cp src/SnackaCapture/.build/x86_64-apple-macosx/release/SnackaCapture publish/
-          cp src/SnackaMetalRenderer/.build/x86_64-apple-macosx/release/libSnackaMetalRenderer.dylib publish/
-
-      - name: Upload artifact
-        uses: actions/upload-artifact@v4
-        with:
-          name: Snacka-macOS-x64
           path: publish/
 
   build-windows:
