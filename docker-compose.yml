@@ -2,6 +2,7 @@ services:
   snacka-server:
     # Use pre-built image from GitHub Container Registry
     # To build locally instead, comment out 'image' and uncomment 'build'
+    # To pin to a specific version, use: ghcr.io/mattias800/snacka:0.2.1
     image: ghcr.io/mattias800/snacka:latest
     # build:
     #   context: .
