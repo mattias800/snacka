@@ -60,6 +60,8 @@ public class SettingsViewModel : ViewModelBase
             AdminPanelViewModel = new AdminPanelViewModel(apiClient, gifsEnabled);
         }
 
+        AboutSettingsViewModel = new AboutSettingsViewModel();
+
         // Start with Voice & Video page
         CurrentPage = AudioSettingsViewModel;
     }
@@ -81,6 +83,7 @@ public class SettingsViewModel : ViewModelBase
     public ControllerSettingsViewModel? ControllerSettingsViewModel { get; }
     public AccountSettingsViewModel? AccountSettingsViewModel { get; }
     public AdminPanelViewModel? AdminPanelViewModel { get; }
+    public AboutSettingsViewModel AboutSettingsViewModel { get; }
     public bool IsServerAdmin { get; }
     public bool HasControllerSettings => ControllerSettingsViewModel != null;
 
@@ -106,6 +109,7 @@ public class SettingsViewModel : ViewModelBase
             "Controllers" => ControllerSettingsViewModel,
             "My Account" => AccountSettingsViewModel,
             "Server Admin" => AdminPanelViewModel,
+            "About" => AboutSettingsViewModel,
             _ => AudioSettingsViewModel
         };
     }

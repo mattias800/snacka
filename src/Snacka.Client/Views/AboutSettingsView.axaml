@@ -1,0 +1,131 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:vm="using:Snacka.Client.ViewModels"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             x:Class="Snacka.Client.Views.AboutSettingsView"
+             x:DataType="vm:AboutSettingsViewModel">
+
+    <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <StackPanel Spacing="24" MaxWidth="600">
+            <!-- Header -->
+            <StackPanel Spacing="8">
+                <TextBlock Text="About Snacka"
+                           FontSize="24"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource ForegroundBrush}"/>
+                <TextBlock Text="Build and system information"
+                           FontSize="14"
+                           Foreground="{StaticResource Foreground3Brush}"/>
+            </StackPanel>
+
+            <!-- Version Info Card -->
+            <Border Background="{StaticResource Content1Brush}"
+                    CornerRadius="12"
+                    Padding="20">
+                <StackPanel Spacing="16">
+                    <StackPanel Orientation="Horizontal" Spacing="12">
+                        <Border Width="48" Height="48" CornerRadius="10" Background="{StaticResource PrimaryGradient}">
+                            <ui:SymbolIcon Symbol="Home" FontSize="24" Foreground="White"
+                                           HorizontalAlignment="Center" VerticalAlignment="Center"/>
+                        </Border>
+                        <StackPanel VerticalAlignment="Center">
+                            <TextBlock Text="Snacka"
+                                       FontSize="18"
+                                       FontWeight="SemiBold"
+                                       Foreground="{StaticResource ForegroundBrush}"/>
+                            <TextBlock Text="{Binding Version, StringFormat='Version {0}'}"
+                                       FontSize="14"
+                                       Foreground="{StaticResource Foreground2Brush}"/>
+                        </StackPanel>
+                    </StackPanel>
+                </StackPanel>
+            </Border>
+
+            <!-- Build Information -->
+            <Border Background="{StaticResource Content1Brush}"
+                    CornerRadius="12"
+                    Padding="20">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="Build Information"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource ForegroundBrush}"/>
+
+                    <Grid RowDefinitions="Auto,Auto,Auto,Auto" ColumnDefinitions="150,*">
+                        <!-- Version -->
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Text="Version"
+                                   FontSize="13"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   Margin="0,0,0,8"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding FullVersion}"
+                                   FontSize="13"
+                                   Foreground="{StaticResource ForegroundBrush}"
+                                   Margin="0,0,0,8"/>
+
+                        <!-- .NET Version -->
+                        <TextBlock Grid.Row="1" Grid.Column="0"
+                                   Text=".NET Runtime"
+                                   FontSize="13"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   Margin="0,0,0,8"/>
+                        <TextBlock Grid.Row="1" Grid.Column="1"
+                                   Text="{Binding DotNetVersion}"
+                                   FontSize="13"
+                                   Foreground="{StaticResource ForegroundBrush}"
+                                   TextWrapping="Wrap"
+                                   Margin="0,0,0,8"/>
+
+                        <!-- Runtime Identifier -->
+                        <TextBlock Grid.Row="2" Grid.Column="0"
+                                   Text="Runtime ID"
+                                   FontSize="13"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   Margin="0,0,0,8"/>
+                        <TextBlock Grid.Row="2" Grid.Column="1"
+                                   Text="{Binding RuntimeIdentifier}"
+                                   FontSize="13"
+                                   Foreground="{StaticResource ForegroundBrush}"
+                                   Margin="0,0,0,8"/>
+
+                        <!-- Architecture -->
+                        <TextBlock Grid.Row="3" Grid.Column="0"
+                                   Text="Architecture"
+                                   FontSize="13"
+                                   Foreground="{StaticResource Foreground3Brush}"/>
+                        <TextBlock Grid.Row="3" Grid.Column="1"
+                                   Text="{Binding Architecture}"
+                                   FontSize="13"
+                                   Foreground="{StaticResource ForegroundBrush}"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+
+            <!-- System Information -->
+            <Border Background="{StaticResource Content1Brush}"
+                    CornerRadius="12"
+                    Padding="20">
+                <StackPanel Spacing="16">
+                    <TextBlock Text="System Information"
+                               FontSize="16"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource ForegroundBrush}"/>
+
+                    <Grid RowDefinitions="Auto" ColumnDefinitions="150,*">
+                        <!-- Operating System -->
+                        <TextBlock Grid.Row="0" Grid.Column="0"
+                                   Text="Operating System"
+                                   FontSize="13"
+                                   Foreground="{StaticResource Foreground3Brush}"/>
+                        <TextBlock Grid.Row="0" Grid.Column="1"
+                                   Text="{Binding OperatingSystem}"
+                                   FontSize="13"
+                                   Foreground="{StaticResource ForegroundBrush}"
+                                   TextWrapping="Wrap"/>
+                    </Grid>
+                </StackPanel>
+            </Border>
+        </StackPanel>
+    </ScrollViewer>
+</UserControl>

@@ -168,6 +168,30 @@
                                 </StackPanel>
                             </Button>
                         </StackPanel>
+
+                        <!-- About Section -->
+                        <TextBlock Text="INFO"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   Margin="12,24,0,12"/>
+
+                        <Button Command="{Binding SelectCategoryCommand}"
+                                CommandParameter="About"
+                                Background="{Binding SelectedCategory, Converter={x:Static conv:SettingsCategoryBackgroundConverter.Instance}, ConverterParameter='About'}"
+                                BorderThickness="0"
+                                HorizontalContentAlignment="Left"
+                                Padding="12,10"
+                                Margin="0,2"
+                                CornerRadius="10"
+                                Cursor="Hand">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <ui:SymbolIcon Symbol="Help" FontSize="16" Foreground="{Binding SelectedCategory, Converter={x:Static conv:SettingsCategoryForegroundConverter.Instance}, ConverterParameter='About'}"/>
+                                <TextBlock Text="About"
+                                           Foreground="{Binding SelectedCategory, Converter={x:Static conv:SettingsCategoryForegroundConverter.Instance}, ConverterParameter='About'}"
+                                           FontSize="14"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </ScrollViewer>
             </DockPanel>
@@ -191,6 +215,9 @@
                     </DataTemplate>
                     <DataTemplate DataType="{x:Type vm:AdminPanelViewModel}">
                         <Views:AdminPanelView/>
+                    </DataTemplate>
+                    <DataTemplate DataType="{x:Type vm:AboutSettingsViewModel}">
+                        <Views:AboutSettingsView/>
                     </DataTemplate>
                 </ContentControl.DataTemplates>
             </ContentControl>
