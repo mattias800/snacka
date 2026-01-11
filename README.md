@@ -1,153 +1,98 @@
-# Snacka - Discord Clone
+# Snacka
 
-A self-hosted Discord alternative built with C# and .NET. Snacka allows users to run their own communication server with full control over data and infrastructure.
+A self-hosted communication platform - like Discord, but you own your data.
+
+<!-- Screenshot: Main app view with voice channel -->
+![Snacka Screenshot](docs/screenshots/main-app.png)
+
+## What is Snacka?
+
+Snacka is a free, open-source alternative to Discord that you can host yourself. Run your own server on your own hardware or cloud infrastructure, with full control over your data and privacy.
+
+Whether you're setting up a private space for friends, a team communication hub, or a community server - Snacka gives you the features you need without relying on third-party services.
 
 ## Features
 
-- **User Accounts**: Secure user authentication with JWT tokens and refresh tokens
-- **Direct Messages**: Private messaging between users with typing indicators
-- **Text Channels**: Organized text-based communication with edit/delete support
-- **Voice Channels**: Real-time voice communication with WebRTC
-- **Webcam Streaming**: Share your camera in voice channels or private calls (in progress)
-- **Screen Sharing**: Share your screen with support for capture devices (in progress)
-- **GIF Picker**: Search and share GIFs via Tenor integration
-- **File Attachments**: Share images, audio, and other files
-- **Cross-platform Client**: Desktop application for Windows, macOS, and Linux
-- **Self-hosted Server**: Deploy on your own infrastructure with Docker support
+### Text Communication
+- **Direct Messages** - Private conversations with typing indicators
+- **Text Channels** - Organized discussions with message editing and deletion
+- **GIF Picker** - Search and share GIFs with Tenor integration
+- **File Sharing** - Share images, audio files, and documents
 
-## Technology Stack
+<!-- Screenshot: Chat with GIF picker -->
 
-- **Language**: C# (.NET 9.0)
-- **Server**: ASP.NET Core 9
-- **Desktop Client**: Avalonia UI 11.1.3 (cross-platform XAML framework)
-- **Real-time Communication**: WebRTC with SipSorcery
-- **Signaling**: SignalR for WebSocket-based signaling
-- **Database**: Entity Framework Core with SQLite or PostgreSQL
-- **Audio**: SDL2 for audio capture and playback
-- **Testing**: MSTest
+### Voice & Video
+- **Voice Channels** - Crystal-clear voice chat with WebRTC
+- **Webcam Streaming** - Share your camera in voice channels
+- **Screen Sharing** - Present your screen to others
 
-## Project Structure
+<!-- Screenshot: Voice channel with participants -->
 
-```
-snacka/
-├── src/
-│   ├── Snacka.Server/          # ASP.NET Core server application
-│   ├── Snacka.Client/          # Avalonia UI desktop client (Windows, macOS, Linux)
-│   ├── Snacka.Shared/          # Shared models and interfaces
-│   ├── Snacka.WebRTC/          # WebRTC/media handling
-│   ├── SnackaCapture/          # Screen/window capture utilities
-│   └── SnackaMetalRenderer/    # Metal-based rendering (macOS)
-├── tests/
-│   ├── Snacka.Server.Tests/
-│   └── Snacka.WebRTC.Tests/
-├── tools/                      # Build and development tools
-├── docs/
-│   └── DEPLOY.md               # Deployment guide
-├── AGENTS.md
-├── PLAN.md
-├── Snacka.sln
-├── Dockerfile
-├── docker-compose.yml
-└── README.md
-```
+### Server Management
+- **Communities** - Create and manage multiple communities
+- **Channels** - Organize with text and voice channels
+- **Roles & Permissions** - Owner, Admin, and Member roles
+- **Invite System** - Invite users to your communities
 
-## Implementation Status
+<!-- Screenshot: Server settings or channel list -->
 
-### Completed Features
-- ✅ **Database Models**: All 7 entity models with EF Core DbContext
-- ✅ **User Authentication**: Register, login, JWT tokens, refresh tokens
-- ✅ **SignalR Hub**: Real-time messaging, presence tracking, WebRTC signaling
-- ✅ **Direct Messages**: Send, receive, edit, delete, typing indicators
-- ✅ **Text Channels**: Create, edit, delete channels and messages
-- ✅ **Voice Channels**: Join/leave with full WebRTC audio support
-- ✅ **Role-based Permissions**: Owner, Admin, Member roles
-- ✅ **Ownership Transfer**: Transfer server ownership between users
-- ✅ **Discord-like UI**: Server list, channels, chat, member list
-- ✅ **Audio Device Selection**: Input/output device configuration
-- ✅ **Audio Controls**: Input gain (0-300%), noise gate
-- ✅ **75+ Automated Tests**
+### Cross-Platform
+- **Windows** - Native installer with automatic updates
+- **macOS** - Apple Silicon and Intel support
+- **Linux** - AppImage for easy installation
 
-### In Progress
-- ⏳ **Webcam Streaming**: Video track integration with WebRTC
-- ⏳ **Screen Sharing**: Platform-specific screen capture
-- ⏳ **STUN/TURN Configuration**: NAT traversal for voice calls
+## Download
 
-See [PLAN.md](PLAN.md) for the complete implementation roadmap.
+Download the latest version for your platform:
 
-## Quick Start
+| Platform | Download | Notes |
+|----------|----------|-------|
+| **Windows** | [Installer](https://github.com/mattias800/snacka/releases/latest) | Recommended - includes auto-updates |
+| **macOS** | [DMG](https://github.com/mattias800/snacka/releases/latest) | Apple Silicon (M1/M2/M3) |
+| **Linux** | [AppImage](https://github.com/mattias800/snacka/releases/latest) | Run `chmod +x` before launching |
 
-### Prerequisites
-- .NET 9 SDK or later
-- Git
-- Native dependencies for client (SDL2, VLC for audio playback) - see [docs/DEPLOY.md](docs/DEPLOY.md)
+See the [Releases](https://github.com/mattias800/snacka/releases) page for all versions and portable downloads.
 
-### Development
+## Self-Hosting
 
-The easiest way to run Snacka for development:
+Snacka is designed to be self-hosted. Run your own server with Docker:
 
 ```bash
-# Start server and two test clients (Alice and Bob)
-./dev-start.sh
-```
+# Clone the repository
+git clone https://github.com/mattias800/snacka.git
+cd snacka
 
-Or manually:
-
-```bash
-# Start server
-cd src/Snacka.Server
-dotnet run
-
-# Start client (in another terminal)
-cd src/Snacka.Client
-dotnet run -- --server http://localhost:5117
-```
-
-### Docker Deployment
-
-```bash
-# Configure environment
+# Configure your server
 cp .env.example .env
-# Edit .env and set JWT_SECRET_KEY
+# Edit .env and set your JWT_SECRET_KEY and other settings
 
-# Start server
+# Start the server
 docker-compose up -d
 ```
 
-See [docs/DEPLOY.md](docs/DEPLOY.md) for complete deployment instructions including production setup with PostgreSQL and nginx.
+Your server will be available at `http://localhost:5117`. Point your Snacka client to this address to connect.
 
-### Running Tests
+For detailed deployment instructions including production setup with HTTPS, see the [Deployment Guide](docs/DEPLOY.md).
 
-```bash
-dotnet test
-```
+### Server Requirements
 
-## Database
+- Docker and Docker Compose
+- 1GB RAM minimum (2GB recommended)
+- PostgreSQL (included in docker-compose)
 
-The project uses Entity Framework Core with support for SQLite and PostgreSQL. Database schema includes:
-- **Users**: User accounts with authentication
-- **SnackaServers**: Server/workspace management
-- **Channels**: Text and voice channels
-- **Messages**: Channel messages
-- **DirectMessages**: Private messages
-- **UserServers**: Server membership and roles
-- **VoiceParticipants**: Active voice channel tracking
+## Getting Help
 
-## Configuration
+- **Issues**: [GitHub Issues](https://github.com/mattias800/snacka/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/mattias800/snacka/discussions)
 
-Key configuration options in `appsettings.json`:
+## Contributing
 
-| Setting | Description |
-|---------|-------------|
-| `Jwt:SecretKey` | JWT signing key (min 32 characters) |
-| `ServerInfo:Name` | Server display name |
-| `ServerInfo:AllowRegistration` | Enable/disable new user registration |
-| `UseSqlite` | Use SQLite (true) or PostgreSQL (false) |
-| `Tenor:ApiKey` | Optional Tenor API key for GIF picker |
+Contributions are welcome! See [DEVELOPMENT.md](DEVELOPMENT.md) for development setup and guidelines.
 
 ## License
 
 TBD
 
-## Contributing
+---
 
-TBD
+*Snacka is not affiliated with Discord. Discord is a trademark of Discord Inc.*

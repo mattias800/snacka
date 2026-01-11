@@ -6,7 +6,7 @@ using Microsoft.EntityFrameworkCore.Migrations;
 namespace Snacka.Server.Migrations
 {
     /// <inheritdoc />
-    public partial class AddThreadSupport : Migration
+    public partial class InitialCreate : Migration
     {
         /// <inheritdoc />
         protected override void Up(MigrationBuilder migrationBuilder)
@@ -140,6 +140,41 @@ namespace Snacka.Server.Migrations
                 });
 
             migrationBuilder.CreateTable(
+                name: "CommunityInvites",
+                columns: table => new
+                {
+                    Id = table.Column<Guid>(type: "TEXT", nullable: false),
+                    CommunityId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    InvitedUserId = table.Column<Guid>(type: "TEXT", nullable: false),
+                    InvitedById = table.Column<Guid>(type: "TEXT", nullable: false),
+                    Status = table.Column<int>(type: "INTEGER", nullable: false),
+                    CreatedAt = table.Column<DateTime>(type: "TEXT", nullable: false),
+                    RespondedAt = table.Column<DateTime>(type: "TEXT", nullable: true)
+                },
+                constraints: table =>
+                {
+                    table.PrimaryKey("PK_CommunityInvites", x => x.Id);
+                    table.ForeignKey(
+                        name: "FK_CommunityInvites_Communities_CommunityId",
+                        column: x => x.CommunityId,
+                        principalTable: "Communities",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_CommunityInvites_Users_InvitedById",
+                        column: x => x.InvitedById,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                    table.ForeignKey(
+                        name: "FK_CommunityInvites_Users_InvitedUserId",
+                        column: x => x.InvitedUserId,
+                        principalTable: "Users",
+                        principalColumn: "Id",
+                        onDelete: ReferentialAction.Cascade);
+                });
+
+            migrationBuilder.CreateTable(
                 name: "UserCommunities",
                 columns: table => new
                 {
@@ -232,6 +267,7 @@ namespace Snacka.Server.Migrations
                     IsServerMuted = table.Column<bool>(type: "INTEGER", nullable: false),
                     IsServerDeafened = table.Column<bool>(type: "INTEGER", nullable: false),
                     IsScreenSharing = table.Column<bool>(type: "INTEGER", nullable: false),
+                    ScreenShareHasAudio = table.Column<bool>(type: "INTEGER", nullable: false),
                     IsCameraOn = table.Column<bool>(type: "INTEGER", nullable: false),
                     JoinedAt = table.Column<DateTime>(type: "TEXT", nullable: false)
                 },
@@ -364,6 +400,21 @@ namespace Snacka.Server.Migrations
                 column: "OwnerId");
 
             migrationBuilder.CreateIndex(
+                name: "IX_CommunityInvites_CommunityId_InvitedUserId_Status",
+                table: "CommunityInvites",
+                columns: new[] { "CommunityId", "InvitedUserId", "Status" });
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CommunityInvites_InvitedById",
+                table: "CommunityInvites",
+                column: "InvitedById");
+
+            migrationBuilder.CreateIndex(
+                name: "IX_CommunityInvites_InvitedUserId",
+                table: "CommunityInvites",
+                column: "InvitedUserId");
+
+            migrationBuilder.CreateIndex(
                 name: "IX_DirectMessages_RecipientId",
                 table: "DirectMessages",
                 column: "RecipientId");
@@ -469,6 +520,9 @@ namespace Snacka.Server.Migrations
         {
             migrationBuilder.DropTable(
                 name: "ChannelReadStates");
+
+            migrationBuilder.DropTable(
+                name: "CommunityInvites");
 
             migrationBuilder.DropTable(
                 name: "DirectMessages");

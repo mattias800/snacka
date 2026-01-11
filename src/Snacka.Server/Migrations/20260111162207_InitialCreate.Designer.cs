@@ -11,8 +11,8 @@ using Snacka.Server.Data;
 namespace Snacka.Server.Migrations
 {
     [DbContext(typeof(SnackaDbContext))]
-    [Migration("20260111153441_AddCommunityInvites")]
-    partial class AddCommunityInvites
+    [Migration("20260111162207_InitialCreate")]
+    partial class InitialCreate
     {
         /// <inheritdoc />
         protected override void BuildTargetModel(ModelBuilder modelBuilder)
