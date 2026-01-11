@@ -9,7 +9,7 @@ public class ServerConnectionViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
     private readonly IServerConnectionStore _connectionStore;
-    private readonly Action<ServerConnection, ServerInfoResponse> _onServerConnected;
+    private readonly Action<ServerConnection, ServerInfoResponse, string?> _onServerConnected;
     private readonly Action<ServerConnection>? _onExistingServerSelected;
 
     private string _serverUrl = string.Empty;
@@ -18,11 +18,12 @@ public class ServerConnectionViewModel : ViewModelBase
     private string? _serverDescription;
     private bool _isLoading;
     private bool _isConnected;
+    private string? _extractedInviteCode;
 
     public ServerConnectionViewModel(
         IApiClient apiClient,
         IServerConnectionStore connectionStore,
-        Action<ServerConnection, ServerInfoResponse> onServerConnected,
+        Action<ServerConnection, ServerInfoResponse, string?> onServerConnected,
         Action<ServerConnection>? onExistingServerSelected = null)
     {
         _apiClient = apiClient;
@@ -108,10 +109,11 @@ public class ServerConnectionViewModel : ViewModelBase
     {
         ErrorMessage = null;
         IsLoading = true;
+        _extractedInviteCode = null;
 
         try
         {
-            // Parse URL - support both plain URLs and share links
+            // Parse URL - support plain URLs, share links, and invite links
             var url = ServerUrl.Trim();
 
             if (string.IsNullOrWhiteSpace(url))
@@ -130,6 +132,14 @@ public class ServerConnectionViewModel : ViewModelBase
                     ErrorMessage = "Invalid share link format";
                     return;
                 }
+            }
+
+            // Extract invite code from URL fragment (e.g., https://server.com#invite=ABC123)
+            var fragmentIndex = url.IndexOf("#invite=", StringComparison.OrdinalIgnoreCase);
+            if (fragmentIndex >= 0)
+            {
+                _extractedInviteCode = url[(fragmentIndex + 8)..]; // Skip "#invite="
+                url = url[..fragmentIndex]; // Remove fragment from URL
             }
 
             // Ensure URL has protocol
@@ -178,7 +188,7 @@ public class ServerConnectionViewModel : ViewModelBase
             LastConnected = DateTime.UtcNow
         };
 
-        _onServerConnected(connection, _serverInfo);
+        _onServerConnected(connection, _serverInfo, _extractedInviteCode);
     }
 
     private void SelectServer(ServerConnection server)

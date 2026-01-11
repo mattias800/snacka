@@ -21,6 +21,7 @@ public class MainWindowViewModel : ViewModelBase
     private AuthResponse? _currentUser;
     private ServerConnection? _currentServer;
     private ServerInfoResponse? _currentServerInfo;
+    private string? _extractedInviteCode; // From invite link (e.g., https://server.com#invite=CODE)
     private UpdateInfo? _updateInfo;
     private bool _showUpdateBanner;
     private UpdateState _updateState = UpdateState.NoUpdate;
@@ -346,10 +347,11 @@ public class MainWindowViewModel : ViewModelBase
         );
     }
 
-    private void OnServerConnected(ServerConnection connection, ServerInfoResponse serverInfo)
+    private void OnServerConnected(ServerConnection connection, ServerInfoResponse serverInfo, string? extractedInviteCode)
     {
         CurrentServer = connection;
         _currentServerInfo = serverInfo;
+        _extractedInviteCode = extractedInviteCode;
 
         // Save the connection
         _connectionStore.Save(connection);
@@ -457,11 +459,14 @@ public class MainWindowViewModel : ViewModelBase
 
     private RegisterViewModel CreateRegisterViewModel()
     {
+        // Prefer extracted invite code from invite link over bootstrap code
+        var inviteCode = _extractedInviteCode ?? _currentServerInfo?.BootstrapInviteCode;
+
         return new RegisterViewModel(
             _apiClient,
             onRegisterSuccess: OnAuthSuccess,
             onSwitchToLogin: () => CurrentView = CreateLoginViewModel(_currentServerInfo?.AllowRegistration ?? true),
-            initialInviteCode: _currentServerInfo?.BootstrapInviteCode
+            initialInviteCode: inviteCode
         );
     }
 

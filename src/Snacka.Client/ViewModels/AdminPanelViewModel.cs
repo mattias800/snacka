@@ -206,6 +206,7 @@ public class InviteViewModel : ViewModelBase
         var canRevoke = this.WhenAnyValue(x => x.IsRevoking, isRevoking => !isRevoking);
         RevokeCommand = ReactiveCommand.CreateFromTask(RevokeAsync, canRevoke);
         CopyCodeCommand = ReactiveCommand.Create(CopyCode);
+        CopyInviteLinkCommand = ReactiveCommand.Create(CopyInviteLink);
     }
 
     public Guid Id => _invite.Id;
@@ -235,6 +236,13 @@ public class InviteViewModel : ViewModelBase
 
     public ReactiveCommand<Unit, Unit> RevokeCommand { get; }
     public ReactiveCommand<Unit, Unit> CopyCodeCommand { get; }
+    public ReactiveCommand<Unit, Unit> CopyInviteLinkCommand { get; }
+
+    /// <summary>
+    /// Gets the full invite link (server URL + invite code) for sharing.
+    /// Format: https://server.com#invite=CODE
+    /// </summary>
+    public string InviteLink => $"{_apiClient.BaseUrl}#invite={Code}";
 
     private async Task RevokeAsync()
     {
@@ -261,10 +269,20 @@ public class InviteViewModel : ViewModelBase
 
     private void CopyCode()
     {
+        CopyToClipboard(Code);
+    }
+
+    private void CopyInviteLink()
+    {
+        CopyToClipboard(InviteLink);
+    }
+
+    private static void CopyToClipboard(string text)
+    {
         // Copy to clipboard using Avalonia's clipboard API
         if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
         {
-            desktop.MainWindow?.Clipboard?.SetTextAsync(Code);
+            desktop.MainWindow?.Clipboard?.SetTextAsync(text);
         }
     }
 }
