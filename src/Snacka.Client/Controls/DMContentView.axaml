@@ -11,10 +11,10 @@
              x:Class="Snacka.Client.Controls.DMContentView"
              x:DataType="controls:DMContentView">
 
-    <Border Background="#36393f">
+    <Border Background="{StaticResource Content2Brush}">
         <DockPanel>
             <!-- DM Header with close button -->
-            <Border DockPanel.Dock="Top" Background="#36393f" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
+            <Border DockPanel.Dock="Top" Classes="panel-header">
                 <Grid>
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
@@ -22,35 +22,31 @@
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="@"
-                                   Foreground="#72767d"
+                                   Foreground="{StaticResource Foreground3Brush}"
                                    FontSize="22"
                                    VerticalAlignment="Center"/>
                         <TextBlock Text="{Binding ViewModel.RecipientName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, FallbackValue='User'}"
-                                   Foreground="White"
-                                   FontWeight="SemiBold"
-                                   FontSize="16"
+                                   Classes="heading-3"
                                    VerticalAlignment="Center"/>
                     </StackPanel>
                     <Button Grid.Column="1"
+                            Classes="btn-icon"
                             Command="{Binding ViewModel.CloseCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
-                            Background="Transparent"
-                            Padding="8,4"
-                            Cursor="Hand"
                             ToolTip.Tip="Close DM">
                         <ui:SymbolIcon Symbol="Dismiss"
-                                   Foreground="#72767d"
+                                   Foreground="{StaticResource Foreground3Brush}"
                                    FontSize="16"/>
                     </Button>
                 </Grid>
             </Border>
 
             <!-- DM Message Input -->
-            <Border DockPanel.Dock="Bottom" Padding="16" Background="#36393f">
+            <Border DockPanel.Dock="Bottom" Classes="panel-footer">
                 <StackPanel>
                     <!-- DM Typing Indicator -->
                     <TextBlock Text="{Binding ViewModel.TypingIndicatorText, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
                                IsVisible="{Binding ViewModel.IsTyping, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
-                               Foreground="#72767d"
+                               Classes="text-muted"
                                FontSize="12"
                                FontStyle="Italic"
                                Margin="0,0,0,4"/>
@@ -62,24 +58,17 @@
 
                         <TextBox x:Name="DMMessageInputBox"
                                  Grid.Column="0"
+                                 Classes="input-chat"
                                  Text="{Binding ViewModel.MessageInput, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Mode=TwoWay}"
                                  Watermark="{Binding ViewModel.RecipientName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, StringFormat='Message @{0}'}"
-                                 Background="#40444b"
-                                 Foreground="White"
-                                 BorderThickness="0"
-                                 CornerRadius="8"
-                                 Padding="16,12"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
                                  MaxHeight="200"/>
 
                         <Button Grid.Column="1"
+                                Classes="btn-primary"
                                 Command="{Binding ViewModel.SendMessageCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
-                                Background="#5865f2"
-                                Foreground="White"
-                                Padding="16,10"
-                                Margin="8,0,0,0"
-                                CornerRadius="4">
+                                Margin="8,0,0,0">
                             <Panel>
                                 <TextBlock Text="Send" IsVisible="{Binding ViewModel.IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Converter={x:Static BoolConverters.Not}}"/>
                                 <TextBlock Text="..." IsVisible="{Binding ViewModel.IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"/>
@@ -90,15 +79,15 @@
             </Border>
 
             <!-- DM Message Edit Overlay -->
-            <Border Background="#2f3136"
+            <Border Background="{StaticResource GlassBrush}"
                     DockPanel.Dock="Bottom"
                     Padding="16"
+                    CornerRadius="16"
+                    Margin="16,0,16,16"
                     IsVisible="{Binding ViewModel.EditingMessage, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Converter={x:Static ObjectConverters.IsNotNull}}">
                 <StackPanel Spacing="8">
                     <TextBlock Text="EDITING MESSAGE"
-                               Foreground="#72767d"
-                               FontSize="11"
-                               FontWeight="SemiBold"/>
+                               Classes="text-caption"/>
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="*"/>
@@ -107,31 +96,20 @@
                         </Grid.ColumnDefinitions>
                         <TextBox Grid.Column="0"
                                  x:Name="EditDMMessageInputBox"
+                                 Classes="input-chat"
                                  Text="{Binding ViewModel.EditingMessageContent, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Mode=TwoWay}"
-                                 Background="#40444b"
-                                 Foreground="White"
-                                 BorderThickness="0"
-                                 CornerRadius="4"
-                                 Padding="12,8"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
                                  MaxHeight="200"/>
                         <Button Grid.Column="1"
+                                Classes="btn-secondary"
                                 Command="{Binding ViewModel.CancelEditMessageCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
-                                Background="Transparent"
-                                Foreground="#b9bbbe"
                                 Content="Cancel"
-                                Padding="12,8"
-                                Margin="8,0,0,0"
-                                Cursor="Hand"/>
+                                Margin="8,0,0,0"/>
                         <Button Grid.Column="2"
+                                Classes="btn-primary"
                                 Command="{Binding ViewModel.SaveMessageEditCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
-                                Background="#5865f2"
-                                Foreground="White"
-                                Padding="12,8"
-                                Margin="8,0,0,0"
-                                CornerRadius="4"
-                                Cursor="Hand">
+                                Margin="8,0,0,0">
                             <Panel>
                                 <TextBlock Text="Save" IsVisible="{Binding ViewModel.IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Converter={x:Static BoolConverters.Not}}"/>
                                 <TextBlock Text="..." IsVisible="{Binding ViewModel.IsLoading, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"/>

@@ -1,0 +1,55 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>CFBundleDevelopmentRegion</key>
+    <string>en</string>
+    <key>CFBundleExecutable</key>
+    <string>Snacka</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
+    <key>CFBundleIdentifier</key>
+    <string>com.snacka.client</string>
+    <key>CFBundleInfoDictionaryVersion</key>
+    <string>6.0</string>
+    <key>CFBundleName</key>
+    <string>Snacka</string>
+    <key>CFBundleDisplayName</key>
+    <string>Snacka</string>
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+    <key>CFBundleShortVersionString</key>
+    <string>${VERSION}</string>
+    <key>CFBundleVersion</key>
+    <string>${BUILD_NUMBER}</string>
+    <key>LSMinimumSystemVersion</key>
+    <string>11.0</string>
+    <key>NSHighResolutionCapable</key>
+    <true/>
+    <key>NSSupportsAutomaticGraphicsSwitching</key>
+    <true/>
+    <key>LSApplicationCategoryType</key>
+    <string>public.app-category.social-networking</string>
+    <!-- Required for microphone access -->
+    <key>NSMicrophoneUsageDescription</key>
+    <string>Snacka needs access to your microphone for voice chat.</string>
+    <!-- Required for camera access -->
+    <key>NSCameraUsageDescription</key>
+    <string>Snacka needs access to your camera for video calls.</string>
+    <!-- Required for screen recording -->
+    <key>NSScreenCaptureUsageDescription</key>
+    <string>Snacka needs screen recording permission to share your screen.</string>
+    <!-- URL scheme for snacka:// links -->
+    <key>CFBundleURLTypes</key>
+    <array>
+        <dict>
+            <key>CFBundleURLName</key>
+            <string>Snacka URL</string>
+            <key>CFBundleURLSchemes</key>
+            <array>
+                <string>snacka</string>
+            </array>
+        </dict>
+    </array>
+</dict>
+</plist>

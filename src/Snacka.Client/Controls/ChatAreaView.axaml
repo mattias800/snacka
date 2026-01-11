@@ -10,13 +10,13 @@
              x:Class="Snacka.Client.Controls.ChatAreaView"
              x:DataType="controls:ChatAreaView">
 
-    <Border Background="#313338">
+    <Border Background="{StaticResource Content2Brush}">
         <DockPanel>
             <!-- Channel Header -->
             <Border DockPanel.Dock="Top" Classes="panel-header">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <TextBlock Text="#"
-                               Foreground="#80848e"
+                               Foreground="{StaticResource Foreground3Brush}"
                                FontSize="22"
                                VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding ChannelName, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}, FallbackValue='general'}"
@@ -69,7 +69,7 @@
                                 Click="OnCodeClick">
                             <TextBlock Text="&lt;/&gt;" Foreground="#b5bac1" FontFamily="Consolas,monospace" FontSize="12"/>
                         </Button>
-                        <Border Width="1" Background="#3f4147" Margin="4,2"/>
+                        <Border Width="1" Background="{StaticResource BorderBrush}" Margin="4,2"/>
                         <TextBlock Text="Markdown supported"
                                    Classes="text-caption"
                                    VerticalAlignment="Center"
@@ -77,8 +77,8 @@
                     </StackPanel>
 
                     <!-- Reply Preview Banner -->
-                    <Border Background="#2b2d31"
-                            CornerRadius="8"
+                    <Border Background="{StaticResource Content1Brush}"
+                            CornerRadius="12"
                             Padding="12,8"
                             Margin="0,0,0,8"
                             IsVisible="{Binding IsReplying, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
@@ -88,10 +88,10 @@
                                 <ColumnDefinition Width="Auto"/>
                             </Grid.ColumnDefinitions>
                             <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
-                                <ui:SymbolIcon Symbol="MailReply" Foreground="#5865f2" FontSize="14" VerticalAlignment="Center"/>
+                                <ui:SymbolIcon Symbol="MailReply" Foreground="{StaticResource PrimaryBrush}" FontSize="14" VerticalAlignment="Center"/>
                                 <TextBlock Text="Replying to" Classes="text-muted" FontSize="13" VerticalAlignment="Center"/>
                                 <TextBlock Text="{Binding ReplyingToAuthor, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
-                                           Foreground="#5865f2"
+                                           Foreground="{StaticResource PrimaryBrush}"
                                            FontSize="13"
                                            FontWeight="SemiBold"
                                            VerticalAlignment="Center"/>
@@ -120,8 +120,8 @@
                                Margin="0,0,0,4"/>
 
                     <!-- Pending Attachments Preview -->
-                    <Border Background="#2b2d31"
-                            CornerRadius="8"
+                    <Border Background="{StaticResource Content1Brush}"
+                            CornerRadius="12"
                             Padding="12"
                             Margin="0,0,0,8"
                             IsVisible="{Binding HasPendingAttachments, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
@@ -139,8 +139,8 @@
                                 </ItemsControl.ItemsPanel>
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Background="#383a40"
-                                                CornerRadius="6"
+                                        <Border Background="{StaticResource Content3Brush}"
+                                                CornerRadius="10"
                                                 Padding="10,6"
                                                 Margin="0,0,8,4">
                                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -171,11 +171,11 @@
                     </Border>
 
                     <!-- Mention Autocomplete Popup -->
-                    <Border Background="#2b2d31"
-                            CornerRadius="8"
+                    <Border Background="{StaticResource GlassBrush}"
+                            CornerRadius="16"
                             Padding="8"
                             Margin="0,0,0,8"
-                            BoxShadow="0 4 12 0 #66000000"
+                            BoxShadow="{StaticResource ShadowLg}"
                             IsVisible="{Binding IsMentionPopupOpen, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
                         <ItemsControl x:Name="MentionSuggestionsList"
                                       ItemsSource="{Binding MentionSuggestions, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
@@ -204,7 +204,7 @@
                                             <Border Grid.Column="0"
                                                     Width="32" Height="32"
                                                     CornerRadius="16"
-                                                    Background="#5865f2"
+                                                    Background="{StaticResource PrimaryGradient}"
                                                     Margin="0,0,10,0">
                                                 <TextBlock Text="{Binding Username, Converter={x:Static conv:FirstCharConverter.Instance}}"
                                                            Foreground="White"
@@ -333,10 +333,10 @@
             </ScrollViewer>
 
             <!-- Message Edit Overlay -->
-            <Border Background="#2b2d31"
+            <Border Background="{StaticResource GlassBrush}"
                     DockPanel.Dock="Bottom"
                     Padding="16"
-                    CornerRadius="8"
+                    CornerRadius="16"
                     Margin="16,0,16,16"
                     IsVisible="{Binding IsEditing, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
                 <StackPanel Spacing="8">

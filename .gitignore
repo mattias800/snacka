@@ -75,3 +75,6 @@ _ReSharper*/
 *.db-shm
 *.db-wal
 src/Snacka.Server/uploads/
+
+# Environment files (contains secrets)
+.env

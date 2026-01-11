@@ -11,17 +11,19 @@
     <UserControl.Resources>
         <conv:ColorToBorderConverter x:Key="ColorToBorderConverter"/>
     </UserControl.Resources>
-    <Grid Background="#202225" RowDefinitions="Auto,*">
+    <Grid Background="{StaticResource BackgroundBrush}" RowDefinitions="Auto,*">
         <Grid.ColumnDefinitions>
             <ColumnDefinition Width="72"/>
-            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>
+            <ColumnDefinition Width="Auto"/>
             <ColumnDefinition Width="*"/>
-            <ColumnDefinition Width="240"/>
+            <ColumnDefinition Width="Auto"/>
+            <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>
         </Grid.ColumnDefinitions>
 
         <!-- Connection Status Banner (top of screen, spans all columns) -->
-        <Border Grid.Row="0" Grid.ColumnSpan="4"
-                Background="#ed4245"
+        <Border Grid.Row="0" Grid.ColumnSpan="6"
+                Background="{StaticResource DangerBrush}"
                 Padding="12,8"
                 IsVisible="{Binding IsDisconnected}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
@@ -32,8 +34,8 @@
             </StackPanel>
         </Border>
 
-        <Border Grid.Row="0" Grid.ColumnSpan="4"
-                Background="#FAA61A"
+        <Border Grid.Row="0" Grid.ColumnSpan="6"
+                Background="{StaticResource WarningBrush}"
                 Padding="8,6"
                 IsVisible="{Binding IsReconnecting}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
@@ -45,12 +47,14 @@
         </Border>
 
         <!-- Main Content Grid (Row 1) -->
-        <Grid Grid.Row="1" Grid.ColumnSpan="4">
+        <Grid Grid.Row="1" Grid.ColumnSpan="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="72"/>
-                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="240"/>
+                <ColumnDefinition Width="Auto"/>
+                <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>
             </Grid.ColumnDefinitions>
 
         <!-- Community List (Left Sidebar) -->
@@ -62,10 +66,10 @@
                                     OpenDMsCommand="{Binding OpenDMsCommand}"/>
 
         <!-- Channel List (Second Column) -->
-        <Border Grid.Column="1" Background="#2f3136">
+        <Border Grid.Column="1" Background="{StaticResource Content1Brush}">
             <DockPanel>
                 <!-- Community Name Header -->
-                <Border DockPanel.Dock="Top" Background="#2f3136" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
+                <Border DockPanel.Dock="Top" Background="{StaticResource Content1Brush}" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BackgroundBrush}">
                     <TextBlock Text="{Binding SelectedCommunity.Name, FallbackValue='Select a Community'}"
                                Foreground="White"
                                FontWeight="SemiBold"
@@ -127,8 +131,16 @@
             </DockPanel>
         </Border>
 
+        <!-- Left Sidebar Splitter -->
+        <GridSplitter Grid.Column="2"
+                      Width="4"
+                      Background="Transparent"
+                      ResizeDirection="Columns"
+                      ResizeBehavior="PreviousAndNext"
+                      Cursor="SizeWestEast"/>
+
         <!-- Main Content Area (Chat, Voice Channel, or DM) -->
-        <Grid Grid.Column="2">
+        <Grid Grid.Column="3">
             <!-- DM Content (shown when viewing DM conversation) -->
             <controls:DMContentView IsVisible="{Binding IsViewingDM}"
                                     ViewModel="{Binding DMContent}"/>
@@ -204,13 +216,21 @@
             </controls:ChatAreaView>
         </Grid>
 
+        <!-- Right Sidebar Splitter -->
+        <GridSplitter Grid.Column="4"
+                      Width="4"
+                      Background="Transparent"
+                      ResizeDirection="Columns"
+                      ResizeBehavior="PreviousAndNext"
+                      Cursor="SizeWestEast"/>
+
         <!-- Right Sidebar (Members List - always visible) -->
-        <controls:MembersListView Grid.Column="3"
+        <controls:MembersListView Grid.Column="5"
                                   ViewModel="{Binding MembersList}"
                                   MemberClicked="OnMemberClicked"/>
 
         <!-- Thread Panel Overlay (visible when thread IS open) -->
-        <Border Grid.Column="2" Grid.ColumnSpan="2"
+        <Border Grid.Column="3" Grid.ColumnSpan="3"
                 HorizontalAlignment="Right"
                 Width="{Binding ThreadPanelWidth}"
                 IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNotNull}}">
@@ -222,7 +242,7 @@
 
                 <!-- Resize Handle -->
                 <Border Grid.Column="0"
-                        Background="#202225"
+                        Background="{StaticResource BackgroundBrush}"
                         Cursor="SizeWestEast"
                         PointerPressed="ThreadPanelResizeHandle_PointerPressed"
                         PointerMoved="ThreadPanelResizeHandle_PointerMoved"
@@ -241,7 +261,7 @@
         </Border>
 
         <!-- Screen Share Picker Overlay -->
-        <Border Grid.ColumnSpan="4"
+        <Border Grid.ColumnSpan="6"
                 Background="#80000000"
                 IsVisible="{Binding IsScreenSharePickerOpen}"
                 HorizontalAlignment="Stretch"
@@ -252,7 +272,7 @@
         </Border>
 
         <!-- Video Fullscreen Overlay -->
-        <Border Grid.ColumnSpan="4"
+        <Border Grid.ColumnSpan="6"
                 Background="#FF000000"
                 IsVisible="{Binding IsVideoFullscreen}"
                 HorizontalAlignment="Stretch"
@@ -306,7 +326,7 @@
                             Background="#80000000"
                             Padding="12,6"
                             Margin="16"
-                            CornerRadius="4">
+                            CornerRadius="12">
                         <TextBlock Text="{Binding FullscreenStream.Username}"
                                    Foreground="White"
                                    FontSize="14"/>
@@ -322,8 +342,8 @@
                         <!-- Drawing Toolbar - left (only visible when host allows drawing) -->
                         <Border HorizontalAlignment="Left"
                                 VerticalAlignment="Center"
-                                Background="#E0202020"
-                                CornerRadius="6"
+                                Background="#E009090b"
+                                CornerRadius="12"
                                 Padding="8,4"
                                 IsVisible="{Binding IsDrawingAllowedByHost}">
                             <StackPanel Orientation="Horizontal" Spacing="8">
@@ -332,7 +352,7 @@
                                               Padding="8,4"
                                               Background="#40FFFFFF"
                                               Foreground="White"
-                                              CornerRadius="4">
+                                              CornerRadius="8">
                                     <StackPanel Orientation="Horizontal" Spacing="4">
                                         <TextBlock Text="✏️" VerticalAlignment="Center" FontSize="12"/>
                                         <TextBlock Text="Draw" VerticalAlignment="Center" FontSize="11"/>
@@ -373,7 +393,7 @@
                                 <Button Padding="8,4"
                                         Background="#40FFFFFF"
                                         Foreground="White"
-                                        CornerRadius="4"
+                                        CornerRadius="8"
                                         Click="OnClearAnnotationsClick">
                                     <TextBlock Text="Clear" FontSize="11"/>
                                 </Button>
@@ -386,7 +406,7 @@
                                     VerticalAlignment="Center"
                                     Spacing="6">
                             <Border Background="#40ffffff"
-                                    CornerRadius="3"
+                                    CornerRadius="8"
                                     Padding="6,2">
                                 <TextBlock Text="ESC"
                                            Foreground="White"
@@ -427,9 +447,9 @@
 
                             <!-- Close button -->
                             <Button Padding="10,6"
-                                    Background="#ed4245"
+                                    Background="{StaticResource DangerBrush}"
                                     BorderThickness="0"
-                                    CornerRadius="4"
+                                    CornerRadius="12"
                                     Cursor="Hand"
                                     Click="OnCloseFullscreenClick">
                                 <StackPanel Orientation="Horizontal" Spacing="6">
@@ -444,7 +464,7 @@
         </Border>
 
         <!-- Nickname Edit Overlay -->
-        <controls:NicknameEditOverlay Grid.ColumnSpan="4"
+        <controls:NicknameEditOverlay Grid.ColumnSpan="6"
                                       IsVisibleOverlay="{Binding IsEditingNickname}"
                                       IsEditingMyNickname="{Binding IsEditingMyNickname}"
                                       EditingNickname="{Binding EditingNickname, Mode=TwoWay}"
@@ -516,7 +536,7 @@
         </Popup>
 
         <!-- Image Lightbox Overlay -->
-        <controls:ImageLightbox Grid.ColumnSpan="4"
+        <controls:ImageLightbox Grid.ColumnSpan="6"
                                 Attachment="{Binding LightboxImage}"
                                 BaseUrl="{Binding BaseUrl}"
                                 CloseRequested="OnLightboxCloseRequested"

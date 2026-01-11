@@ -3,6 +3,13 @@
 # Development startup script - starts server and two clients with different test accounts
 # Usage: ./dev-start.sh
 
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+
 # Set VLC environment variables for audio playback on macOS
 if [[ "$OSTYPE" == "darwin"* ]]; then
     export VLC_PLUGIN_PATH="/Applications/VLC.app/Contents/MacOS/plugins"
@@ -16,9 +23,9 @@ DB_FILE="src/Snacka.Server/snacka.db"
 
 # Test accounts (will be auto-registered if they don't exist)
 USER1_EMAIL="alice@test.com"
-USER1_PASSWORD="password123"
+USER1_PASSWORD="Password123!"
 USER2_EMAIL="bob@test.com"
-USER2_PASSWORD="password123"
+USER2_PASSWORD="Password123!"
 
 echo "=== Snacka Development Startup ==="
 echo ""

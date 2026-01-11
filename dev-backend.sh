@@ -3,6 +3,13 @@
 # Development backend startup script - starts only the server
 # Usage: ./dev-backend.sh
 
+# Load environment variables from .env file if it exists
+if [ -f .env ]; then
+    set -a
+    source .env
+    set +a
+fi
+
 SERVER_URL="http://localhost:5117"
 SERVER_PROJECT="src/Snacka.Server/Snacka.Server.csproj"
 

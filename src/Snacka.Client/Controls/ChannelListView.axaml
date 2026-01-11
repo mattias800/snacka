@@ -33,10 +33,10 @@
 
         <!-- Channel item hover effect during drag -->
         <Style Selector="Button.channel-btn.drag-over">
-            <Setter Property="Background" Value="#3f4248"/>
+            <Setter Property="Background" Value="#4e5058"/>
         </Style>
         <Style Selector="Border.voice-channel-item.drag-over">
-            <Setter Property="Background" Value="#3f4248"/>
+            <Setter Property="Background" Value="#4e5058"/>
         </Style>
 
         <!-- Channel item transition for smooth reordering -->
@@ -86,11 +86,11 @@
 
         <!-- Drag ghost style -->
         <Style Selector="Border.drag-ghost">
-            <Setter Property="Background" Value="#36393f"/>
-            <Setter Property="CornerRadius" Value="4"/>
-            <Setter Property="Padding" Value="8,6"/>
-            <Setter Property="Opacity" Value="0.9"/>
-            <Setter Property="BoxShadow" Value="0 4 12 2 #40000000"/>
+            <Setter Property="Background" Value="#2b2d31"/>
+            <Setter Property="CornerRadius" Value="8"/>
+            <Setter Property="Padding" Value="10,8"/>
+            <Setter Property="Opacity" Value="0.95"/>
+            <Setter Property="BoxShadow" Value="0 4 16 0 #66000000"/>
         </Style>
     </UserControl.Styles>
 
@@ -103,16 +103,16 @@
                 HorizontalAlignment="Left"
                 VerticalAlignment="Top"
                 ZIndex="1000">
-            <StackPanel Orientation="Horizontal" Spacing="6">
+            <StackPanel Orientation="Horizontal" Spacing="8">
                 <TextBlock x:Name="DragGhostIcon"
                            Text="#"
-                           Foreground="#72767d"
+                           Foreground="{StaticResource Foreground3Brush}"
                            FontSize="14"
                            VerticalAlignment="Center"/>
                 <TextBlock x:Name="DragGhostName"
                            Text=""
-                           Foreground="#dcddde"
-                           FontSize="15"
+                           Classes="text-body"
+                           FontSize="14"
                            VerticalAlignment="Center"/>
             </StackPanel>
         </Border>
@@ -121,34 +121,33 @@
         <StackPanel>
             <!-- Loading indicator -->
             <TextBlock Text="Loading channels..."
-                       Foreground="#72767d"
+                       Classes="text-muted"
                        FontSize="12"
-                       Margin="16,8"
+                       Margin="16,12"
                        IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"/>
 
             <!-- Text Channels Section -->
-            <Grid Margin="8,8,8,4">
+            <Grid Margin="12,12,12,6">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="TEXT CHANNELS"
-                           Foreground="#72767d"
-                           FontSize="11"
-                           FontWeight="SemiBold"
+                           Classes="text-caption"
                            VerticalAlignment="Center"/>
                 <Button Grid.Column="1"
+                        Classes="btn-icon"
                         Command="{Binding CreateChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
-                        Background="Transparent"
                         Padding="4"
-                        Cursor="Hand"
+                        MinWidth="24"
+                        MinHeight="24"
                         ToolTip.Tip="Create Text Channel"
                         IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"
                         IsVisible="{Binding CanManageChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
                     <ui:SymbolIcon Symbol="Add"
-                               Foreground="#72767d"
-                               FontSize="16"/>
+                               Foreground="{StaticResource Foreground3Brush}"
+                               FontSize="14"/>
                 </Button>
             </Grid>
 
@@ -156,7 +155,8 @@
             <Border x:Name="TextChannelsTopDropIndicator" Classes="drop-indicator"/>
 
             <ItemsControl x:Name="TextChannelsList"
-                          ItemsSource="{Binding TextChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
+                          ItemsSource="{Binding TextChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                          Margin="4,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="services:ChannelResponse">
                         <StackPanel>
@@ -167,7 +167,7 @@
                                     CommandParameter="{Binding}"
                                     HorizontalAlignment="Stretch"
                                     HorizontalContentAlignment="Stretch"
-                                    Padding="8,6"
+                                    Padding="10,8"
                                     Margin="0,1"
                                     Cursor="Hand"
                                     DoubleTapped="OnChannelDoubleTapped"
@@ -194,7 +194,7 @@
                                                   x:Name="DeleteTextChannelItem"
                                                   Click="OnDeleteChannelClick"
                                                   Tag="{Binding}"
-                                                  Foreground="#ed4245">
+                                                  Foreground="{StaticResource DangerBrush}">
                                             <MenuItem.Icon>
                                                 <ui:SymbolIcon Symbol="Delete" FontSize="12"/>
                                             </MenuItem.Icon>
@@ -207,21 +207,21 @@
                                         <ColumnDefinition Width="Auto"/>
                                         <ColumnDefinition Width="Auto"/>
                                     </Grid.ColumnDefinitions>
-                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
+                                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
                                         <TextBlock Text="#"
-                                                   Foreground="#72767d"
+                                                   Foreground="{StaticResource Foreground3Brush}"
                                                    FontSize="18"
                                                    VerticalAlignment="Center"/>
                                         <TextBlock Text="{Binding Name}"
-                                                   Foreground="#8e9297"
-                                                   FontSize="15"
+                                                   Classes="text-secondary"
+                                                   FontSize="14"
                                                    VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <!-- Unread badge -->
                                     <Border Grid.Column="1"
-                                            Background="#ed4245"
-                                            CornerRadius="8"
-                                            Padding="5,1"
+                                            Background="{StaticResource DangerBrush}"
+                                            CornerRadius="10"
+                                            Padding="6,2"
                                             Margin="4,0"
                                             VerticalAlignment="Center"
                                             IsVisible="{Binding UnreadCount, Converter={x:Static conv:IntGreaterThanZeroConverter.Instance}}">
@@ -231,16 +231,17 @@
                                                    FontWeight="SemiBold"/>
                                     </Border>
                                     <Button Grid.Column="2"
+                                            Classes="btn-icon"
                                             Command="{Binding StartEditChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
                                             CommandParameter="{Binding}"
-                                            Background="Transparent"
-                                            Padding="4,2"
-                                            Cursor="Hand"
+                                            Padding="4"
+                                            MinWidth="24"
+                                            MinHeight="24"
                                             ToolTip.Tip="Rename Channel"
                                             IsVisible="{Binding CanManageChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
                                         <ui:SymbolIcon Symbol="Edit"
-                                                   Foreground="#72767d"
-                                                   FontSize="12"/>
+                                                   Foreground="{StaticResource Foreground3Brush}"
+                                                   FontSize="11"/>
                                     </Button>
                                 </Grid>
                             </Button>
@@ -253,28 +254,27 @@
             <Border x:Name="TextChannelsBottomDropIndicator" Classes="drop-indicator"/>
 
             <!-- Voice Channels Section -->
-            <Grid Margin="8,16,8,4">
+            <Grid Margin="12,20,12,6">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Grid.Column="0"
                            Text="VOICE CHANNELS"
-                           Foreground="#72767d"
-                           FontSize="11"
-                           FontWeight="SemiBold"
+                           Classes="text-caption"
                            VerticalAlignment="Center"/>
                 <Button Grid.Column="1"
+                        Classes="btn-icon"
                         Command="{Binding CreateVoiceChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
-                        Background="Transparent"
                         Padding="4"
-                        Cursor="Hand"
+                        MinWidth="24"
+                        MinHeight="24"
                         ToolTip.Tip="Create Voice Channel"
                         IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"
                         IsVisible="{Binding CanManageChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
                     <ui:SymbolIcon Symbol="Add"
-                               Foreground="#72767d"
-                               FontSize="16"/>
+                               Foreground="{StaticResource Foreground3Brush}"
+                               FontSize="14"/>
                 </Button>
             </Grid>
 
@@ -283,7 +283,8 @@
 
             <!-- Voice Channels with participant tracking -->
             <ItemsControl x:Name="VoiceChannelsList"
-                          ItemsSource="{Binding VoiceChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}">
+                          ItemsSource="{Binding VoiceChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                          Margin="4,0">
                 <ItemsControl.ItemTemplate>
                     <DataTemplate x:DataType="vm:VoiceChannelViewModel">
                         <StackPanel>
@@ -291,7 +292,7 @@
                             <Border Classes="drop-placeholder"
                                     Classes.active="{Binding ShowGapAbove}"/>
                             <Border Classes="voice-channel-item"
-                                    Padding="8,6"
+                                    Padding="10,8"
                                     Margin="0,1"
                                     Cursor="Hand"
                                     Opacity="{Binding IsDragSource, Converter={x:Static conv:BoolToOpacityConverter.Instance}}"
@@ -315,29 +316,29 @@
                                                   x:Name="DeleteVoiceChannelItem"
                                                   Click="OnDeleteChannelClick"
                                                   Tag="{Binding Channel}"
-                                                  Foreground="#ed4245">
+                                                  Foreground="{StaticResource DangerBrush}">
                                             <MenuItem.Icon>
                                                 <ui:SymbolIcon Symbol="Delete" FontSize="12"/>
                                             </MenuItem.Icon>
                                         </MenuItem>
                                     </ContextMenu>
                                 </Border.ContextMenu>
-                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
                                     <ui:SymbolIcon Symbol="Speaker2"
-                                               Foreground="#72767d"
+                                               Foreground="{StaticResource Foreground3Brush}"
                                                FontSize="14"
                                                VerticalAlignment="Center"/>
                                     <TextBlock Text="{Binding Name}"
-                                               Foreground="#8e9297"
-                                               FontSize="15"
+                                               Classes="text-secondary"
+                                               FontSize="14"
                                                VerticalAlignment="Center"/>
                                 </StackPanel>
                             </Border>
                             <!-- Voice Participants - directly bound to ObservableCollection -->
-                            <ItemsControl ItemsSource="{Binding Participants}" Margin="24,0,0,4">
+                            <ItemsControl ItemsSource="{Binding Participants}" Margin="28,0,0,4">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Classes="voice-participant" Margin="4,1">
+                                        <Border Classes="voice-participant" Margin="4,2">
                                             <!-- Context menu for user volume (only for other users) -->
                                             <Border.ContextMenu>
                                                 <ContextMenu>
@@ -354,7 +355,7 @@
                                                                         Value="{Binding VolumePercent}"
                                                                         VerticalAlignment="Center"/>
                                                                 <TextBlock Text="{Binding VolumePercent, StringFormat={}{0}%}"
-                                                                           Foreground="#dcddde"
+                                                                           Classes="text-body"
                                                                            FontSize="12"
                                                                            Width="40"
                                                                            VerticalAlignment="Center"/>
@@ -396,8 +397,8 @@
                                                 </ContextMenu>
                                             </Border.ContextMenu>
                                             <!-- Username and status icons -->
-                                            <StackPanel Orientation="Horizontal" Spacing="6">
-                                                <Ellipse Width="24" Height="24" Fill="#40444b"/>
+                                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                                <Ellipse Width="24" Height="24" Fill="{StaticResource Content3Brush}"/>
                                                 <TextBlock Text="{Binding Username}"
                                                            Foreground="{Binding IsSpeaking, Converter={x:Static conv:SpeakingForegroundConverter.Instance}}"
                                                            FontSize="13"
@@ -405,7 +406,7 @@
                                                 <!-- Self muted (red) - only show if self-muted but not server-muted -->
                                                 <ui:SymbolIcon Symbol="Mute"
                                                            FontSize="10"
-                                                           Foreground="#ed4245"
+                                                           Foreground="{StaticResource DangerBrush}"
                                                            VerticalAlignment="Center"
                                                            ToolTip.Tip="Muted">
                                                     <ui:SymbolIcon.IsVisible>
@@ -418,14 +419,14 @@
                                                 <!-- Server muted (orange) -->
                                                 <ui:SymbolIcon Symbol="Mute"
                                                            FontSize="10"
-                                                           Foreground="#faa61a"
+                                                           Foreground="{StaticResource WarningBrush}"
                                                            VerticalAlignment="Center"
                                                            ToolTip.Tip="Server Muted"
                                                            IsVisible="{Binding IsServerMuted}"/>
                                                 <!-- Self deafened (red) - only show if self-deafened but not server-deafened -->
                                                 <ui:SymbolIcon Symbol="SpeakerMute"
                                                            FontSize="10"
-                                                           Foreground="#ed4245"
+                                                           Foreground="{StaticResource DangerBrush}"
                                                            VerticalAlignment="Center"
                                                            ToolTip.Tip="Deafened">
                                                     <ui:SymbolIcon.IsVisible>
@@ -438,13 +439,13 @@
                                                 <!-- Server deafened (orange) -->
                                                 <ui:SymbolIcon Symbol="SpeakerMute"
                                                            FontSize="10"
-                                                           Foreground="#faa61a"
+                                                           Foreground="{StaticResource WarningBrush}"
                                                            VerticalAlignment="Center"
                                                            ToolTip.Tip="Server Deafened"
                                                            IsVisible="{Binding IsServerDeafened}"/>
                                                 <ui:SymbolIcon Symbol="Video"
                                                            FontSize="10"
-                                                           Foreground="#3ba55c"
+                                                           Foreground="{StaticResource SuccessBrush}"
                                                            VerticalAlignment="Center"
                                                            IsVisible="{Binding IsCameraOn}"/>
                                             </StackPanel>
@@ -468,39 +469,28 @@
             </Border>
 
             <!-- Channel Rename Editor -->
-            <Border Background="#202225"
-                    CornerRadius="4"
-                    Padding="8"
-                    Margin="0,8,8,0"
+            <Border Background="{StaticResource BackgroundBrush}"
+                    CornerRadius="12"
+                    Padding="12"
+                    Margin="8,12,8,0"
                     IsVisible="{Binding EditingChannel, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static ObjectConverters.IsNotNull}}">
-                <StackPanel Spacing="8">
+                <StackPanel Spacing="10">
                     <TextBlock Text="RENAME CHANNEL"
-                               Foreground="#72767d"
-                               FontSize="11"
-                               FontWeight="SemiBold"/>
+                               Classes="text-caption"/>
                     <TextBox x:Name="ChannelRenameInputBox"
+                             Classes="input-default"
                              Text="{Binding EditingChannelName, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
-                             Background="#40444b"
-                             Foreground="White"
-                             BorderThickness="0"
-                             CornerRadius="4"
-                             Padding="8"
                              IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"
                              KeyDown="OnChannelRenameKeyDown"/>
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                        <Button Command="{Binding CancelEditChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
-                                Background="Transparent"
-                                Foreground="#b9bbbe"
+                        <Button Classes="btn-secondary"
+                                Command="{Binding CancelEditChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
                                 Content="Cancel"
-                                Padding="8,4"
-                                Cursor="Hand"
+                                Padding="12,6"
                                 IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"/>
-                        <Button Command="{Binding SaveChannelNameCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
-                                Background="#5865f2"
-                                Foreground="White"
-                                Padding="12,4"
-                                CornerRadius="4"
-                                Cursor="Hand"
+                        <Button Classes="btn-primary"
+                                Command="{Binding SaveChannelNameCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                Padding="12,6"
                                 IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}">
                             <Panel>
                                 <TextBlock Text="Save" IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"/>
@@ -512,38 +502,33 @@
             </Border>
 
             <!-- Channel Delete Confirmation -->
-            <Border Background="#202225"
-                    CornerRadius="4"
-                    Padding="12"
-                    Margin="8,8,8,0"
+            <Border Background="{StaticResource BackgroundBrush}"
+                    CornerRadius="12"
+                    Padding="16"
+                    Margin="8,12,8,0"
                     IsVisible="{Binding ChannelPendingDelete, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static ObjectConverters.IsNotNull}}">
                 <StackPanel Spacing="12">
                     <TextBlock Text="DELETE CHANNEL"
-                               Foreground="#ed4245"
+                               Foreground="{StaticResource DangerBrush}"
                                FontSize="11"
                                FontWeight="SemiBold"/>
                     <TextBlock TextWrapping="Wrap"
-                               Foreground="#dcddde"
+                               Classes="text-body"
                                FontSize="13">
                         <Run Text="Are you sure you want to delete "/>
-                        <Run Text="#" Foreground="#72767d"/>
+                        <Run Text="#" Foreground="{StaticResource Foreground3Brush}"/>
                         <Run Text="{Binding ChannelPendingDelete.Name, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}" FontWeight="SemiBold"/>
                         <Run Text="? This action cannot be undone."/>
                     </TextBlock>
                     <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
-                        <Button Command="{Binding CancelDeleteChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
-                                Background="Transparent"
-                                Foreground="#b9bbbe"
+                        <Button Classes="btn-secondary"
+                                Command="{Binding CancelDeleteChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
                                 Content="Cancel"
-                                Padding="12,6"
-                                Cursor="Hand"
+                                Padding="12,8"
                                 IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"/>
-                        <Button Command="{Binding ConfirmDeleteChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
-                                Background="#ed4245"
-                                Foreground="White"
-                                Padding="12,6"
-                                CornerRadius="4"
-                                Cursor="Hand"
+                        <Button Classes="btn-danger"
+                                Command="{Binding ConfirmDeleteChannelCommand, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                Padding="12,8"
                                 IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}">
                             <Panel>
                                 <TextBlock Text="Delete" IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}, Converter={x:Static BoolConverters.Not}}"/>

@@ -10,54 +10,50 @@
              x:Class="Snacka.Client.Controls.ThreadPanelView"
              x:DataType="vm:ThreadViewModel">
 
-    <DockPanel Background="#2f3136">
+    <DockPanel Background="{StaticResource Content1Brush}">
         <!-- Header with close button -->
-        <Border DockPanel.Dock="Top" Background="#202225" Padding="12,8">
+        <Border DockPanel.Dock="Top" Background="{StaticResource BackgroundBrush}" Padding="16,12">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
                     <ColumnDefinition Width="Auto"/>
                 </Grid.ColumnDefinitions>
                 <TextBlock Text="Thread"
-                           Foreground="White"
-                           FontSize="14"
-                           FontWeight="SemiBold"
+                           Classes="heading-3"
                            VerticalAlignment="Center"/>
                 <Button Grid.Column="1"
+                        Classes="btn-icon"
                         Command="{Binding CloseCommand}"
-                        Background="Transparent"
-                        Padding="4"
                         ToolTip.Tip="Close thread">
-                    <ui:SymbolIcon Symbol="Dismiss" Foreground="#72767d" FontSize="14"/>
+                    <ui:SymbolIcon Symbol="Dismiss" Foreground="{StaticResource Foreground3Brush}" FontSize="14"/>
                 </Button>
             </Grid>
         </Border>
 
         <!-- Parent Message Preview -->
-        <Border DockPanel.Dock="Top" Background="#36393f" Padding="12" Margin="8,8,8,0" CornerRadius="4">
+        <Border DockPanel.Dock="Top" Background="{StaticResource Content2Brush}" Padding="14" Margin="12,12,12,0" CornerRadius="12">
             <StackPanel>
-                <StackPanel Orientation="Horizontal" Spacing="8">
-                    <Border Width="24" Height="24" CornerRadius="12" Background="#5865f2">
+                <StackPanel Orientation="Horizontal" Spacing="10">
+                    <Border Width="28" Height="28" CornerRadius="14" Background="{StaticResource PrimaryGradient}">
                         <TextBlock Text="{Binding ParentMessage.AuthorUsername, Converter={x:Static conv:FirstCharConverter.Instance}}"
                                    Foreground="White"
-                                   FontSize="11"
+                                   FontSize="12"
                                    FontWeight="Bold"
                                    HorizontalAlignment="Center"
                                    VerticalAlignment="Center"/>
                     </Border>
                     <TextBlock Text="{Binding ParentMessage.AuthorUsername}"
-                               Foreground="White"
-                               FontSize="13"
-                               FontWeight="SemiBold"
+                               Classes="heading-3"
+                               FontSize="14"
                                VerticalAlignment="Center"/>
                 </StackPanel>
                 <TextBlock Text="{Binding ParentMessage.Content}"
-                           Foreground="#dcddde"
+                           Classes="text-body"
                            FontSize="13"
                            TextWrapping="Wrap"
                            MaxLines="3"
-                           Margin="0,4,0,0"/>
-                <TextBlock Foreground="#72767d" FontSize="11" Margin="0,4,0,0">
+                           Margin="0,8,0,0"/>
+                <TextBlock Classes="text-muted" FontSize="11" Margin="0,6,0,0">
                     <TextBlock.Text>
                         <MultiBinding StringFormat="{}{0} replies">
                             <Binding Path="TotalReplyCount"/>
@@ -68,7 +64,7 @@
         </Border>
 
         <!-- Reply Input (docked at bottom) -->
-        <Border DockPanel.Dock="Bottom" Background="#40444b" Margin="8" CornerRadius="8" Padding="12,8">
+        <Border DockPanel.Dock="Bottom" Background="{StaticResource Content3Brush}" Margin="12" CornerRadius="12" Padding="12,10">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="*"/>
@@ -83,11 +79,8 @@
                          AcceptsReturn="False"
                          KeyDown="OnThreadReplyKeyDown"/>
                 <Button Grid.Column="1"
+                        Classes="btn-primary"
                         Command="{Binding SendReplyCommand}"
-                        Background="#5865f2"
-                        Foreground="White"
-                        Padding="12,6"
-                        CornerRadius="4"
                         Margin="8,0,0,0">
                     <TextBlock Text="Send" FontSize="12"/>
                 </Button>
@@ -96,7 +89,7 @@
 
         <!-- Loading indicator -->
         <TextBlock Text="Loading..."
-                   Foreground="#72767d"
+                   Classes="text-muted"
                    HorizontalAlignment="Center"
                    Margin="0,20,0,0"
                    IsVisible="{Binding IsLoading}"/>

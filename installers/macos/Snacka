@@ -1,0 +1,24 @@
+#!/bin/bash
+
+# Snacka launcher script for macOS .app bundle
+# This script sets up the environment and launches the .NET application
+
+# Get the directory where this script is located
+SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
+APP_DIR="$SCRIPT_DIR"
+
+# Set up VLC library paths for audio playback
+# Check for VLC.app in standard locations
+if [ -d "/Applications/VLC.app" ]; then
+    export VLC_PLUGIN_PATH="/Applications/VLC.app/Contents/MacOS/plugins"
+    export DYLD_LIBRARY_PATH="/Applications/VLC.app/Contents/MacOS/lib:$DYLD_LIBRARY_PATH"
+elif [ -d "$HOME/Applications/VLC.app" ]; then
+    export VLC_PLUGIN_PATH="$HOME/Applications/VLC.app/Contents/MacOS/plugins"
+    export DYLD_LIBRARY_PATH="$HOME/Applications/VLC.app/Contents/MacOS/lib:$DYLD_LIBRARY_PATH"
+fi
+
+# Set the working directory to the app's MacOS folder
+cd "$APP_DIR"
+
+# Launch the .NET application
+exec "$APP_DIR/Snacka.Client" "$@"

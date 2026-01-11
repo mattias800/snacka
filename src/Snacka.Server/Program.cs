@@ -11,41 +11,23 @@ using Snacka.Server.Services.Sfu;
 
 var builder = WebApplication.CreateBuilder(args);
 
-// Configure JWT settings
-builder.Services.Configure<JwtSettings>(
-    builder.Configuration.GetSection(JwtSettings.SectionName));
+// SECURITY: Get JWT secret from environment variable or config
+var jwtSecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
+    ?? builder.Configuration.GetSection(JwtSettings.SectionName)["SecretKey"]
+    ?? throw new InvalidOperationException(
+        "JWT secret key is not configured. Set the JWT_SECRET_KEY environment variable or copy .env.example to .env");
 
-var jwtSettings = builder.Configuration.GetSection(JwtSettings.SectionName).Get<JwtSettings>()
-    ?? throw new InvalidOperationException("JWT settings are not configured.");
-
-// SECURITY: Get JWT secret from environment variable, with fallback for development only
-var jwtSecretFromEnv = Environment.GetEnvironmentVariable("JWT_SECRET_KEY");
-var jwtSecretFromConfig = jwtSettings.SecretKey;
-
-if (!string.IsNullOrEmpty(jwtSecretFromEnv))
-{
-    // Use environment variable (preferred for production)
-    jwtSettings.SecretKey = jwtSecretFromEnv;
-}
-else if (string.IsNullOrEmpty(jwtSecretFromConfig))
-{
-    if (builder.Environment.IsDevelopment())
-    {
-        // Generate a random secret for development only
-        jwtSettings.SecretKey = Convert.ToBase64String(System.Security.Cryptography.RandomNumberGenerator.GetBytes(32));
-        Console.WriteLine("WARNING: Using auto-generated JWT secret for development. Set JWT_SECRET_KEY environment variable for production.");
-    }
-    else
-    {
-        throw new InvalidOperationException(
-            "JWT secret key is not configured. Set the JWT_SECRET_KEY environment variable.");
-    }
-}
-
-if (jwtSettings.SecretKey.Length < 32)
+if (jwtSecretKey.Length < 32)
 {
     throw new InvalidOperationException("JWT secret key must be at least 32 characters long.");
 }
+
+// Configure JWT settings with resolved secret key
+builder.Services.Configure<JwtSettings>(options =>
+{
+    builder.Configuration.GetSection(JwtSettings.SectionName).Bind(options);
+    options.SecretKey = jwtSecretKey;
+});
 
 // SECURITY: Configure rate limiting to prevent brute force attacks
 builder.Services.AddRateLimiter(options =>
@@ -146,9 +128,9 @@ builder.Services.AddAuthentication(options =>
         ValidateAudience = true,
         ValidateLifetime = true,
         ValidateIssuerSigningKey = true,
-        ValidIssuer = jwtSettings.Issuer,
-        ValidAudience = jwtSettings.Audience,
-        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSettings.SecretKey)),
+        ValidIssuer = builder.Configuration.GetSection(JwtSettings.SectionName)["Issuer"],
+        ValidAudience = builder.Configuration.GetSection(JwtSettings.SectionName)["Audience"],
+        IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtSecretKey)),
         ClockSkew = TimeSpan.Zero
     };
 

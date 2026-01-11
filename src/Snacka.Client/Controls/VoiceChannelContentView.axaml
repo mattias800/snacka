@@ -10,26 +10,24 @@
              x:Class="Snacka.Client.Controls.VoiceChannelContentView"
              x:DataType="controls:VoiceChannelContentView">
 
-    <Border Background="#36393f">
+    <Border Background="{StaticResource Content2Brush}">
         <DockPanel>
             <!-- Voice Channel Header -->
-            <Border DockPanel.Dock="Top" Background="#36393f" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="#202225">
+            <Border DockPanel.Dock="Top" Classes="panel-header">
                 <StackPanel Orientation="Horizontal" Spacing="8">
                     <ui:SymbolIcon Symbol="Speaker2"
-                               Foreground="#3ba55c"
+                               Foreground="{StaticResource SuccessBrush}"
                                FontSize="18"
                                VerticalAlignment="Center"/>
                     <TextBlock Text="{Binding SelectedVoiceChannel.Name, RelativeSource={RelativeSource AncestorType=controls:VoiceChannelContentView}, FallbackValue='Voice Channel'}"
-                               Foreground="White"
-                               FontWeight="SemiBold"
-                               FontSize="16"
+                               Classes="heading-3"
                                VerticalAlignment="Center"/>
                 </StackPanel>
             </Border>
 
             <!-- Audio Device Warning Banner -->
             <Border DockPanel.Dock="Top"
-                    Background="#faa61a"
+                    Background="{StaticResource WarningBrush}"
                     Padding="16,12"
                     IsVisible="{Binding ShowAudioDeviceWarning, RelativeSource={RelativeSource AncestorType=controls:VoiceChannelContentView}}">
                 <Grid ColumnDefinitions="Auto,*,Auto">
@@ -39,7 +37,7 @@
                                Foreground="#1a1a1a"
                                VerticalAlignment="Center"
                                Margin="0,0,12,0"/>
-                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
+                    <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="4">
                         <TextBlock Text="Audio devices not configured"
                                    Foreground="#1a1a1a"
                                    FontWeight="SemiBold"
@@ -50,11 +48,10 @@
                                    TextWrapping="Wrap"/>
                     </StackPanel>
                     <Button Grid.Column="2"
+                            Classes="btn-secondary"
                             Content="Open Settings"
                             Background="#1a1a1a"
                             Foreground="White"
-                            Padding="12,6"
-                            CornerRadius="4"
                             VerticalAlignment="Center"
                             Command="{Binding OpenSettingsCommand, RelativeSource={RelativeSource AncestorType=controls:VoiceChannelContentView}}"/>
                 </Grid>
@@ -75,17 +72,17 @@
                             <!-- Video Stream Tile with Control Bar -->
                             <Border Width="320"
                                     Margin="8"
-                                    CornerRadius="8"
-                                    Background="#2f3136"
+                                    CornerRadius="12"
+                                    Background="{StaticResource Content1Brush}"
                                     ClipToBounds="True"
                                     DoubleTapped="OnVideoTileDoubleTapped"
                                     Tag="{Binding}">
                                 <Grid RowDefinitions="200,Auto">
                                     <!-- Video Area (row 0) - Hardware overlay renders here -->
                                     <Border Grid.Row="0"
-                                            CornerRadius="8,8,0,0"
+                                            CornerRadius="12,12,0,0"
                                             ClipToBounds="True"
-                                            Background="#1e1f22">
+                                            Background="{StaticResource BackgroundBrush}">
                                         <Grid>
                                             <!-- Video content (only shown when watching) -->
                                             <Grid IsVisible="{Binding ShowVideoContent}">
@@ -105,7 +102,7 @@
                                                             IsVisible="{Binding ShowAvatarPlaceholder}">
                                                     <Border Width="80" Height="80"
                                                             CornerRadius="40"
-                                                            Background="#5865f2"
+                                                            Background="{StaticResource PrimaryGradient}"
                                                             HorizontalAlignment="Center">
                                                         <TextBlock Text="{Binding Username, Converter={x:Static conv:FirstCharConverter.Instance}}"
                                                                    Foreground="White"
@@ -124,7 +121,7 @@
                                                         IsVisible="{Binding ShowWatchButton}">
                                                 <Border Width="56" Height="56"
                                                         CornerRadius="28"
-                                                        Background="#5865f2"
+                                                        Background="{StaticResource PrimaryGradient}"
                                                         HorizontalAlignment="Center">
                                                     <ui:SymbolIcon Symbol="Share"
                                                                FontSize="24"
@@ -133,15 +130,11 @@
                                                                VerticalAlignment="Center"/>
                                                 </Border>
                                                 <TextBlock Text="{Binding Username, StringFormat='{}{0} is sharing'}"
-                                                           Foreground="#dcddde"
+                                                           Classes="text-body"
                                                            FontSize="13"
                                                            HorizontalAlignment="Center"/>
-                                                <Button Background="#5865f2"
-                                                        Foreground="White"
-                                                        Padding="14,8"
-                                                        CornerRadius="4"
+                                                <Button Classes="btn-primary"
                                                         HorizontalAlignment="Center"
-                                                        Cursor="Hand"
                                                         Click="OnWatchScreenShareClick"
                                                         Tag="{Binding}">
                                                     <StackPanel Orientation="Horizontal" Spacing="6">
@@ -152,18 +145,18 @@
                                             </StackPanel>
 
                                             <!-- Speaking indicator ring (only for camera streams) -->
-                                            <Border CornerRadius="8,8,0,0"
+                                            <Border CornerRadius="12,12,0,0"
                                                     BorderThickness="3"
-                                                    BorderBrush="#3ba55c"
+                                                    BorderBrush="{StaticResource SuccessBrush}"
                                                     IsVisible="{Binding ShowSpeakingIndicator}"/>
                                         </Grid>
                                     </Border>
 
                                     <!-- Control Bar (row 1) - Always visible, not covered by overlay -->
                                     <Border Grid.Row="1"
-                                            Background="#2f3136"
-                                            Padding="10,8"
-                                            CornerRadius="0,0,8,8">
+                                            Background="{StaticResource Content1Brush}"
+                                            Padding="12,10"
+                                            CornerRadius="0,0,12,12">
                                         <Grid ColumnDefinitions="Auto,*,Auto">
                                             <!-- Left: Username and stream label -->
                                             <StackPanel Grid.Column="0"
@@ -171,15 +164,14 @@
                                                         Spacing="8"
                                                         VerticalAlignment="Center">
                                                 <TextBlock Text="{Binding Username}"
-                                                           Foreground="White"
-                                                           FontSize="13"
+                                                           Classes="text-body"
                                                            FontWeight="SemiBold"
                                                            VerticalAlignment="Center"
                                                            MaxWidth="100"
                                                            TextTrimming="CharacterEllipsis"/>
-                                                <Border Background="#5865f2"
-                                                        CornerRadius="3"
-                                                        Padding="5,2"
+                                                <Border Background="{StaticResource PrimaryGradient}"
+                                                        CornerRadius="8"
+                                                        Padding="6,3"
                                                         IsVisible="{Binding StreamLabel, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
                                                     <TextBlock Text="{Binding StreamLabel}"
                                                                Foreground="White"
@@ -192,12 +184,12 @@
                                             <!-- Center: Volume slider for remote streams with audio -->
                                             <StackPanel Grid.Column="1"
                                                         Orientation="Horizontal"
-                                                        Spacing="4"
+                                                        Spacing="6"
                                                         HorizontalAlignment="Center"
                                                         VerticalAlignment="Center"
                                                         IsVisible="{Binding ShowVolumeSlider}">
                                                 <ui:SymbolIcon Symbol="Speaker2"
-                                                           Foreground="#b9bbbe"
+                                                           Foreground="{StaticResource Foreground2Brush}"
                                                            FontSize="11"
                                                            VerticalAlignment="Center"/>
                                                 <Slider Width="70"
@@ -206,7 +198,7 @@
                                                         Value="{Binding VolumePercent}"
                                                         VerticalAlignment="Center"/>
                                                 <TextBlock Text="{Binding VolumePercent, StringFormat={}{0}%}"
-                                                           Foreground="#b9bbbe"
+                                                           Classes="text-muted"
                                                            FontSize="10"
                                                            Width="30"
                                                            VerticalAlignment="Center"/>
@@ -225,11 +217,7 @@
                                                 </StackPanel.IsVisible>
 
                                                 <!-- Fullscreen button -->
-                                                <Button Padding="6,4"
-                                                        Background="#40ffffff"
-                                                        BorderThickness="0"
-                                                        CornerRadius="4"
-                                                        Cursor="Hand"
+                                                <Button Classes="btn-icon"
                                                         Click="OnFullscreenButtonClick"
                                                         Tag="{Binding}"
                                                         ToolTip.Tip="Fullscreen (or double-click video)">
@@ -237,11 +225,8 @@
                                                 </Button>
 
                                                 <!-- Stop Watching button -->
-                                                <Button Padding="6,4"
-                                                        Background="#ed4245"
-                                                        BorderThickness="0"
-                                                        CornerRadius="4"
-                                                        Cursor="Hand"
+                                                <Button Classes="btn-icon"
+                                                        Background="{StaticResource DangerBrush}"
                                                         Click="OnStopWatchingClick"
                                                         Tag="{Binding}"
                                                         ToolTip.Tip="Stop Watching">

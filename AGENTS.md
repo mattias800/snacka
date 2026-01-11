@@ -184,7 +184,7 @@ The client supports the following CLI arguments for development/testing:
 dotnet run --project src/Snacka.Client -- \
     --server "http://localhost:5117" \
     --email "user@test.com" \
-    --password "password123" \
+    --password "Password123!" \
     --title "Snacka - Username" \
     --profile profilename
 ```

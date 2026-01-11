@@ -5,44 +5,116 @@
     RequestedThemeVariant="Dark">
 
     <Application.Resources>
-        <!-- Color Palette - Modern 2025 Design System -->
+        <!-- =====================================================
+             HEROUI-INSPIRED DESIGN SYSTEM - 2025 AESTHETIC
+             ===================================================== -->
 
-        <!-- Primary Colors -->
-        <SolidColorBrush x:Key="PrimaryBrush" Color="#5865f2"/>
-        <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#4752c4"/>
-        <SolidColorBrush x:Key="PrimaryPressedBrush" Color="#3c45a5"/>
+        <!-- Background Layers (deep, rich darks with subtle cool tint) -->
+        <Color x:Key="BackgroundColor">#09090b</Color>
+        <Color x:Key="Content1Color">#18181b</Color>
+        <Color x:Key="Content2Color">#27272a</Color>
+        <Color x:Key="Content3Color">#3f3f46</Color>
+        <Color x:Key="Content4Color">#52525b</Color>
 
-        <!-- Surface Colors (Backgrounds) -->
-        <SolidColorBrush x:Key="Surface1Brush" Color="#1e1f22"/>
-        <SolidColorBrush x:Key="Surface2Brush" Color="#2b2d31"/>
-        <SolidColorBrush x:Key="Surface3Brush" Color="#313338"/>
-        <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="#383a40"/>
+        <SolidColorBrush x:Key="BackgroundBrush" Color="{StaticResource BackgroundColor}"/>
+        <SolidColorBrush x:Key="Content1Brush" Color="{StaticResource Content1Color}"/>
+        <SolidColorBrush x:Key="Content2Brush" Color="{StaticResource Content2Color}"/>
+        <SolidColorBrush x:Key="Content3Brush" Color="{StaticResource Content3Color}"/>
+        <SolidColorBrush x:Key="Content4Brush" Color="{StaticResource Content4Color}"/>
+
+        <!-- Glassmorphism Surfaces (semi-transparent for depth) -->
+        <SolidColorBrush x:Key="GlassBrush" Color="#E618181b"/>
+        <SolidColorBrush x:Key="GlassLightBrush" Color="#B327272a"/>
+        <SolidColorBrush x:Key="GlassOverlayBrush" Color="#8009090b"/>
+
+        <!-- Primary Color Scale (HeroUI Blue) -->
+        <Color x:Key="Primary50">#e6f1fe</Color>
+        <Color x:Key="Primary100">#cce3fd</Color>
+        <Color x:Key="Primary200">#99c7fb</Color>
+        <Color x:Key="Primary300">#66aaf9</Color>
+        <Color x:Key="Primary400">#338ef7</Color>
+        <Color x:Key="Primary500">#006FEE</Color>
+        <Color x:Key="Primary600">#005bc4</Color>
+        <Color x:Key="Primary700">#004493</Color>
+
+        <SolidColorBrush x:Key="PrimaryBrush" Color="{StaticResource Primary500}"/>
+        <SolidColorBrush x:Key="PrimaryHoverBrush" Color="{StaticResource Primary400}"/>
+        <SolidColorBrush x:Key="PrimaryPressedBrush" Color="{StaticResource Primary600}"/>
+        <SolidColorBrush x:Key="PrimaryLightBrush" Color="#1a006FEE"/>
+
+        <!-- Primary Gradient -->
+        <LinearGradientBrush x:Key="PrimaryGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#338ef7" Offset="0"/>
+            <GradientStop Color="#006FEE" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Secondary Color Scale (Purple/Violet) -->
+        <Color x:Key="Secondary400">#a78bfa</Color>
+        <Color x:Key="Secondary500">#8b5cf6</Color>
+        <Color x:Key="Secondary600">#7c3aed</Color>
+
+        <SolidColorBrush x:Key="SecondaryBrush" Color="{StaticResource Secondary500}"/>
+
+        <LinearGradientBrush x:Key="SecondaryGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#a78bfa" Offset="0"/>
+            <GradientStop Color="#7c3aed" Offset="1"/>
+        </LinearGradientBrush>
+
+        <!-- Success Color Scale (Green) -->
+        <Color x:Key="Success400">#4ade80</Color>
+        <Color x:Key="Success500">#22c55e</Color>
+        <Color x:Key="Success600">#16a34a</Color>
+
+        <SolidColorBrush x:Key="SuccessBrush" Color="{StaticResource Success500}"/>
+
+        <!-- Warning Color Scale (Amber) -->
+        <Color x:Key="Warning400">#fbbf24</Color>
+        <Color x:Key="Warning500">#f59e0b</Color>
+        <Color x:Key="Warning600">#d97706</Color>
+
+        <SolidColorBrush x:Key="WarningBrush" Color="{StaticResource Warning500}"/>
+
+        <!-- Danger Color Scale (Red) -->
+        <Color x:Key="Danger400">#f87171</Color>
+        <Color x:Key="Danger500">#ef4444</Color>
+        <Color x:Key="Danger600">#dc2626</Color>
+
+        <SolidColorBrush x:Key="DangerBrush" Color="{StaticResource Danger500}"/>
+        <SolidColorBrush x:Key="DangerHoverBrush" Color="{StaticResource Danger400}"/>
+
+        <LinearGradientBrush x:Key="DangerGradient" StartPoint="0%,0%" EndPoint="100%,100%">
+            <GradientStop Color="#f87171" Offset="0"/>
+            <GradientStop Color="#dc2626" Offset="1"/>
+        </LinearGradientBrush>
 
         <!-- Text Colors -->
-        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#f2f3f5"/>
-        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#b5bac1"/>
-        <SolidColorBrush x:Key="TextMutedBrush" Color="#80848e"/>
+        <SolidColorBrush x:Key="ForegroundBrush" Color="#fafafa"/>
+        <SolidColorBrush x:Key="Foreground2Brush" Color="#a1a1aa"/>
+        <SolidColorBrush x:Key="Foreground3Brush" Color="#71717a"/>
 
-        <!-- Border Colors -->
-        <SolidColorBrush x:Key="BorderSubtleBrush" Color="#3f4147"/>
-        <SolidColorBrush x:Key="BorderDefaultBrush" Color="#4e5058"/>
+        <!-- Border/Divider -->
+        <SolidColorBrush x:Key="DividerBrush" Color="#27272a"/>
+        <SolidColorBrush x:Key="BorderBrush" Color="#3f3f46"/>
+        <SolidColorBrush x:Key="FocusBrush" Color="{StaticResource Primary400}"/>
 
-        <!-- Semantic Colors -->
-        <SolidColorBrush x:Key="SuccessBrush" Color="#23a559"/>
-        <SolidColorBrush x:Key="WarningBrush" Color="#f0b232"/>
-        <SolidColorBrush x:Key="DangerBrush" Color="#da373c"/>
-        <SolidColorBrush x:Key="DangerHoverBrush" Color="#a12828"/>
+        <!-- Border Radius Scale (HeroUI-style large radius) -->
+        <CornerRadius x:Key="RadiusNone">0</CornerRadius>
+        <CornerRadius x:Key="RadiusSm">8</CornerRadius>
+        <CornerRadius x:Key="RadiusMd">12</CornerRadius>
+        <CornerRadius x:Key="RadiusLg">16</CornerRadius>
+        <CornerRadius x:Key="RadiusXl">24</CornerRadius>
+        <CornerRadius x:Key="RadiusFull">9999</CornerRadius>
 
-        <!-- Border Radius Scale -->
-        <CornerRadius x:Key="RadiusSm">6</CornerRadius>
-        <CornerRadius x:Key="RadiusMd">8</CornerRadius>
-        <CornerRadius x:Key="RadiusLg">12</CornerRadius>
-        <CornerRadius x:Key="RadiusXl">16</CornerRadius>
+        <!-- Shadows (layered for depth) -->
+        <BoxShadows x:Key="ShadowSm">0 1 2 0 #1a000000, 0 1 3 1 #0f000000</BoxShadows>
+        <BoxShadows x:Key="ShadowMd">0 4 6 -1 #1a000000, 0 2 4 -2 #1a000000</BoxShadows>
+        <BoxShadows x:Key="ShadowLg">0 10 15 -3 #1a000000, 0 4 6 -4 #1a000000</BoxShadows>
+        <BoxShadows x:Key="ShadowXl">0 20 25 -5 #1a000000, 0 8 10 -6 #1a000000</BoxShadows>
 
-        <!-- Shadows -->
-        <BoxShadows x:Key="Elevation1">0 1 2 0 #4D000000</BoxShadows>
-        <BoxShadows x:Key="Elevation2">0 4 12 0 #66000000</BoxShadows>
-        <BoxShadows x:Key="Elevation3">0 8 24 0 #80000000</BoxShadows>
+        <!-- Glow Effects for Primary Actions -->
+        <BoxShadows x:Key="PrimaryGlow">0 0 24 0 #50006FEE</BoxShadows>
+        <BoxShadows x:Key="SuccessGlow">0 0 20 0 #4022c55e</BoxShadows>
+        <BoxShadows x:Key="DangerGlow">0 0 20 0 #40ef4444</BoxShadows>
     </Application.Resources>
 
     <Application.Styles>
@@ -51,32 +123,41 @@
 
         <!-- Global TextBox Styles -->
         <Style Selector="TextBox">
-            <Setter Property="CaretBrush" Value="White"/>
-            <Setter Property="SelectionBrush" Value="#5865f2"/>
+            <Setter Property="CaretBrush" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="SelectionBrush" Value="{StaticResource PrimaryBrush}"/>
             <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
-            <Setter Property="Background" Value="{StaticResource Surface1Brush}"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
-            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
+            <Setter Property="Background" Value="{StaticResource Content1Brush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource ForegroundBrush}"/>
+            <Setter Property="BorderThickness" Value="1"/>
+            <Setter Property="Padding" Value="14,12"/>
         </Style>
         <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="#1a1b1e"/>
+            <Setter Property="Background" Value="{StaticResource Content2Brush}"/>
             <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
             <Setter Property="BorderThickness" Value="2"/>
         </Style>
         <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="#232428"/>
-            <Setter Property="BorderBrush" Value="{StaticResource BorderDefaultBrush}"/>
+            <Setter Property="Background" Value="{StaticResource Content2Brush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource Content4Brush}"/>
         </Style>
 
-        <!-- Global Button Base Styles -->
+        <!-- Global Button Transitions -->
         <Style Selector="Button">
             <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
-            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Padding" Value="16,10"/>
+            <Setter Property="FontWeight" Value="Medium"/>
             <Setter Property="Transitions">
                 <Transitions>
-                    <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                    <BrushTransition Property="Background" Duration="0:0:0.2"/>
+                    <TransformOperationsTransition Property="RenderTransform" Duration="0:0:0.15"/>
                 </Transitions>
             </Setter>
+        </Style>
+
+        <!-- Global Slider Styles -->
+        <Style Selector="Slider">
+            <Setter Property="Foreground" Value="{StaticResource PrimaryBrush}"/>
         </Style>
     </Application.Styles>
 </Application>

@@ -14,17 +14,15 @@
         <Border Margin="0,16,0,8" Padding="0"
                 IsVisible="{Binding ShowDateSeparator, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}">
             <Grid>
-                <Separator Background="#42464d" Margin="0,8"/>
-                <Border Background="#36393f" HorizontalAlignment="Center" Padding="8,2">
+                <Separator Background="{StaticResource BorderBrush}" Margin="0,8"/>
+                <Border Background="{StaticResource Content2Brush}" HorizontalAlignment="Center" Padding="12,4" CornerRadius="12">
                     <TextBlock Text="{Binding CreatedAt, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static conv:DateSeparatorTextConverter.Instance}}"
-                               Foreground="#72767d"
-                               FontSize="11"
-                               FontWeight="SemiBold"/>
+                               Classes="text-caption"/>
                 </Border>
             </Grid>
         </Border>
 
-        <Border Margin="0,8" Padding="0" x:Name="MessageBorder" HorizontalAlignment="Stretch">
+        <Border Margin="0,8" Padding="8" x:Name="MessageBorder" HorizontalAlignment="Stretch" CornerRadius="12">
             <Grid HorizontalAlignment="Stretch">
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto"/>
@@ -36,7 +34,7 @@
                 <Border Grid.Column="0"
                         Width="40" Height="40"
                         CornerRadius="20"
-                        Background="#5865f2"
+                        Background="{StaticResource PrimaryGradient}"
                         VerticalAlignment="Top"
                         Margin="0,0,12,0">
                     <TextBlock Text="{Binding AuthorUsername, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static conv:FirstCharConverter.Instance}}"
@@ -50,22 +48,22 @@
                 <!-- Message Content -->
                 <StackPanel Grid.Column="1">
                     <!-- Reply Preview (if this message is a reply) -->
-                    <Border Background="#2f3136"
-                            CornerRadius="4"
-                            Padding="8,4"
-                            Margin="0,0,0,4"
-                            BorderBrush="#5865f2"
+                    <Border Background="{StaticResource Content1Brush}"
+                            CornerRadius="10"
+                            Padding="10,6"
+                            Margin="0,0,0,6"
+                            BorderBrush="{StaticResource PrimaryBrush}"
                             BorderThickness="2,0,0,0"
                             IsVisible="{Binding ReplyTo, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static ObjectConverters.IsNotNull}}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <ui:SymbolIcon Symbol="MailReply" Foreground="#5865f2" FontSize="12" VerticalAlignment="Center"/>
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ui:SymbolIcon Symbol="MailReply" Foreground="{StaticResource PrimaryBrush}" FontSize="12" VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding ReplyTo.AuthorUsername, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
-                                       Foreground="#5865f2"
+                                       Foreground="{StaticResource PrimaryBrush}"
                                        FontSize="12"
                                        FontWeight="SemiBold"
                                        VerticalAlignment="Center"/>
                             <TextBlock Text="{Binding ReplyTo.Content, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
-                                       Foreground="#72767d"
+                                       Classes="text-muted"
                                        FontSize="12"
                                        TextTrimming="CharacterEllipsis"
                                        MaxWidth="400"
@@ -75,16 +73,15 @@
 
                     <StackPanel Orientation="Horizontal" Spacing="8">
                         <TextBlock Text="{Binding AuthorUsername, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
-                                   Foreground="White"
-                                   FontWeight="SemiBold"
+                                   Classes="heading-3"
                                    FontSize="15"/>
                         <TextBlock Text="{Binding CreatedAt, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static conv:RelativeTimestampConverter.Instance}}"
                                    ToolTip.Tip="{Binding CreatedAt, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static conv:FullTimestampConverter.Instance}}"
-                                   Foreground="#72767d"
+                                   Classes="text-muted"
                                    FontSize="12"
                                    VerticalAlignment="Center"/>
                         <TextBlock Text="(edited)"
-                                   Foreground="#72767d"
+                                   Classes="text-muted"
                                    FontSize="11"
                                    VerticalAlignment="Center"
                                    IsVisible="{Binding IsEdited, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"/>
@@ -97,7 +94,7 @@
                     <!-- Attachments Display -->
                     <ItemsControl x:Name="AttachmentsControl"
                                   ItemsSource="{Binding Attachments, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
-                                  Margin="0,4,0,0">
+                                  Margin="0,8,0,0">
                         <ItemsControl.IsVisible>
                             <MultiBinding Converter="{x:Static BoolConverters.And}">
                                 <Binding Path="ShowAttachments" RelativeSource="{RelativeSource AncestorType=controls:MessageItemView}"/>
@@ -115,7 +112,7 @@
 
                     <!-- Reactions Display -->
                     <ItemsControl ItemsSource="{Binding Reactions, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
-                                  Margin="0,4,0,0">
+                                  Margin="0,8,0,0">
                         <ItemsControl.IsVisible>
                             <MultiBinding Converter="{x:Static BoolConverters.And}">
                                 <Binding Path="ShowReactions" RelativeSource="{RelativeSource AncestorType=controls:MessageItemView}"/>
@@ -124,23 +121,23 @@
                         </ItemsControl.IsVisible>
                         <ItemsControl.ItemsPanel>
                             <ItemsPanelTemplate>
-                                <StackPanel Orientation="Horizontal" Spacing="4"/>
+                                <StackPanel Orientation="Horizontal" Spacing="6"/>
                             </ItemsPanelTemplate>
                         </ItemsControl.ItemsPanel>
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Classes="reaction-chip"
-                                        Padding="4,2"
-                                        CornerRadius="4"
+                                        Padding="6,4"
+                                        CornerRadius="10"
                                         Cursor="Hand"
                                         Tag="{Binding}"
                                         PointerPressed="ReactionChip_PointerPressed">
                                     <Border.Background>
                                         <SolidColorBrush Color="{Binding HasReacted, Converter={x:Static conv:ReactionBackgroundConverter.Instance}}"/>
                                     </Border.Background>
-                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
                                         <TextBlock Text="{Binding Emoji}" FontSize="14"/>
-                                        <TextBlock Text="{Binding Count}" Foreground="#dcddde" FontSize="12" VerticalAlignment="Center"/>
+                                        <TextBlock Text="{Binding Count}" Classes="text-body" FontSize="12" VerticalAlignment="Center"/>
                                     </StackPanel>
                                     <ToolTip.Tip>
                                         <ItemsControl ItemsSource="{Binding Users}">
@@ -157,10 +154,10 @@
                     </ItemsControl>
 
                     <!-- Thread Indicator (only when there are replies and ShowThreadIndicator is true) -->
-                    <Border Margin="0,6,0,0"
-                            Padding="8,6"
-                            Background="#32353b"
-                            CornerRadius="4"
+                    <Border Margin="0,8,0,0"
+                            Padding="10,8"
+                            Background="{StaticResource Content3Brush}"
+                            CornerRadius="10"
                             Cursor="Hand"
                             Tag="{Binding Message, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             PointerPressed="ThreadIndicator_PointerPressed">
@@ -171,7 +168,7 @@
                             </MultiBinding>
                         </Border.IsVisible>
                         <StackPanel Orientation="Horizontal" Spacing="8">
-                            <TextBlock Foreground="#5865f2" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center">
+                            <TextBlock Foreground="{StaticResource PrimaryBrush}" FontSize="12" FontWeight="SemiBold" VerticalAlignment="Center">
                                 <TextBlock.Text>
                                     <MultiBinding StringFormat="{}{0} {1}">
                                         <Binding Path="ReplyCount" RelativeSource="{RelativeSource AncestorType=controls:MessageItemView}"/>
@@ -179,7 +176,7 @@
                                     </MultiBinding>
                                 </TextBlock.Text>
                             </TextBlock>
-                            <TextBlock Text="View thread" Foreground="#72767d" FontSize="12" VerticalAlignment="Center"/>
+                            <TextBlock Text="View thread" Classes="text-muted" FontSize="12" VerticalAlignment="Center"/>
                         </StackPanel>
                     </Border>
                 </StackPanel>
@@ -187,16 +184,16 @@
                 <!-- Action Buttons -->
                 <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4" VerticalAlignment="Top">
                     <!-- Add Reaction button (only when ShowReactions is true) -->
-                    <Button Classes="msg-action-btn"
+                    <Button Classes="btn-icon"
                             ToolTip.Tip="Add Reaction"
                             Tag="{Binding Message, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             Click="AddReactionButton_Click"
                             IsVisible="{Binding ShowReactions, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}">
-                        <ui:SymbolIcon Symbol="Emoji" Foreground="#72767d" FontSize="12"/>
+                        <ui:SymbolIcon Symbol="Emoji" Foreground="{StaticResource Foreground3Brush}" FontSize="12"/>
                     </Button>
 
                     <!-- Start Thread button (only when ShowStartThreadButton is true and no replies yet) -->
-                    <Button Classes="msg-action-btn"
+                    <Button Classes="btn-icon"
                             Tag="{Binding Message, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             ToolTip.Tip="Start Thread"
                             Click="StartThreadButton_Click">
@@ -206,41 +203,41 @@
                                 <Binding Path="ReplyCount" RelativeSource="{RelativeSource AncestorType=controls:MessageItemView}" Converter="{x:Static conv:IntEqualsZeroConverter.Instance}"/>
                             </MultiBinding>
                         </Button.IsVisible>
-                        <ui:SymbolIcon Symbol="Message" Foreground="#72767d" FontSize="12"/>
+                        <ui:SymbolIcon Symbol="Message" Foreground="{StaticResource Foreground3Brush}" FontSize="12"/>
                     </Button>
 
                     <!-- Pin button (only when ShowPinButton is true) -->
-                    <Button Classes="msg-action-btn"
+                    <Button Classes="btn-icon"
                             Command="{Binding TogglePinCommand, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             CommandParameter="{Binding Message, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             ToolTip.Tip="{Binding IsPinned, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static conv:BoolToStringConverter.Instance}, ConverterParameter='Unpin|Pin'}"
                             IsVisible="{Binding ShowPinButton, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}">
                         <ui:SymbolIcon Symbol="Pin"
-                                   Foreground="{Binding IsPinned, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static conv:BoolToColorConverter.Instance}, ConverterParameter='#faa61a|#72767d'}"
+                                   Foreground="{Binding IsPinned, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}, Converter={x:Static conv:BoolToColorConverter.Instance}, ConverterParameter='#faa61a|#80848e'}"
                                    FontSize="12"/>
                     </Button>
 
                     <!-- Reply button (only when ShowReplyButton is true) -->
-                    <Button Classes="msg-action-btn"
+                    <Button Classes="btn-icon"
                             Command="{Binding ReplyToMessageCommand, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             CommandParameter="{Binding Message, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             ToolTip.Tip="Reply"
                             IsVisible="{Binding ShowReplyButton, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}">
-                        <ui:SymbolIcon Symbol="MailReply" Foreground="#72767d" FontSize="12"/>
+                        <ui:SymbolIcon Symbol="MailReply" Foreground="{StaticResource Foreground3Brush}" FontSize="12"/>
                     </Button>
 
-                    <Button Classes="msg-action-btn"
+                    <Button Classes="btn-icon"
                             Command="{Binding StartEditMessageCommand, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             CommandParameter="{Binding Message, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             ToolTip.Tip="Edit">
-                        <ui:SymbolIcon Symbol="Edit" Foreground="#72767d" FontSize="12"/>
+                        <ui:SymbolIcon Symbol="Edit" Foreground="{StaticResource Foreground3Brush}" FontSize="12"/>
                     </Button>
 
-                    <Button Classes="msg-action-btn"
+                    <Button Classes="btn-icon"
                             Command="{Binding DeleteMessageCommand, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             CommandParameter="{Binding Message, RelativeSource={RelativeSource AncestorType=controls:MessageItemView}}"
                             ToolTip.Tip="Delete">
-                        <ui:SymbolIcon Symbol="Delete" Foreground="#72767d" FontSize="12"/>
+                        <ui:SymbolIcon Symbol="Delete" Foreground="{StaticResource Foreground3Brush}" FontSize="12"/>
                     </Button>
                 </StackPanel>
             </Grid>

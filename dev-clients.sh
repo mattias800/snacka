@@ -15,9 +15,9 @@ CLIENT_PROJECT="src/Snacka.Client/Snacka.Client.csproj"
 
 # Test accounts (will be auto-registered if they don't exist)
 USER1_EMAIL="alice@test.com"
-USER1_PASSWORD="password123"
+USER1_PASSWORD="Password123!"
 USER2_EMAIL="bob@test.com"
-USER2_PASSWORD="password123"
+USER2_PASSWORD="Password123!"
 
 echo "=== Snacka Clients Startup ==="
 echo ""

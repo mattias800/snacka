@@ -9,7 +9,7 @@
              x:Class="Snacka.Client.Controls.UserPanelView"
              x:DataType="controls:UserPanelView">
 
-    <Border Background="#292b2f" Padding="8">
+    <Border Background="{StaticResource BackgroundBrush}" Padding="10">
         <Grid>
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="Auto"/>
@@ -17,14 +17,14 @@
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
 
-            <Panel Grid.Column="0" Width="36" Height="36" Margin="0,0,6,0">
+            <Panel Grid.Column="0" Width="40" Height="40" Margin="0,0,10,0">
                 <!-- Speaking indicator ring (green glow when speaking) -->
-                <Border Width="36" Height="36"
-                        CornerRadius="18"
-                        BorderBrush="#3ba55c"
+                <Border Width="40" Height="40"
+                        CornerRadius="20"
+                        BorderBrush="{StaticResource SuccessBrush}"
                         BorderThickness="2"
                         IsVisible="{Binding IsSpeaking, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"/>
-                <Border Width="32" Height="32" CornerRadius="16" Background="#5865f2"
+                <Border Width="36" Height="36" CornerRadius="18" Background="{StaticResource PrimaryGradient}"
                         HorizontalAlignment="Center" VerticalAlignment="Center">
                     <TextBlock Text="{Binding Username, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}, Converter={x:Static conv:FirstCharConverter.Instance}}"
                                Foreground="White"
@@ -34,9 +34,9 @@
                                VerticalAlignment="Center"/>
                 </Border>
                 <!-- Muted indicator on avatar -->
-                <Border Width="14" Height="14"
-                        CornerRadius="7"
-                        Background="#ed4245"
+                <Border Width="16" Height="16"
+                        CornerRadius="8"
+                        Background="{StaticResource DangerBrush}"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Bottom"
                         Margin="0,0,0,0"
@@ -50,74 +50,65 @@
 
             <StackPanel Grid.Column="1" VerticalAlignment="Center">
                 <TextBlock Text="{Binding Username, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
-                           Foreground="White"
-                           FontSize="13"
-                           FontWeight="SemiBold"/>
+                           Classes="heading-3"
+                           FontSize="13"/>
                 <TextBlock Text="Online"
-                           Foreground="#3ba55c"
+                           Foreground="{StaticResource SuccessBrush}"
                            FontSize="11"/>
             </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="2">
+            <StackPanel Grid.Column="2" Orientation="Horizontal" Spacing="4">
                 <!-- Mute Button - always visible -->
                 <Panel>
-                    <Button Command="{Binding ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
-                            Padding="6,4"
-                            CornerRadius="4"
-                            Cursor="Hand"
-                            Background="#ed4245"
+                    <Button Classes="btn-icon"
+                            Command="{Binding ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
+                            Padding="8"
+                            Background="{StaticResource DangerBrush}"
                             ToolTip.Tip="Unmute"
                             IsVisible="{Binding IsMuted, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}">
                         <ui:SymbolIcon Symbol="Mute" Foreground="White" FontSize="14"/>
                     </Button>
-                    <Button Command="{Binding ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
-                            Padding="6,4"
-                            CornerRadius="4"
-                            Cursor="Hand"
-                            Background="Transparent"
+                    <Button Classes="btn-icon"
+                            Command="{Binding ToggleMuteCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
+                            Padding="8"
                             ToolTip.Tip="Mute"
                             IsVisible="{Binding !IsMuted, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}">
-                        <ui:SymbolIcon Symbol="Microphone" Foreground="#b9bbbe" FontSize="14"/>
+                        <ui:SymbolIcon Symbol="Microphone" Foreground="{StaticResource Foreground2Brush}" FontSize="14"/>
                     </Button>
                 </Panel>
                 <!-- Deafen Button - always visible -->
                 <Panel>
-                    <Button Command="{Binding ToggleDeafenCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
-                            Padding="6,4"
-                            CornerRadius="4"
-                            Cursor="Hand"
-                            Background="#ed4245"
+                    <Button Classes="btn-icon"
+                            Command="{Binding ToggleDeafenCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
+                            Padding="8"
+                            Background="{StaticResource DangerBrush}"
                             ToolTip.Tip="Undeafen"
                             IsVisible="{Binding IsDeafened, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}">
                         <ui:SymbolIcon Symbol="SpeakerMute" Foreground="White" FontSize="14"/>
                     </Button>
-                    <Button Command="{Binding ToggleDeafenCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
-                            Padding="6,4"
-                            CornerRadius="4"
-                            Cursor="Hand"
-                            Background="Transparent"
+                    <Button Classes="btn-icon"
+                            Command="{Binding ToggleDeafenCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
+                            Padding="8"
                             ToolTip.Tip="Deafen"
                             IsVisible="{Binding !IsDeafened, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}">
-                        <ui:SymbolIcon Symbol="Speaker2" Foreground="#b9bbbe" FontSize="14"/>
+                        <ui:SymbolIcon Symbol="Speaker2" Foreground="{StaticResource Foreground2Brush}" FontSize="14"/>
                     </Button>
                 </Panel>
                 <!-- Audio Device Button -->
                 <Button x:Name="AudioDeviceButton"
-                        Background="Transparent"
-                        Padding="6,4"
-                        Cursor="Hand"
+                        Classes="btn-icon"
+                        Padding="8"
                         ToolTip.Tip="Audio Devices"
                         Click="OnAudioDeviceButtonClick">
-                    <ui:SymbolIcon Symbol="Audio" Foreground="#b9bbbe" FontSize="14"/>
+                    <ui:SymbolIcon Symbol="Audio" Foreground="{StaticResource Foreground2Brush}" FontSize="14"/>
                 </Button>
                 <!-- Settings Button -->
-                <Button Command="{Binding OpenSettingsCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
-                        Background="Transparent"
-                        Padding="6,4"
-                        Cursor="Hand"
+                <Button Classes="btn-icon"
+                        Command="{Binding OpenSettingsCommand, RelativeSource={RelativeSource AncestorType=controls:UserPanelView}}"
+                        Padding="8"
                         ToolTip.Tip="Settings">
                     <ui:SymbolIcon Symbol="Settings"
-                               Foreground="#b9bbbe"
+                               Foreground="{StaticResource Foreground2Brush}"
                                FontSize="14"/>
                 </Button>
             </StackPanel>

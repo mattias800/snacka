@@ -17,16 +17,18 @@ public sealed partial class AuthService : IAuthService
     private readonly SnackaDbContext _db;
     private readonly JwtSettings _jwtSettings;
     private readonly IServerInviteService _inviteService;
+    private readonly ICommunityService _communityService;
 
     // SECURITY: Password complexity regex - requires uppercase, lowercase, digit, and special character
     [GeneratedRegex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;':"",./<>?\\`~]).{8,}$")]
     private static partial Regex PasswordComplexityRegex();
 
-    public AuthService(SnackaDbContext db, IOptions<JwtSettings> jwtSettings, IServerInviteService inviteService)
+    public AuthService(SnackaDbContext db, IOptions<JwtSettings> jwtSettings, IServerInviteService inviteService, ICommunityService communityService)
     {
         _db = db;
         _jwtSettings = jwtSettings.Value;
         _inviteService = inviteService;
+        _communityService = communityService;
     }
 
     /// <summary>
@@ -91,6 +93,15 @@ public sealed partial class AuthService : IAuthService
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Create default community for first user (server setup)
+        if (isFirstUser)
+        {
+            await _communityService.CreateCommunityAsync(
+                user.Id,
+                new DTOs.CreateCommunityRequest("General", "Welcome to your new Snacka server!"),
+                cancellationToken);
+        }
 
         // Mark invite as used
         await _inviteService.UseInviteAsync(request.InviteCode, cancellationToken);

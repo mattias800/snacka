@@ -1,0 +1,18 @@
+[Desktop Entry]
+Type=Application
+Name=Snacka
+Comment=A self-hosted Discord alternative
+Exec=Snacka %u
+Icon=snacka
+Terminal=false
+Categories=Network;Chat;InstantMessaging;
+Keywords=chat;voice;video;discord;communication;
+StartupWMClass=Snacka.Client
+MimeType=x-scheme-handler/snacka;
+
+# Actions
+Actions=new-window;
+
+[Desktop Action new-window]
+Name=New Window
+Exec=Snacka --new-window

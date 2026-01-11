@@ -79,14 +79,24 @@ public sealed class CommunityService : ICommunityService
         _db.UserCommunities.Add(userCommunity);
 
         // Create default text channel
-        var generalChannel = new Channel
+        var generalTextChannel = new Channel
         {
             Name = "general",
             CommunityId = community.Id,
             Type = ChannelType.Text,
             Position = 0
         };
-        _db.Channels.Add(generalChannel);
+        _db.Channels.Add(generalTextChannel);
+
+        // Create default voice channel
+        var generalVoiceChannel = new Channel
+        {
+            Name = "general",
+            CommunityId = community.Id,
+            Type = ChannelType.Voice,
+            Position = 1
+        };
+        _db.Channels.Add(generalVoiceChannel);
 
         await _db.SaveChangesAsync(cancellationToken);
 

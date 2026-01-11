@@ -1,0 +1,21 @@
+#!/bin/bash
+
+# AppRun script for Snacka AppImage
+# This script sets up the environment and launches the application
+
+# Get the directory where the AppImage is mounted
+APPDIR="$(dirname "$(readlink -f "$0")")"
+
+# Set up library paths
+export LD_LIBRARY_PATH="$APPDIR/usr/lib:$LD_LIBRARY_PATH"
+
+# Set up VLC paths if bundled
+if [ -d "$APPDIR/usr/lib/vlc" ]; then
+    export VLC_PLUGIN_PATH="$APPDIR/usr/lib/vlc/plugins"
+fi
+
+# Set XDG paths for proper desktop integration
+export XDG_DATA_DIRS="$APPDIR/usr/share:${XDG_DATA_DIRS:-/usr/local/share:/usr/share}"
+
+# Launch the application
+exec "$APPDIR/usr/bin/Snacka.Client" "$@"

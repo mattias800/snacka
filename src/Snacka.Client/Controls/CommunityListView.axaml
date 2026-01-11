@@ -10,21 +10,20 @@
              x:Class="Snacka.Client.Controls.CommunityListView"
              x:DataType="controls:CommunityListView">
 
-    <Border Background="#202225" Padding="0,12">
+    <Border Background="{StaticResource BackgroundBrush}" Padding="0,12">
         <DockPanel>
             <!-- Add Community Button -->
             <Button DockPanel.Dock="Bottom"
+                    Classes="btn-ghost"
                     Command="{Binding CreateCommunityCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
-                    Background="Transparent"
                     HorizontalAlignment="Center"
                     Margin="0,8"
                     Padding="0"
-                    Cursor="Hand"
                     IsEnabled="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}, Converter={x:Static BoolConverters.Not}}">
-                <Border Width="48" Height="48" CornerRadius="24"
-                        Background="#36393f">
+                <Border Width="48" Height="48" CornerRadius="18"
+                        Background="{StaticResource Content1Brush}">
                     <ui:SymbolIcon Symbol="Add"
-                               Foreground="#3ba55c"
+                               Foreground="{StaticResource SuccessBrush}"
                                FontSize="24"
                                HorizontalAlignment="Center"
                                VerticalAlignment="Center"/>
@@ -35,16 +34,15 @@
             <ScrollViewer VerticalScrollBarVisibility="Hidden">
                 <StackPanel>
                     <!-- Direct Messages Button -->
-                    <Button Command="{Binding OpenDMsCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
-                            Background="Transparent"
+                    <Button Classes="btn-ghost"
+                            Command="{Binding OpenDMsCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
                             HorizontalAlignment="Center"
                             Margin="0,4"
                             Padding="0"
-                            Cursor="Hand"
                             ToolTip.Tip="Direct Messages">
                         <Border Width="48" Height="48"
-                                CornerRadius="24"
-                                Background="#36393f">
+                                CornerRadius="18"
+                                Background="{StaticResource Content1Brush}">
                             <ui:SymbolIcon Symbol="Mail"
                                        Foreground="White"
                                        FontSize="20"
@@ -54,23 +52,22 @@
                     </Button>
 
                     <!-- Separator -->
-                    <Border Width="32" Height="2" Background="#36393f" Margin="8,8" HorizontalAlignment="Center"/>
+                    <Border Width="32" Height="2" Background="{StaticResource Content1Brush}" Margin="8,10" HorizontalAlignment="Center" CornerRadius="1"/>
 
                     <!-- Community Icons -->
                     <ItemsControl x:Name="CommunitiesList"
                                   ItemsSource="{Binding Communities, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate x:DataType="services:CommunityResponse">
-                                <Button Background="Transparent"
+                                <Button Classes="btn-ghost"
                                         Command="{Binding SelectCommunityCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
                                         CommandParameter="{Binding}"
                                         HorizontalAlignment="Center"
                                         Margin="0,4"
-                                        Padding="0"
-                                        Cursor="Hand">
+                                        Padding="0">
                                     <Border Width="48" Height="48"
-                                            CornerRadius="24"
-                                            Background="#5865f2">
+                                            CornerRadius="18"
+                                            Background="{StaticResource PrimaryGradient}">
                                         <TextBlock Text="{Binding Name, Converter={x:Static conv:FirstCharConverter.Instance}}"
                                                    Foreground="White"
                                                    FontSize="20"

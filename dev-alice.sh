@@ -15,7 +15,7 @@ CLIENT_PROJECT="src/Snacka.Client/Snacka.Client.csproj"
 
 # Test account (will be auto-registered if it doesn't exist)
 EMAIL="alice@test.com"
-PASSWORD="password123"
+PASSWORD="Password123!"
 
 echo "=== Snacka Alice Client Startup ==="
 echo ""
