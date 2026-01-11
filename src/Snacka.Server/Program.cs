@@ -1,6 +1,7 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
@@ -10,6 +11,16 @@ using Snacka.Server.Services;
 using Snacka.Server.Services.Sfu;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// Configure forwarded headers for reverse proxy support (NGINX, etc.)
+// This must be configured before other middleware to get correct client IPs
+builder.Services.Configure<ForwardedHeadersOptions>(options =>
+{
+    options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto;
+    // Clear default restrictions to trust any proxy (configure KnownProxies/KnownNetworks in production if needed)
+    options.KnownNetworks.Clear();
+    options.KnownProxies.Clear();
+});
 
 // SECURITY: Get JWT secret from environment variable or config
 var jwtSecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
@@ -278,9 +289,37 @@ using (var scope = app.Services.CreateScope())
         db.SaveChanges();
         Console.WriteLine($"Cleared {staleParticipants.Count} stale voice participants on startup");
     }
+
+    // Check if server needs initial setup (no users)
+    var hasUsers = db.Users.Any();
+    if (!hasUsers)
+    {
+        Console.WriteLine("");
+        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
+        Console.WriteLine("║                    FIRST TIME SETUP                          ║");
+        Console.WriteLine("╠══════════════════════════════════════════════════════════════╣");
+        Console.WriteLine("║  No users found. Please complete the setup wizard to         ║");
+        Console.WriteLine("║  create the first administrator account.                     ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  Open your browser and navigate to:                          ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║    http://<your-server-address>:5117/setup                   ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║  If using a reverse proxy with SSL:                          ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("║    https://<your-domain>/setup                               ║");
+        Console.WriteLine("║                                                              ║");
+        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
+        Console.WriteLine("");
+    }
 }
 
 // Configure the HTTP request pipeline.
+
+// IMPORTANT: UseForwardedHeaders must be first to get correct client IPs for rate limiting
+// This enables the server to work correctly behind reverse proxies (NGINX, etc.)
+app.UseForwardedHeaders();
+
 if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
@@ -288,6 +327,7 @@ if (app.Environment.IsDevelopment())
 else
 {
     // SECURITY: Enable HSTS in production
+    // Note: When behind a reverse proxy that handles SSL, HSTS headers should be set by the proxy
     app.UseHsts();
 }
 
@@ -302,6 +342,8 @@ app.Use(async (context, next) =>
     await next();
 });
 
+// HTTPS redirection - works correctly with reverse proxies when X-Forwarded-Proto is set
+// The forwarded headers middleware sets the request scheme based on X-Forwarded-Proto
 app.UseHttpsRedirection();
 app.UseCors("AllowConfigured");
 app.UseRateLimiter();

@@ -208,7 +208,16 @@ ASPNETCORE_ENVIRONMENT=Production dotnet Snacka.Server.dll
 
 #### 5. Reverse Proxy Setup (Recommended)
 
-For production, run behind a reverse proxy like nginx:
+For production, run behind a reverse proxy for SSL termination. The server is designed to work behind proxies and correctly handles:
+- `X-Forwarded-For` - Real client IP (for rate limiting and logging)
+- `X-Forwarded-Proto` - Original protocol (https)
+- WebSocket connections (for real-time messaging via SignalR)
+
+**NGINX Proxy Manager**
+
+NGINX Proxy Manager works out of the box - just create a proxy host pointing to `snacka-server:8080` (or `localhost:5117` if running outside Docker) and enable SSL. WebSocket support is enabled by default.
+
+**Manual NGINX Configuration**
 
 ```nginx
 server {
@@ -281,54 +290,42 @@ The easiest way to deploy Snacka is using Docker Compose with pre-built images.
 1. **Configure environment variables:**
    ```bash
    cp .env.example .env
-   # Edit .env and set a secure JWT_SECRET_KEY
    ```
 
-2. **Start the server:**
+2. **Edit `.env` and set the required values:**
+   - `JWT_SECRET_KEY` - A secure random string (min 32 characters)
+   - `POSTGRES_PASSWORD` - A strong database password
+   - `ALLOWED_ORIGIN` - Your domain (e.g., `https://snacka.example.com`)
+
+3. **Start the server:**
    ```bash
    docker compose up -d
    ```
 
-3. **Check status:**
+4. **Check status:**
    ```bash
    docker compose ps
    docker compose logs -f
    ```
 
-4. **Stop the server:**
+5. **Stop the server:**
    ```bash
    docker compose down
    ```
 
-The database and uploads are persisted in Docker volumes (`snacka-data` and `snacka-uploads`).
-
-#### Using PostgreSQL (Recommended for Production)
-
-For production deployments, use PostgreSQL instead of SQLite:
-
-```bash
-# Edit .env
-USE_SQLITE=false
-POSTGRES_PASSWORD=your-secure-password
-
-# Start with PostgreSQL profile
-docker compose --profile postgres up -d
-```
-
-This starts both the Snacka server and a PostgreSQL database container.
+Data is persisted in Docker volumes (`postgres-data` for database, `snacka-uploads` for files).
 
 #### Environment Variables (.env file)
 
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `JWT_SECRET_KEY` | JWT signing key (min 32 chars) | **Must change!** |
-| `SERVER_NAME` | Server display name | Snacka Server |
-| `SERVER_DESCRIPTION` | Server description | A self-hosted Discord alternative |
-| `ALLOW_REGISTRATION` | Allow new user signups | true |
-| `USE_SQLITE` | Use SQLite instead of PostgreSQL | true |
-| `POSTGRES_PASSWORD` | PostgreSQL password | snacka |
-| `TENOR_API_KEY` | Tenor GIF API key (optional) | *(empty)* |
-| `ALLOWED_ORIGIN` | CORS allowed origin | http://localhost:5117 |
+| Variable | Description | Required |
+|----------|-------------|----------|
+| `JWT_SECRET_KEY` | JWT signing key (min 32 chars) | **Yes** |
+| `POSTGRES_PASSWORD` | PostgreSQL password | **Yes** |
+| `ALLOWED_ORIGIN` | CORS allowed origin (your domain) | **Yes** |
+| `SERVER_NAME` | Server display name | No (default: Snacka Server) |
+| `SERVER_DESCRIPTION` | Server description | No |
+| `ALLOW_REGISTRATION` | Allow new user signups | No (default: true) |
+| `TENOR_API_KEY` | Tenor GIF API key (optional) | No |
 
 #### Using Pre-built Images
 
@@ -366,25 +363,18 @@ docker compose up -d
 
 #### Manual Docker Run
 
-If you prefer not to use docker compose:
+For production deployments, use docker compose (shown above) which includes PostgreSQL.
+
+For quick testing with SQLite (not recommended for production):
 
 ```bash
-# Using pre-built image
 docker run -d -p 5117:8080 \
   --name snacka-server \
+  -e UseSqlite=true \
   -e Jwt__SecretKey=your-secret-key-at-least-32-characters \
   -v snacka-data:/app/data \
   -v snacka-uploads:/app/uploads \
   ghcr.io/mattias800/snacka:latest
-
-# Or build and run locally
-docker build -t snacka-server .
-docker run -d -p 5117:8080 \
-  --name snacka-server \
-  -e Jwt__SecretKey=your-secret-key-at-least-32-characters \
-  -v snacka-data:/app/data \
-  -v snacka-uploads:/app/uploads \
-  snacka-server
 ```
 
 ## Environment Variables
@@ -395,9 +385,10 @@ The server supports configuration via environment variables:
 |----------|-------------|
 | `ASPNETCORE_ENVIRONMENT` | Environment name (Development/Production) |
 | `ASPNETCORE_URLS` | Server URLs (e.g., `http://0.0.0.0:5117`) |
-| `Jwt__SecretKey` | JWT signing key |
-| `ConnectionStrings__DefaultConnection` | Database connection string |
-| `UseSqlite` | Use SQLite instead of SQL Server |
+| `Jwt__SecretKey` | JWT signing key (min 32 characters) |
+| `ConnectionStrings__DefaultConnection` | PostgreSQL connection string |
+| `UseSqlite` | Use SQLite instead of PostgreSQL (dev only) |
+| `AllowedOrigins__0` | CORS allowed origin |
 
 ## Health Check
 

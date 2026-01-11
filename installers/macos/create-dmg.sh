@@ -61,8 +61,9 @@ EOF
 
 # Set custom icon positions using AppleScript (optional, makes it prettier)
 # This sets up the Finder window to show nicely when opened
+# Note: This doesn't work in CI environments without a GUI, so we make it optional
 echo "Configuring DMG window..."
-osascript << EOF
+if osascript << EOF 2>/dev/null
 tell application "Finder"
     tell disk "$VOLUME_NAME"
         open
@@ -82,6 +83,11 @@ tell application "Finder"
     end tell
 end tell
 EOF
+then
+    echo "DMG window configured successfully"
+else
+    echo "Skipping DMG window configuration (no GUI available, e.g. CI environment)"
+fi
 
 # Unmount
 echo "Unmounting..."
