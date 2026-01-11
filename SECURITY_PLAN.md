@@ -521,6 +521,132 @@ dotnet user-secrets set "Jwt:SecretKey" "your-dev-secret"
 
 ---
 
+---
+
+## Additional Findings (January 2026 Review)
+
+### 19. Potential Timing Attack on Login
+**File:** `src/Snacka.Server/Services/AuthService.cs:109`
+
+**Issue:** The login check short-circuits if user is null, potentially creating a timing difference.
+
+```csharp
+if (user is null || !BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+```
+
+**Risk:** Attackers could enumerate valid emails by measuring response times.
+
+**Fix:**
+- [ ] Always run BCrypt.Verify with a dummy hash when user is null
+
+```csharp
+if (user is null)
+{
+    // Constant-time comparison to prevent timing attacks
+    BCrypt.Net.BCrypt.Verify(request.Password, "$2a$11$dummy.hash.for.timing.attack.prevention");
+    throw new InvalidOperationException("Invalid email or password.");
+}
+
+if (!BCrypt.Net.BCrypt.Verify(request.Password, user.PasswordHash))
+    throw new InvalidOperationException("Invalid email or password.");
+```
+
+---
+
+### 20. CORS Fail-Open in Production
+**File:** `src/Snacka.Server/Program.cs:210-222`
+
+**Issue:** In non-development mode without configured origins, CORS allows all origins with only a console warning.
+
+```csharp
+if (builder.Environment.IsDevelopment() || allowedOrigins == null || allowedOrigins.Length == 0)
+{
+    // Development mode: allow all origins but log a warning
+    options.AddPolicy("AllowConfigured", policy =>
+    {
+        policy.AllowAnyOrigin()
+              .AllowAnyMethod()
+              .AllowAnyHeader();
+    });
+```
+
+**Risk:** Accidental production deployment without CORS configuration allows any origin.
+
+**Fix:**
+- [ ] Fail-closed in production - require explicit origin configuration
+
+```csharp
+if (builder.Environment.IsDevelopment())
+{
+    // Development only - allow all
+    policy.AllowAnyOrigin().AllowAnyMethod().AllowAnyHeader();
+}
+else if (allowedOrigins == null || allowedOrigins.Length == 0)
+{
+    throw new InvalidOperationException("AllowedOrigins must be configured for production.");
+}
+else
+{
+    policy.WithOrigins(allowedOrigins)...
+}
+```
+
+---
+
+### 21. Forwarded Headers Trust Any Proxy
+**File:** `src/Snacka.Server/Program.cs:20-23`
+
+**Issue:** Forwarded headers trust is cleared, allowing any client to spoof X-Forwarded-For.
+
+```csharp
+options.KnownNetworks.Clear();
+options.KnownProxies.Clear();
+```
+
+**Risk:** IP spoofing to bypass rate limiting if server is exposed directly (no reverse proxy).
+
+**Fix:**
+- [ ] Document that a reverse proxy is required for production
+- [ ] Consider configuring KnownProxies for specific deployments
+
+---
+
+### 22. Database Credentials in Version Control
+**File:** `src/Snacka.Server/appsettings.json:15`
+
+**Issue:** Development database credentials are committed to the repository.
+
+```json
+"DefaultConnection": "Host=localhost;Port=5435;Database=snacka;Username=snacka;Password=snacka"
+```
+
+**Risk:** Credential exposure, though these are clearly development-only values.
+
+**Fix:**
+- [ ] Use environment variables or user secrets for connection strings
+- [ ] Add appsettings.Development.json to .gitignore with template example
+
+---
+
+## Security Strengths Summary
+
+The following security measures are **well-implemented**:
+
+| Category | Implementation |
+|----------|----------------|
+| Password Hashing | BCrypt with proper work factor |
+| Password Complexity | 8+ chars, uppercase, lowercase, digit, special char required |
+| JWT Validation | Issuer, audience, lifetime, signing key all validated |
+| Rate Limiting | Login (10/min), Register (5/hr), Refresh (30/min), API (100/min) |
+| SSRF Protection | Comprehensive blocklist including cloud metadata endpoints |
+| Path Traversal | UUID filenames, path validation, directory boundary checks |
+| SQL Injection | Entity Framework Core parameterized queries |
+| Security Headers | X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, HSTS |
+| Authorization | Community/channel membership checks on all sensitive operations |
+| SignalR Security | `[Authorize]` on hub, voice channel verification for WebRTC |
+
+---
+
 ## Testing Checklist
 
 After implementing fixes, verify:
