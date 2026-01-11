@@ -29,19 +29,6 @@ jobs:
         run: |
           dotnet build tools/AudioEnumTest -c Release
 
-      - name: List build output to find SDL2.dll
-        run: |
-          Write-Host "=== Searching for SDL2.dll ==="
-          Get-ChildItem -Path tools/AudioEnumTest/bin -Recurse -Filter "*.dll" | ForEach-Object { Write-Host $_.FullName }
-          Write-Host ""
-          Write-Host "=== NuGet packages cache ==="
-          $sdl2Path = "$env:USERPROFILE\.nuget\packages\sdl2.nuget.redist"
-          if (Test-Path $sdl2Path) {
-            Get-ChildItem -Path $sdl2Path -Recurse -Filter "*.dll" | ForEach-Object { Write-Host $_.FullName }
-          } else {
-            Write-Host "sdl2.nuget.redist not found in NuGet cache"
-          }
-
       - name: Run AudioEnumTest
         run: |
           dotnet run --project tools/AudioEnumTest -c Release

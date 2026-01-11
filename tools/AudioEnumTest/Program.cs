@@ -27,12 +27,35 @@ string[] GetSdl2Paths()
 {
     if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
     {
-        return new[]
+        var paths = new List<string>
         {
             "SDL2.dll",
             Path.Combine(AppContext.BaseDirectory, "SDL2.dll"),
             Path.Combine(AppContext.BaseDirectory, "runtimes", "win-x64", "native", "SDL2.dll"),
         };
+
+        // Also check NuGet packages cache for sdl2.nuget.redist
+        var userProfile = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+        var nugetPath = Path.Combine(userProfile, ".nuget", "packages", "sdl2.nuget.redist");
+        if (Directory.Exists(nugetPath))
+        {
+            try
+            {
+                var versionDirs = Directory.GetDirectories(nugetPath);
+                foreach (var versionDir in versionDirs.OrderByDescending(d => d))
+                {
+                    var x64Path = Path.Combine(versionDir, "build", "native", "bin", "x64", "SDL2.dll");
+                    if (File.Exists(x64Path))
+                    {
+                        paths.Add(x64Path);
+                        break;
+                    }
+                }
+            }
+            catch { }
+        }
+
+        return paths.ToArray();
     }
     else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
     {
