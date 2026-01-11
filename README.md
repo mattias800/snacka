@@ -4,14 +4,16 @@ A self-hosted Discord alternative built with C# and .NET. Snacka allows users to
 
 ## Features
 
-- **User Accounts**: Secure user authentication and account management
-- **Direct Messages**: Private messaging between users
-- **Text Channels**: Organized text-based communication
-- **Voice Channels**: Real-time voice communication
-- **Webcam Streaming**: Share your camera in voice channels or private calls
-- **Screen Sharing**: Share your screen with support for capture devices (e.g., Elgato 4K)
+- **User Accounts**: Secure user authentication with JWT tokens and refresh tokens
+- **Direct Messages**: Private messaging between users with typing indicators
+- **Text Channels**: Organized text-based communication with edit/delete support
+- **Voice Channels**: Real-time voice communication with WebRTC
+- **Webcam Streaming**: Share your camera in voice channels or private calls (in progress)
+- **Screen Sharing**: Share your screen with support for capture devices (in progress)
+- **GIF Picker**: Search and share GIFs via Tenor integration
+- **File Attachments**: Share images, audio, and other files
 - **Cross-platform Client**: Desktop application for Windows, macOS, and Linux
-- **Self-hosted Server**: Deploy on your own infrastructure for complete control
+- **Self-hosted Server**: Deploy on your own infrastructure with Docker support
 
 ## Technology Stack
 
@@ -21,55 +23,97 @@ A self-hosted Discord alternative built with C# and .NET. Snacka allows users to
 - **Real-time Communication**: WebRTC with SipSorcery
 - **Signaling**: SignalR for WebSocket-based signaling
 - **Database**: Entity Framework Core with SQLite or PostgreSQL
+- **Audio**: SDL2 for audio capture and playback
 - **Testing**: MSTest
 
 ## Project Structure
 
 ```
-snacka-csharp/
+miscord-csharp/
 ├── src/
 │   ├── Snacka.Server/          # ASP.NET Core server application
 │   ├── Snacka.Client/          # Avalonia UI desktop client (Windows, macOS, Linux)
 │   ├── Snacka.Shared/          # Shared models and interfaces
-│   └── Snacka.WebRTC/          # WebRTC/media handling
+│   ├── Snacka.WebRTC/          # WebRTC/media handling
+│   ├── SnackaCapture/          # Screen/window capture utilities
+│   └── SnackaMetalRenderer/    # Metal-based rendering (macOS)
 ├── tests/
 │   ├── Snacka.Server.Tests/
 │   └── Snacka.WebRTC.Tests/
+├── tools/                      # Build and development tools
+├── docs/
+│   └── DEPLOY.md               # Deployment guide
 ├── AGENTS.md
-├── .gitignore
-├── .editorconfig
+├── PLAN.md
 ├── Snacka.sln
+├── Dockerfile
+├── docker-compose.yml
 └── README.md
 ```
 
 ## Implementation Status
 
-### Current Progress
-- ✅ **Phase 1.1 - Database Setup (100%)**: All 7 entity models created with EF Core DbContext
-  - User, SnackaServer, Channel, Message, DirectMessage, UserServer, VoiceParticipant
-  - Migrations ready for deployment
-  - Foreign key relationships configured
-  - Unique constraints and indexes optimized
-- ⏳ **Phase 1.2 - User Authentication (0%)**: Next to implement
-- ⏳ **Phase 1.3 - SignalR Setup (0%)**: Planned after authentication
-- ⏳ **Phases 2-5**: Messaging, voice/media, UI, testing
+### Completed Features
+- ✅ **Database Models**: All 7 entity models with EF Core DbContext
+- ✅ **User Authentication**: Register, login, JWT tokens, refresh tokens
+- ✅ **SignalR Hub**: Real-time messaging, presence tracking, WebRTC signaling
+- ✅ **Direct Messages**: Send, receive, edit, delete, typing indicators
+- ✅ **Text Channels**: Create, edit, delete channels and messages
+- ✅ **Voice Channels**: Join/leave with full WebRTC audio support
+- ✅ **Role-based Permissions**: Owner, Admin, Member roles
+- ✅ **Ownership Transfer**: Transfer server ownership between users
+- ✅ **Discord-like UI**: Server list, channels, chat, member list
+- ✅ **Audio Device Selection**: Input/output device configuration
+- ✅ **Audio Controls**: Input gain (0-300%), noise gate
+- ✅ **75+ Automated Tests**
 
-See [PLAN.md](PLAN.md) for complete implementation roadmap.
+### In Progress
+- ⏳ **Webcam Streaming**: Video track integration with WebRTC
+- ⏳ **Screen Sharing**: Platform-specific screen capture
+- ⏳ **STUN/TURN Configuration**: NAT traversal for voice calls
 
-## Development
+See [PLAN.md](PLAN.md) for the complete implementation roadmap.
+
+## Quick Start
 
 ### Prerequisites
 - .NET 9 SDK or later
-- Visual Studio 2022 (recommended), Rider, or VS Code
 - Git
-- Native dependencies for client (FFmpeg, SDL2, VLC) - see [docs/DEPLOY.md](docs/DEPLOY.md) for platform-specific instructions
+- Native dependencies for client (SDL2, VLC for audio playback) - see [docs/DEPLOY.md](docs/DEPLOY.md)
 
-### Building
+### Development
+
+The easiest way to run Snacka for development:
 
 ```bash
-cd /Users/mattias800/repos/snacka-csharp
-dotnet build
+# Start server and two test clients (Alice and Bob)
+./dev-start.sh
 ```
+
+Or manually:
+
+```bash
+# Start server
+cd src/Snacka.Server
+dotnet run
+
+# Start client (in another terminal)
+cd src/Snacka.Client
+dotnet run -- --server http://localhost:5117
+```
+
+### Docker Deployment
+
+```bash
+# Configure environment
+cp .env.example .env
+# Edit .env and set JWT_SECRET_KEY
+
+# Start server
+docker-compose up -d
+```
+
+See [docs/DEPLOY.md](docs/DEPLOY.md) for complete deployment instructions including production setup with PostgreSQL and nginx.
 
 ### Running Tests
 
@@ -77,9 +121,9 @@ dotnet build
 dotnet test
 ```
 
-### Database
+## Database
 
-The project uses Entity Framework Core with support for SQL Server and PostgreSQL. Database schema includes:
+The project uses Entity Framework Core with support for SQLite and PostgreSQL. Database schema includes:
 - **Users**: User accounts with authentication
 - **SnackaServers**: Server/workspace management
 - **Channels**: Text and voice channels
@@ -88,13 +132,17 @@ The project uses Entity Framework Core with support for SQL Server and PostgreSQ
 - **UserServers**: Server membership and roles
 - **VoiceParticipants**: Active voice channel tracking
 
-## Code Style
+## Configuration
 
-This project follows C# coding standards with the following conventions:
-- Arrow function syntax for all methods
-- Explicit type annotations (no `any`)
-- Interfaces preferred over types
-- Proper testing with automated verification
+Key configuration options in `appsettings.json`:
+
+| Setting | Description |
+|---------|-------------|
+| `Jwt:SecretKey` | JWT signing key (min 32 characters) |
+| `ServerInfo:Name` | Server display name |
+| `ServerInfo:AllowRegistration` | Enable/disable new user registration |
+| `UseSqlite` | Use SQLite (true) or PostgreSQL (false) |
+| `Tenor:ApiKey` | Optional Tenor API key for GIF picker |
 
 ## License
 

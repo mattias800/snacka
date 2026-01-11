@@ -454,23 +454,22 @@ VoiceParticipants
 
 ---
 
-## Estimated Timeline
+## Implementation Summary
 
-| Phase | Component | LOC | Effort | Notes |
-|-------|-----------|-----|--------|-------|
-| 1.1 | Database | 400 | ✅ Complete | All models and migrations |
-| 1.2 | Auth Backend | 400 | 2-3 days | Register, Login, JWT |
-| 1.3 | SignalR Hub | 300 | 1-2 days | Connection management |
-| 2.1 | Direct Messages | 600 | 3-4 days | Endpoints + SignalR |
-| 2.2 | Text Channels | 800 | 4-5 days | More complex than DM |
-| 4.1 | Auth UI | 400 | 2-3 days | Login/Register windows |
-| 4.2 | Main Layout | 1000 | 5-7 days | Most complex UI |
-| 3.1 | Voice/WebRTC | 1200 | 5-7 days | Signaling is complex |
-| 4.3 | Voice UI | 700 | 3-4 days | Depends on Phase 3.1 |
-| 3.2 | Webcam | 700 | 4-5 days | Camera APIs per OS |
-| 3.3 | Screen Share | 1000 | 5-7 days | Elgato + device enum |
-| 5 | Testing/Polish | 800 | 4-5 days | Throughout project |
-| **Total** | | **8000** | **8-10 weeks** | Single developer estimate |
+| Phase | Component | Status | Notes |
+|-------|-----------|--------|-------|
+| 1.1 | Database | ✅ Complete | All models and migrations |
+| 1.2 | Auth Backend | ✅ Complete | Register, Login, JWT |
+| 1.3 | SignalR Hub | ✅ Complete | Connection management |
+| 2.1 | Direct Messages | ✅ Complete | Endpoints + SignalR |
+| 2.2 | Text Channels | ✅ Complete | Messages, permissions, roles |
+| 4.1 | Auth UI | ✅ Complete | Login/Register windows |
+| 4.2 | Main Layout | ✅ Complete | Discord-like interface |
+| 3.1 | Voice/WebRTC | ✅ Complete | Audio fully working |
+| 4.3 | Voice UI | ✅ Complete | Device selection, gain, noise gate |
+| 3.2 | Webcam | ⏳ Pending | Camera APIs per OS |
+| 3.3 | Screen Share | ⏳ Pending | Platform-specific capture |
+| 5 | Testing/Polish | ⏳ Ongoing | 75+ tests, targeting >80% coverage |
 
 ---
 
@@ -548,7 +547,7 @@ VoiceParticipants
 ## Repository Structure
 
 ```
-snacka-csharp/
+miscord-csharp/
 ├── src/
 │   ├── Snacka.Server/
 │   │   ├── Controllers/          (REST endpoints)
@@ -569,14 +568,22 @@ snacka-csharp/
 │   │   └── Program.cs ✅
 │   ├── Snacka.Shared/
 │   │   └── Models/               (entities ✅)
-│   └── Snacka.WebRTC/
-│       ├── Handlers/             (WebRTC peer handling)
-│       └── Services/             (media capture, encoding)
+│   ├── Snacka.WebRTC/
+│   │   ├── Handlers/             (WebRTC peer handling)
+│   │   └── Services/             (media capture, encoding)
+│   ├── SnackaCapture/            (screen/window capture)
+│   └── SnackaMetalRenderer/      (Metal-based rendering, macOS)
 ├── tests/
 │   ├── Snacka.Server.Tests/
 │   └── Snacka.WebRTC.Tests/
+├── tools/                        (build and dev tools)
+├── docs/
+│   └── DEPLOY.md                 (deployment guide)
 ├── .github/
-│   └── workflows/                (CI/CD if desired)
+│   └── workflows/                (CI/CD)
+├── Dockerfile ✅
+├── docker-compose.yml ✅
+├── dev-start.sh                  (quick start script)
 ├── PLAN.md ✅
 ├── AGENTS.md ✅
 ├── README.md ✅
@@ -622,6 +629,6 @@ snacka-csharp/
 
 ---
 
-**Last Updated:** 2026-01-05
+**Last Updated:** 2026-01-11
 **Status:** Core Features Complete, Voice Audio Fully Functional
 **Maintainer:** Development Team
