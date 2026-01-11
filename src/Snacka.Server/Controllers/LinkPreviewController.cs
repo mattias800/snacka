@@ -6,7 +6,7 @@ using Snacka.Shared.Models;
 namespace Snacka.Server.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/link-previews")]
 [Authorize]
 public class LinkPreviewController : ControllerBase
 {

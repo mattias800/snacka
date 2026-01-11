@@ -361,13 +361,13 @@
     </Style>
 
     <Style Selector="Border.voice-participant">
-        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Background" Value="#0027272a"/>
         <Setter Property="CornerRadius" Value="10"/>
         <Setter Property="Padding" Value="10"/>
         <Setter Property="Cursor" Value="Hand"/>
         <Setter Property="Transitions">
             <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                <BrushTransition Property="Background" Duration="0:0:0.1"/>
             </Transitions>
         </Setter>
     </Style>

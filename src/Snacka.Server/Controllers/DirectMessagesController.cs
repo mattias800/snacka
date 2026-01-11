@@ -11,7 +11,7 @@ using Snacka.Server.Services;
 namespace Snacka.Server.Controllers;
 
 [ApiController]
-[Route("api/[controller]")]
+[Route("api/direct-messages")]
 [Authorize]
 public class DirectMessagesController : ControllerBase
 {
@@ -29,6 +29,9 @@ public class DirectMessagesController : ControllerBase
         _hubContext = hubContext;
     }
 
+    /// <summary>
+    /// Get all conversations for the current user.
+    /// </summary>
     [HttpGet]
     public async Task<ActionResult<IEnumerable<ConversationSummary>>> GetConversations(
         CancellationToken cancellationToken)
@@ -40,7 +43,10 @@ public class DirectMessagesController : ControllerBase
         return Ok(conversations);
     }
 
-    [HttpGet("{userId:guid}")]
+    /// <summary>
+    /// Get messages in a conversation with a specific user.
+    /// </summary>
+    [HttpGet("conversations/{userId:guid}")]
     public async Task<ActionResult<IEnumerable<DirectMessageResponse>>> GetConversation(
         Guid userId,
         [FromQuery] int skip = 0,
@@ -55,7 +61,10 @@ public class DirectMessagesController : ControllerBase
         return Ok(messages);
     }
 
-    [HttpPost("{userId:guid}")]
+    /// <summary>
+    /// Send a message to a specific user.
+    /// </summary>
+    [HttpPost("conversations/{userId:guid}")]
     public async Task<ActionResult<DirectMessageResponse>> SendMessage(
         Guid userId,
         [FromBody] SendDirectMessageRequest request,
@@ -81,9 +90,25 @@ public class DirectMessagesController : ControllerBase
         }
     }
 
-    [HttpPut("{id:guid}")]
+    /// <summary>
+    /// Mark a conversation as read.
+    /// </summary>
+    [HttpPost("conversations/{userId:guid}/read")]
+    public async Task<IActionResult> MarkAsRead(Guid userId, CancellationToken cancellationToken)
+    {
+        var currentUserId = GetCurrentUserId();
+        if (currentUserId is null) return Unauthorized();
+
+        await _directMessageService.MarkAsReadAsync(currentUserId.Value, userId, cancellationToken);
+        return NoContent();
+    }
+
+    /// <summary>
+    /// Update a direct message.
+    /// </summary>
+    [HttpPut("messages/{messageId:guid}")]
     public async Task<ActionResult<DirectMessageResponse>> UpdateMessage(
-        Guid id,
+        Guid messageId,
         [FromBody] DirectMessageUpdate request,
         CancellationToken cancellationToken)
     {
@@ -93,7 +118,7 @@ public class DirectMessagesController : ControllerBase
         try
         {
             var message = await _directMessageService.UpdateMessageAsync(
-                id, userId.Value, request.Content, cancellationToken);
+                messageId, userId.Value, request.Content, cancellationToken);
 
             // Notify both parties about the edit
             await _hubContext.Clients.User(message.RecipientId.ToString())
@@ -111,8 +136,11 @@ public class DirectMessagesController : ControllerBase
         }
     }
 
-    [HttpDelete("{id:guid}")]
-    public async Task<IActionResult> DeleteMessage(Guid id, CancellationToken cancellationToken)
+    /// <summary>
+    /// Delete a direct message.
+    /// </summary>
+    [HttpDelete("messages/{messageId:guid}")]
+    public async Task<IActionResult> DeleteMessage(Guid messageId, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
@@ -122,19 +150,19 @@ public class DirectMessagesController : ControllerBase
             // SECURITY: Get message info BEFORE deletion to notify only the participants
             var message = await _db.DirectMessages
                 .AsNoTracking()
-                .Where(m => m.Id == id)
+                .Where(m => m.Id == messageId)
                 .Select(m => new { m.SenderId, m.RecipientId })
                 .FirstOrDefaultAsync(cancellationToken);
 
             if (message is null)
                 return NotFound(new { error = "Message not found." });
 
-            await _directMessageService.DeleteMessageAsync(id, userId.Value, cancellationToken);
+            await _directMessageService.DeleteMessageAsync(messageId, userId.Value, cancellationToken);
 
             // Notify only the two participants (not all users)
             await _hubContext.Clients
                 .Users(message.SenderId.ToString(), message.RecipientId.ToString())
-                .SendAsync("DirectMessageDeleted", id, cancellationToken);
+                .SendAsync("DirectMessageDeleted", messageId, cancellationToken);
 
             return NoContent();
         }
@@ -146,16 +174,6 @@ public class DirectMessagesController : ControllerBase
         {
             return Forbid(ex.Message);
         }
-    }
-
-    [HttpPost("{userId:guid}/read")]
-    public async Task<IActionResult> MarkAsRead(Guid userId, CancellationToken cancellationToken)
-    {
-        var currentUserId = GetCurrentUserId();
-        if (currentUserId is null) return Unauthorized();
-
-        await _directMessageService.MarkAsReadAsync(currentUserId.Value, userId, cancellationToken);
-        return NoContent();
     }
 
     private Guid? GetCurrentUserId()

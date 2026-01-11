@@ -215,7 +215,7 @@ public class ApiClient : IApiClient
         if (string.IsNullOrEmpty(_baseUrl))
             return null;
 
-        var url = $"{_baseUrl}/api/auth/{userId}/avatar";
+        var url = $"{_baseUrl}/api/users/{userId}/avatar";
 
         // Append access token for authenticated image loading
         if (!string.IsNullOrEmpty(_authToken))
@@ -515,42 +515,42 @@ public class ApiClient : IApiClient
     // Direct Message methods
     public async Task<ApiResult<List<ConversationSummary>>> GetConversationsAsync()
     {
-        return await GetAsync<List<ConversationSummary>>("/api/directmessages");
+        return await GetAsync<List<ConversationSummary>>("/api/direct-messages");
     }
 
     public async Task<ApiResult<List<DirectMessageResponse>>> GetDirectMessagesAsync(Guid userId, int skip = 0, int take = 50)
     {
-        return await GetAsync<List<DirectMessageResponse>>($"/api/directmessages/{userId}?skip={skip}&take={take}");
+        return await GetAsync<List<DirectMessageResponse>>($"/api/direct-messages/conversations/{userId}?skip={skip}&take={take}");
     }
 
     public async Task<ApiResult<DirectMessageResponse>> SendDirectMessageAsync(Guid userId, string content)
     {
         return await PostAsync<SendDirectMessageRequest, DirectMessageResponse>(
-            $"/api/directmessages/{userId}",
+            $"/api/direct-messages/conversations/{userId}",
             new SendDirectMessageRequest(content));
     }
 
     public async Task<ApiResult<DirectMessageResponse>> UpdateDirectMessageAsync(Guid messageId, string content)
     {
         return await PutAsync<SendDirectMessageRequest, DirectMessageResponse>(
-            $"/api/directmessages/{messageId}",
+            $"/api/direct-messages/messages/{messageId}",
             new SendDirectMessageRequest(content));
     }
 
     public async Task<ApiResult<bool>> DeleteDirectMessageAsync(Guid messageId)
     {
-        return await DeleteAsync($"/api/directmessages/{messageId}");
+        return await DeleteAsync($"/api/direct-messages/messages/{messageId}");
     }
 
     public async Task<ApiResult<bool>> MarkConversationAsReadAsync(Guid userId)
     {
-        return await PostEmptyAsync($"/api/directmessages/{userId}/read");
+        return await PostEmptyAsync($"/api/direct-messages/conversations/{userId}/read");
     }
 
     // Link Preview methods
     public async Task<ApiResult<LinkPreview>> GetLinkPreviewAsync(string url)
     {
-        return await GetAsync<LinkPreview>($"/api/linkpreview?url={Uri.EscapeDataString(url)}");
+        return await GetAsync<LinkPreview>($"/api/link-previews?url={Uri.EscapeDataString(url)}");
     }
 
     // GIF Search methods
