@@ -91,6 +91,9 @@ public partial class ChannelListView : UserControl
     public static readonly StyledProperty<ICommand?> ServerDeafenUserCommandProperty =
         AvaloniaProperty.Register<ChannelListView, ICommand?>(nameof(ServerDeafenUserCommand));
 
+    public static readonly StyledProperty<ICommand?> MoveUserToChannelCommandProperty =
+        AvaloniaProperty.Register<ChannelListView, ICommand?>(nameof(MoveUserToChannelCommand));
+
     public static readonly StyledProperty<ICommand?> ReorderChannelsCommandProperty =
         AvaloniaProperty.Register<ChannelListView, ICommand?>(nameof(ReorderChannelsCommand));
 
@@ -239,6 +242,12 @@ public partial class ChannelListView : UserControl
         set => SetValue(ServerDeafenUserCommandProperty, value);
     }
 
+    public ICommand? MoveUserToChannelCommand
+    {
+        get => GetValue(MoveUserToChannelCommandProperty);
+        set => SetValue(MoveUserToChannelCommandProperty, value);
+    }
+
     public ICommand? ReorderChannelsCommand
     {
         get => GetValue(ReorderChannelsCommandProperty);
@@ -260,6 +269,7 @@ public partial class ChannelListView : UserControl
     // Events
     public event EventHandler<ChannelResponse>? VoiceChannelClicked;
     public event EventHandler<ChannelResponse>? VoiceChannelViewRequested;
+    public event EventHandler<(VoiceParticipantViewModel Participant, VoiceChannelViewModel TargetChannel)>? MoveUserRequested;
 
     // Voice channel click/drag state
     private ChannelResponse? _voiceClickChannel;
@@ -950,4 +960,51 @@ public partial class ChannelListView : UserControl
         ReorderChannelsCommand?.Execute(newOrder);
     }
     #pragma warning restore CS0618
+
+    // Move user to channel - wire up click handlers on submenu items
+    private VoiceParticipantViewModel? _moveUserParticipant;
+
+    private void MoveToMenuItem_SubmenuOpened(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem parentMenuItem) return;
+
+        // Store the participant from the parent menu item's Tag
+        _moveUserParticipant = parentMenuItem.Tag as VoiceParticipantViewModel;
+        if (_moveUserParticipant is null) return;
+
+        // Wire up click handlers for each submenu item
+        foreach (var item in parentMenuItem.Items)
+        {
+            if (item is MenuItem submenuItem)
+            {
+                // Remove any previous handler to avoid duplicates
+                submenuItem.Click -= MoveToChannel_Click;
+                submenuItem.Click += MoveToChannel_Click;
+            }
+        }
+    }
+
+    private void MoveToChannel_Click(object? sender, RoutedEventArgs e)
+    {
+        if (sender is not MenuItem menuItem) return;
+        if (_moveUserParticipant is null) return;
+
+        var targetChannel = menuItem.Tag as VoiceChannelViewModel;
+        if (targetChannel is null) return;
+
+        // Don't move to the same channel
+        if (targetChannel.Id == _moveUserParticipant.Participant.ChannelId) return;
+
+        // Invoke the command or raise event
+        if (MoveUserToChannelCommand?.CanExecute((_moveUserParticipant, targetChannel)) == true)
+        {
+            MoveUserToChannelCommand.Execute((_moveUserParticipant, targetChannel));
+        }
+        else
+        {
+            MoveUserRequested?.Invoke(this, (_moveUserParticipant, targetChannel));
+        }
+
+        _moveUserParticipant = null;
+    }
 }

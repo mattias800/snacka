@@ -148,6 +148,7 @@
                                           ChannelPendingDelete="{Binding ChannelPendingDelete}"
                                           ServerMuteUserCommand="{Binding ServerMuteUserCommand}"
                                           ServerDeafenUserCommand="{Binding ServerDeafenUserCommand}"
+                                          MoveUserToChannelCommand="{Binding MoveUserToChannelCommand}"
                                           ReorderChannelsCommand="{Binding ReorderChannelsCommand}"
                                           PreviewReorderCommand="{Binding PreviewReorderCommand}"
                                           CancelPreviewCommand="{Binding CancelPreviewCommand}"

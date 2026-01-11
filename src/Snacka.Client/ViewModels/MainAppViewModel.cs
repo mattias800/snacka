@@ -301,6 +301,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Admin voice commands
         ServerMuteUserCommand = ReactiveCommand.CreateFromTask<VoiceParticipantViewModel>(ServerMuteUserAsync);
         ServerDeafenUserCommand = ReactiveCommand.CreateFromTask<VoiceParticipantViewModel>(ServerDeafenUserAsync);
+        MoveUserToChannelCommand = ReactiveCommand.CreateFromTask<(VoiceParticipantViewModel, VoiceChannelViewModel)>(MoveUserToChannelAsync);
 
         var canSendMessage = this.WhenAnyValue(
             x => x.MessageInput,
@@ -2076,6 +2077,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Admin voice commands
     public ReactiveCommand<VoiceParticipantViewModel, Unit> ServerMuteUserCommand { get; }
     public ReactiveCommand<VoiceParticipantViewModel, Unit> ServerDeafenUserCommand { get; }
+    public ReactiveCommand<(VoiceParticipantViewModel, VoiceChannelViewModel), Unit> MoveUserToChannelCommand { get; }
 
     public bool CanSwitchServer => _onSwitchServer is not null;
 
@@ -3015,6 +3017,25 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"Failed to server deafen user: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Move a user to a different voice channel (admin action).
+    /// </summary>
+    private async Task MoveUserToChannelAsync((VoiceParticipantViewModel Participant, VoiceChannelViewModel TargetChannel) args)
+    {
+        if (!CanManageVoice) return;
+        if (args.Participant.UserId == _auth.UserId) return; // Cannot move yourself via this action
+
+        try
+        {
+            await _signalR.MoveUserAsync(args.Participant.UserId, args.TargetChannel.Id);
+            Console.WriteLine($"Moved user {args.Participant.Username} to channel {args.TargetChannel.Name}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to move user: {ex.Message}");
         }
     }
 

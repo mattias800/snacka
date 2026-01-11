@@ -175,3 +175,45 @@ public class BoolToOpacityConverter : IValueConverter
         throw new NotSupportedException();
     }
 }
+
+/// <summary>
+/// Filters voice channels to exclude the participant's current channel.
+/// Values: [0] = VoiceChannels collection, [1] = Participant's current channel ID
+/// </summary>
+public class OtherVoiceChannelsConverter : IMultiValueConverter
+{
+    public static readonly OtherVoiceChannelsConverter Instance = new();
+
+    public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (values.Count < 2) return null;
+
+        var voiceChannels = values[0] as IEnumerable<VoiceChannelViewModel>;
+        var currentChannelId = values[1] as Guid?;
+
+        if (voiceChannels is null) return null;
+
+        return voiceChannels.Where(c => c.Id != currentChannelId).ToList();
+    }
+}
+
+/// <summary>
+/// Creates a tuple of (VoiceParticipantViewModel, VoiceChannelViewModel) for the MoveUserToChannel command.
+/// Values: [0] = VoiceParticipantViewModel, [1] = VoiceChannelViewModel (target channel)
+/// </summary>
+public class MoveUserParameterConverter : IMultiValueConverter
+{
+    public static readonly MoveUserParameterConverter Instance = new();
+
+    public object? Convert(IList<object?> values, Type targetType, object? parameter, CultureInfo culture)
+    {
+        if (values.Count < 2) return null;
+
+        var participant = values[0] as VoiceParticipantViewModel;
+        var targetChannel = values[1] as VoiceChannelViewModel;
+
+        if (participant is null || targetChannel is null) return null;
+
+        return (participant, targetChannel);
+    }
+}

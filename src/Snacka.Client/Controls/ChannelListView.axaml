@@ -392,6 +392,28 @@
                                                             <ui:SymbolIcon Symbol="SpeakerMute" FontSize="12"/>
                                                         </MenuItem.Icon>
                                                     </MenuItem>
+                                                    <!-- Move to (admin only, not for current user) -->
+                                                    <MenuItem x:Name="MoveToMenuItem"
+                                                              Header="Move to..."
+                                                              ItemsSource="{Binding VoiceChannels, RelativeSource={RelativeSource AncestorType=controls:ChannelListView}}"
+                                                              Tag="{Binding}"
+                                                              SubmenuOpened="MoveToMenuItem_SubmenuOpened">
+                                                        <MenuItem.IsVisible>
+                                                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                                                <Binding Path="!IsCurrentUser"/>
+                                                                <Binding Path="CanManageVoice" RelativeSource="{RelativeSource AncestorType=controls:ChannelListView}"/>
+                                                            </MultiBinding>
+                                                        </MenuItem.IsVisible>
+                                                        <MenuItem.Icon>
+                                                            <ui:SymbolIcon Symbol="ChevronRight" FontSize="12"/>
+                                                        </MenuItem.Icon>
+                                                        <MenuItem.ItemContainerTheme>
+                                                            <ControlTheme TargetType="MenuItem" BasedOn="{StaticResource {x:Type MenuItem}}">
+                                                                <Setter Property="Header" Value="{Binding Name}"/>
+                                                                <Setter Property="Tag" Value="{Binding}"/>
+                                                            </ControlTheme>
+                                                        </MenuItem.ItemContainerTheme>
+                                                    </MenuItem>
                                                     <MenuItem Header="(You)" IsEnabled="False"
                                                               IsVisible="{Binding IsCurrentUser}"/>
                                                 </ContextMenu>
