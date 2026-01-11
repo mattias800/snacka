@@ -289,6 +289,23 @@ for (i, d) in devices.enumerated() {
         catch (Exception ex)
         {
             Console.WriteLine($"VideoDeviceService: Failed to start camera - {ex.Message}");
+            // Log inner exception for native library loading failures
+            if (ex.InnerException != null)
+            {
+                Console.WriteLine($"VideoDeviceService: Inner exception - {ex.InnerException.Message}");
+                if (ex.InnerException.InnerException != null)
+                {
+                    Console.WriteLine($"VideoDeviceService: Root cause - {ex.InnerException.InnerException.Message}");
+                }
+            }
+            // TypeInitializationException usually means native library failed to load
+            if (ex is TypeInitializationException)
+            {
+                Console.WriteLine("VideoDeviceService: This usually means OpenCV native libraries are not installed.");
+                Console.WriteLine("VideoDeviceService: On Linux, ensure opencv and libgdiplus are installed:");
+                Console.WriteLine("VideoDeviceService:   Ubuntu/Debian: sudo apt install libopencv-dev libgdiplus");
+                Console.WriteLine("VideoDeviceService:   Arch Linux: sudo pacman -S opencv libgdiplus");
+            }
             await StopTestAsync();
             throw;
         }
