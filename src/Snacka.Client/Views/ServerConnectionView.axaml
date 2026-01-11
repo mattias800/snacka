@@ -233,41 +233,61 @@
                             </ItemsControl.ItemsPanel>
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button Command="{Binding $parent[UserControl].DataContext.SelectServerCommand}"
-                                            CommandParameter="{Binding}"
-                                            Classes="btn-ghost"
-                                            Padding="16,12"
-                                            CornerRadius="14">
-                                        <StackPanel Orientation="Horizontal" Spacing="12">
-                                            <Border CornerRadius="10"
-                                                    Width="40"
-                                                    Height="40">
-                                                <Border.Background>
-                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                                                        <GradientStop Color="#a78bfa" Offset="0"/>
-                                                        <GradientStop Color="#7c3aed" Offset="1"/>
-                                                    </LinearGradientBrush>
-                                                </Border.Background>
-                                                <TextBlock Text="S"
-                                                           Foreground="White"
-                                                           FontSize="16"
-                                                           FontWeight="Bold"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-                                            <StackPanel VerticalAlignment="Center" Spacing="2">
-                                                <TextBlock Text="{Binding Name}"
-                                                           Foreground="#fafafa"
-                                                           FontSize="14"
-                                                           FontWeight="SemiBold"/>
-                                                <TextBlock Text="{Binding Url}"
-                                                           Foreground="#52525b"
-                                                           FontSize="11"
-                                                           MaxWidth="150"
-                                                           TextTrimming="CharacterEllipsis"/>
-                                            </StackPanel>
-                                        </StackPanel>
-                                    </Button>
+                                    <Border x:Name="ServerItemBorder" CornerRadius="14" Background="Transparent">
+                                        <Grid>
+                                            <Button Command="{Binding $parent[UserControl].DataContext.SelectServerCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    Classes="btn-ghost"
+                                                    Padding="16,12"
+                                                    CornerRadius="14">
+                                                <StackPanel Orientation="Horizontal" Spacing="12">
+                                                    <Border CornerRadius="10"
+                                                            Width="40"
+                                                            Height="40">
+                                                        <Border.Background>
+                                                            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                                <GradientStop Color="#a78bfa" Offset="0"/>
+                                                                <GradientStop Color="#7c3aed" Offset="1"/>
+                                                            </LinearGradientBrush>
+                                                        </Border.Background>
+                                                        <TextBlock Text="S"
+                                                                   Foreground="White"
+                                                                   FontSize="16"
+                                                                   FontWeight="Bold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+                                                    <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                        <TextBlock Text="{Binding Name}"
+                                                                   Foreground="#fafafa"
+                                                                   FontSize="14"
+                                                                   FontWeight="SemiBold"/>
+                                                        <TextBlock Text="{Binding Url}"
+                                                                   Foreground="#52525b"
+                                                                   FontSize="11"
+                                                                   MaxWidth="150"
+                                                                   TextTrimming="CharacterEllipsis"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </Button>
+                                            <!-- Delete button - shown on hover -->
+                                            <Button x:Name="DeleteButton"
+                                                    Command="{Binding $parent[UserControl].DataContext.RemoveServerCommand}"
+                                                    CommandParameter="{Binding}"
+                                                    HorizontalAlignment="Right"
+                                                    VerticalAlignment="Top"
+                                                    Margin="0,-6,-6,0"
+                                                    Width="20"
+                                                    Height="20"
+                                                    Padding="0"
+                                                    CornerRadius="10"
+                                                    Background="#3f3f46"
+                                                    IsVisible="{Binding #ServerItemBorder.IsPointerOver}"
+                                                    ToolTip.Tip="Remove from recent servers">
+                                                <ui:SymbolIcon Symbol="Dismiss" FontSize="10" Foreground="#a1a1aa"/>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
                         </ItemsControl>

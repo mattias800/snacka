@@ -1,3 +1,4 @@
+using System.Collections.ObjectModel;
 using System.Reactive;
 using System.Reactive.Linq;
 using Snacka.Client.Services;
@@ -31,7 +32,7 @@ public class ServerConnectionViewModel : ViewModelBase
         _onServerConnected = onServerConnected;
         _onExistingServerSelected = onExistingServerSelected;
 
-        SavedServers = _connectionStore.GetAll().ToList();
+        SavedServers = new ObservableCollection<ServerConnection>(_connectionStore.GetAll());
 
         var canConnect = this.WhenAnyValue(
             x => x.ServerUrl,
@@ -48,6 +49,7 @@ public class ServerConnectionViewModel : ViewModelBase
 
         ContinueCommand = ReactiveCommand.Create(Continue, canContinue);
         SelectServerCommand = ReactiveCommand.Create<ServerConnection>(SelectServer);
+        RemoveServerCommand = ReactiveCommand.Create<ServerConnection>(RemoveServer);
     }
 
     public string ServerUrl
@@ -97,11 +99,12 @@ public class ServerConnectionViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _isConnected, value);
     }
 
-    public List<ServerConnection> SavedServers { get; }
+    public ObservableCollection<ServerConnection> SavedServers { get; }
 
     public ReactiveCommand<Unit, Unit> ConnectCommand { get; }
     public ReactiveCommand<Unit, Unit> ContinueCommand { get; }
     public ReactiveCommand<ServerConnection, Unit> SelectServerCommand { get; }
+    public ReactiveCommand<ServerConnection, Unit> RemoveServerCommand { get; }
 
     private ServerInfoResponse? _serverInfo;
 
@@ -201,6 +204,12 @@ public class ServerConnectionViewModel : ViewModelBase
         {
             ServerUrl = server.Url;
         }
+    }
+
+    private void RemoveServer(ServerConnection server)
+    {
+        _connectionStore.Remove(server.Id);
+        SavedServers.Remove(server);
     }
 
     private static string GenerateServerId(string url)
