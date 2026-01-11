@@ -18,9 +18,11 @@ public interface ISignalRService : IAsyncDisposable
 {
     bool IsConnected { get; }
     ConnectionState State { get; }
+    int ReconnectSecondsRemaining { get; }
 
     // Connection state events
     event Action<ConnectionState>? ConnectionStateChanged;
+    event Action<int>? ReconnectCountdownChanged;
     Task ConnectAsync(string baseUrl, string accessToken);
     Task DisconnectAsync();
     Task JoinServerAsync(Guid serverId);
@@ -133,12 +135,46 @@ public interface ISignalRService : IAsyncDisposable
 public record TypingEvent(Guid ChannelId, Guid UserId, string Username);
 public record DMTypingEvent(Guid UserId, string Username);
 
+/// <summary>
+/// Custom retry policy that notifies when a retry is scheduled.
+/// </summary>
+public class CountdownRetryPolicy : IRetryPolicy
+{
+    private readonly TimeSpan[] _retryDelays = [
+        TimeSpan.Zero,
+        TimeSpan.FromSeconds(2),
+        TimeSpan.FromSeconds(10),
+        TimeSpan.FromSeconds(30)
+    ];
+
+    public event Action<TimeSpan>? RetryScheduled;
+
+    public TimeSpan? NextRetryDelay(RetryContext retryContext)
+    {
+        if (retryContext.PreviousRetryCount >= _retryDelays.Length)
+        {
+            // Keep retrying every 30 seconds
+            var delay = TimeSpan.FromSeconds(30);
+            RetryScheduled?.Invoke(delay);
+            return delay;
+        }
+
+        var nextDelay = _retryDelays[retryContext.PreviousRetryCount];
+        RetryScheduled?.Invoke(nextDelay);
+        return nextDelay;
+    }
+}
+
 public class SignalRService : ISignalRService
 {
     private HubConnection? _hubConnection;
     private ConnectionState _state = ConnectionState.Disconnected;
+    private int _reconnectSecondsRemaining;
+    private Timer? _countdownTimer;
+    private CountdownRetryPolicy? _retryPolicy;
 
     public bool IsConnected => _hubConnection?.State == HubConnectionState.Connected;
+    public int ReconnectSecondsRemaining => _reconnectSecondsRemaining;
 
     public ConnectionState State
     {
@@ -153,8 +189,9 @@ public class SignalRService : ISignalRService
         }
     }
 
-    // Connection state event
+    // Connection state events
     public event Action<ConnectionState>? ConnectionStateChanged;
+    public event Action<int>? ReconnectCountdownChanged;
 
     // Channel events
     public event Action<ChannelResponse>? ChannelCreated;
@@ -223,6 +260,37 @@ public class SignalRService : ISignalRService
     public event Action<CommunityInviteReceivedEvent>? CommunityInviteReceived;
     public event Action<CommunityInviteRespondedEvent>? CommunityInviteResponded;
 
+    private void OnRetryScheduled(TimeSpan delay)
+    {
+        _reconnectSecondsRemaining = (int)Math.Ceiling(delay.TotalSeconds);
+        ReconnectCountdownChanged?.Invoke(_reconnectSecondsRemaining);
+
+        // Start countdown timer
+        _countdownTimer?.Dispose();
+        _countdownTimer = new Timer(CountdownTick, null, TimeSpan.FromSeconds(1), TimeSpan.FromSeconds(1));
+    }
+
+    private void CountdownTick(object? state)
+    {
+        if (_reconnectSecondsRemaining > 0)
+        {
+            _reconnectSecondsRemaining--;
+            ReconnectCountdownChanged?.Invoke(_reconnectSecondsRemaining);
+        }
+        else
+        {
+            StopCountdown();
+        }
+    }
+
+    private void StopCountdown()
+    {
+        _countdownTimer?.Dispose();
+        _countdownTimer = null;
+        _reconnectSecondsRemaining = 0;
+        ReconnectCountdownChanged?.Invoke(0);
+    }
+
     public async Task ConnectAsync(string baseUrl, string accessToken)
     {
         if (_hubConnection is not null)
@@ -235,12 +303,16 @@ public class SignalRService : ISignalRService
 
         State = ConnectionState.Connecting;
 
+        // Create retry policy with countdown notifications
+        _retryPolicy = new CountdownRetryPolicy();
+        _retryPolicy.RetryScheduled += OnRetryScheduled;
+
         _hubConnection = new HubConnectionBuilder()
             .WithUrl(hubUrl, options =>
             {
                 options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
             })
-            .WithAutomaticReconnect()
+            .WithAutomaticReconnect(_retryPolicy)
             .Build();
 
         RegisterHandlers();
@@ -286,6 +358,14 @@ public class SignalRService : ISignalRService
 
     public async Task DisconnectAsync()
     {
+        StopCountdown();
+
+        if (_retryPolicy != null)
+        {
+            _retryPolicy.RetryScheduled -= OnRetryScheduled;
+            _retryPolicy = null;
+        }
+
         if (_hubConnection is not null)
         {
             await _hubConnection.DisposeAsync();
@@ -722,6 +802,7 @@ public class SignalRService : ISignalRService
 
         _hubConnection.Reconnected += connectionId =>
         {
+            StopCountdown();
             State = ConnectionState.Connected;
             Console.WriteLine($"SignalR: Reconnected with ID {connectionId}");
             return Task.CompletedTask;
@@ -729,6 +810,7 @@ public class SignalRService : ISignalRService
 
         _hubConnection.Closed += error =>
         {
+            StopCountdown();
             State = ConnectionState.Disconnected;
             Console.WriteLine($"SignalR: Connection closed. {error?.Message}");
             return Task.CompletedTask;

@@ -40,7 +40,7 @@
                 Padding="8,6"
                 IsVisible="{Binding IsReconnecting}">
             <StackPanel Orientation="Horizontal" HorizontalAlignment="Center" Spacing="8">
-                <TextBlock Text="Reconnecting..."
+                <TextBlock Text="{Binding ReconnectStatusText}"
                            Foreground="White"
                            FontWeight="SemiBold"
                            VerticalAlignment="Center"/>
@@ -523,7 +523,7 @@
 
         <!-- Audio Device Popup -->
         <Popup x:Name="AudioDevicePopup"
-               IsOpen="{Binding IsAudioDevicePopupOpen}"
+               IsOpen="{Binding IsAudioDevicePopupOpen, Mode=TwoWay}"
                IsLightDismissEnabled="True"
                Placement="Bottom"
                PlacementTarget="{Binding $parent[Grid]}">
@@ -538,7 +538,7 @@
         </Popup>
 
         <!-- Pinned Messages Popup -->
-        <Popup IsOpen="{Binding IsPinnedPopupOpen}"
+        <Popup IsOpen="{Binding IsPinnedPopupOpen, Mode=TwoWay}"
                IsLightDismissEnabled="True"
                Placement="Center"
                PlacementTarget="{Binding $parent[Grid]}">
@@ -549,7 +549,7 @@
 
         <!-- Invite User Popup -->
         <Popup x:Name="InviteUserPopup"
-               IsOpen="{Binding IsInviteUserPopupOpen}"
+               IsOpen="{Binding IsInviteUserPopupOpen, Mode=TwoWay}"
                IsLightDismissEnabled="True"
                Placement="Center"
                PlacementTarget="{Binding $parent[Grid]}">
@@ -568,7 +568,7 @@
 
         <!-- Pending Invites Popup -->
         <Popup x:Name="PendingInvitesPopup"
-               IsOpen="{Binding IsPendingInvitesPopupOpen}"
+               IsOpen="{Binding IsPendingInvitesPopupOpen, Mode=TwoWay}"
                IsLightDismissEnabled="True"
                Placement="Center"
                PlacementTarget="{Binding $parent[Grid]}">

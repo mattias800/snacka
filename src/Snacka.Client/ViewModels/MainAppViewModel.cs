@@ -146,6 +146,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     // Connection state
     private ConnectionState _connectionState = ConnectionState.Connected;
+    private int _reconnectSecondsRemaining;
 
     public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null, bool gifsEnabled = false)
     {
@@ -193,6 +194,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _signalR.ConnectionStateChanged += state =>
         {
             Dispatcher.UIThread.Post(() => ConnectionState = state);
+        };
+        _signalR.ReconnectCountdownChanged += seconds =>
+        {
+            Dispatcher.UIThread.Post(() =>
+            {
+                ReconnectSecondsRemaining = seconds;
+                this.RaisePropertyChanged(nameof(ReconnectStatusText));
+            });
         };
         ConnectionState = _signalR.State;
 
@@ -1208,6 +1217,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         ConnectionState.Disconnected => "Disconnected",
         _ => ""
     };
+
+    public int ReconnectSecondsRemaining
+    {
+        get => _reconnectSecondsRemaining;
+        set => this.RaiseAndSetIfChanged(ref _reconnectSecondsRemaining, value);
+    }
+
+    public string ReconnectStatusText => _reconnectSecondsRemaining > 0
+        ? $"Reconnecting in {_reconnectSecondsRemaining}s..."
+        : "Reconnecting...";
 
     public ChannelResponse? EditingChannel
     {
