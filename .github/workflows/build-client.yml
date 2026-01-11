@@ -91,6 +91,7 @@ jobs:
         run: |
           dotnet publish src/Snacka.Client -c Release -r osx-arm64 \
             --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
             -o publish
 
       - name: Copy native binaries
@@ -154,6 +155,7 @@ jobs:
         run: |
           dotnet publish src/Snacka.Client -c Release -r win-x64 `
             --self-contained `
+            -p:Version=${{ needs.version.outputs.version }} `
             -o publish
 
       - name: Copy SnackaCaptureWindows
@@ -223,6 +225,7 @@ jobs:
         run: |
           dotnet publish src/Snacka.Client -c Release -r linux-x64 \
             --self-contained \
+            -p:Version=${{ needs.version.outputs.version }} \
             -o publish
 
       - name: Upload portable build
