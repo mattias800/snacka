@@ -1147,6 +1147,13 @@ public class WebRtcService : IWebRtcService
                 // Microphone audio - always play (with per-user volume control)
                 Guid? userId = _audioSsrcToUserMap.TryGetValue(ssrc, out var uid) ? uid : null;
 
+                // Diagnostic logging for first few mic audio packets
+                _micAudioPacketCount++;
+                if (_micAudioPacketCount <= 5 || _micAudioPacketCount % 500 == 0)
+                {
+                    Console.WriteLine($"WebRTC: Mic audio packet #{_micAudioPacketCount}, PT={payloadType}, size={rtpPkt.Payload.Length}, ssrc={ssrc}, user={userId}");
+                }
+
                 _audioMixer.ProcessAudioPacket(
                     ssrc,
                     userId,
@@ -2633,6 +2640,7 @@ public class WebRtcService : IWebRtcService
 
     private int _sentCameraFrameCount;
     private int _sentScreenFrameCount;
+    private int _micAudioPacketCount;
 
     /// <summary>
     /// Handler for encoded camera video frames. Sends to camera video track.

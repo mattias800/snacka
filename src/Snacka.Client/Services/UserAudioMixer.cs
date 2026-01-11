@@ -142,14 +142,38 @@ public class UserAudioMixer : IUserAudioMixer
     private const int OpusMicPayloadType = 111;     // Microphone audio
     private const int OpusScreenPayloadType = 112;  // Screen share audio
 
+    private int _micAudioRecvCount;
+
     public void ProcessAudioPacket(uint ssrc, Guid? userId, ushort seqNum, uint timestamp,
                                    int payloadType, bool marker, byte[] payload)
     {
-        if (_audioOutput == null) return;
+        if (_audioOutput == null)
+        {
+            Console.WriteLine("UserAudioMixer: _audioOutput is NULL, cannot play audio!");
+            return;
+        }
 
         // Screen audio (PT 112) and mic audio (PT 111) both use Opus codec
         // Remap PT 112 to PT 111 so the audio sink can decode it
         var outputPayloadType = payloadType == OpusScreenPayloadType ? OpusMicPayloadType : payloadType;
+
+        // Diagnostic: Log first few mic audio packets and unexpected payload types
+        if (payloadType != OpusScreenPayloadType)
+        {
+            _micAudioRecvCount++;
+            if (_micAudioRecvCount <= 5)
+            {
+                Console.WriteLine($"UserAudioMixer: Mic audio #{_micAudioRecvCount}, PT={payloadType}, size={payload.Length}, currentFormat={_currentFormat?.FormatName ?? "none"}");
+            }
+            // Warn if payload type doesn't match expected format
+            if (payloadType != OpusMicPayloadType && payloadType != 0 && payloadType != 8)
+            {
+                if (_micAudioRecvCount <= 10)
+                {
+                    Console.WriteLine($"UserAudioMixer: WARNING - Unexpected payload type {payloadType} (expected 111=Opus, 0=PCMU, 8=PCMA)");
+                }
+            }
+        }
 
         // Screen audio uses a completely separate audio output with its own Opus decoder
         // This prevents decoder state corruption when mic and screen audio are interleaved
