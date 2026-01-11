@@ -7,13 +7,13 @@
              mc:Ignorable="d"
              x:Class="Snacka.Client.Controls.InviteUserContent"
              x:DataType="controls:InviteUserContent"
-             Width="400">
+             Width="420">
 
-    <Border Background="{StaticResource Content2Brush}"
-            CornerRadius="12"
-            Padding="16"
-            BoxShadow="0 8 32 0 #66000000">
-        <StackPanel Spacing="16">
+    <Border Background="#18181b"
+            CornerRadius="16"
+            Padding="24"
+            BoxShadow="0 25 50 -12 #40000000">
+        <StackPanel Spacing="20">
             <!-- Header -->
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -22,127 +22,175 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Spacing="4">
                     <TextBlock Text="Invite Users"
-                               Foreground="White"
-                               FontSize="18"
+                               Foreground="#fafafa"
+                               FontSize="20"
                                FontWeight="SemiBold"/>
                     <TextBlock Text="{Binding CommunityName, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}, StringFormat='Invite users to {0}'}"
-                               Classes="text-muted"
-                               FontSize="12"/>
+                               Foreground="#71717a"
+                               FontSize="13"/>
                 </StackPanel>
                 <Button Grid.Column="1"
-                        Classes="btn-icon"
                         Command="{Binding CloseCommand, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}}"
                         ToolTip.Tip="Close"
-                        Padding="4"
-                        MinWidth="24"
-                        MinHeight="24">
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="8"
+                        CornerRadius="8"
+                        VerticalAlignment="Top">
                     <ui:SymbolIcon Symbol="Dismiss"
-                               Foreground="{StaticResource Foreground3Brush}"
-                               FontSize="14"/>
+                               Foreground="#71717a"
+                               FontSize="16"/>
                 </Button>
             </Grid>
 
             <!-- Search Box -->
-            <Border Background="{StaticResource Content1Brush}"
-                    CornerRadius="8"
-                    Padding="12,8">
+            <Border Background="#27272a"
+                    CornerRadius="12"
+                    Padding="14,12">
                 <Grid ColumnDefinitions="Auto,*,Auto">
-                    <TextBlock Grid.Column="0"
-                               Text="&#x1F50D;"
-                               Foreground="{StaticResource Foreground3Brush}"
-                               FontSize="14"
+                    <ui:SymbolIcon Grid.Column="0"
+                               Symbol="Find"
+                               Foreground="#71717a"
+                               FontSize="16"
                                VerticalAlignment="Center"
-                               Margin="0,0,8,0"/>
+                               Margin="0,0,12,0"/>
                     <TextBox Grid.Column="1"
                              x:Name="SearchBox"
-                             Classes="input-borderless"
                              Watermark="Search by username..."
                              Text="{Binding SearchQuery, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}, Mode=TwoWay}"
                              KeyUp="OnSearchBoxKeyUp"
                              Background="Transparent"
                              BorderThickness="0"
-                             Padding="0"/>
+                             Foreground="#fafafa"
+                             FontSize="14"
+                             Padding="0,2"
+                             VerticalContentAlignment="Center"/>
                     <ui:ProgressRing Grid.Column="2"
-                                      Width="16"
-                                      Height="16"
+                                      Width="18"
+                                      Height="18"
                                       IsVisible="{Binding IsSearching, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}}"
                                       IsIndeterminate="True"
-                                      Foreground="{StaticResource PrimaryBrush}"/>
+                                      Foreground="#006FEE"
+                                      Margin="12,0,0,0"/>
                 </Grid>
             </Border>
 
             <!-- Search Results -->
-            <Border Background="{StaticResource Content1Brush}"
-                    CornerRadius="8"
-                    MinHeight="200"
-                    MaxHeight="300">
-                <ScrollViewer>
+            <Border Background="#27272a"
+                    CornerRadius="12"
+                    MinHeight="220"
+                    MaxHeight="320"
+                    ClipToBounds="True">
+                <ScrollViewer Padding="8">
                     <StackPanel>
                         <!-- Empty State: No search yet -->
-                        <TextBlock Text="Type a username to search"
-                                   Classes="text-muted"
-                                   FontSize="13"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,60,0,0">
-                            <TextBlock.IsVisible>
+                        <StackPanel HorizontalAlignment="Center"
+                                    Margin="0,70,0,0">
+                            <StackPanel.IsVisible>
                                 <MultiBinding Converter="{x:Static BoolConverters.And}">
                                     <Binding Path="SearchQuery" RelativeSource="{RelativeSource AncestorType=controls:InviteUserContent}" Converter="{x:Static StringConverters.IsNullOrEmpty}"/>
                                     <Binding Path="IsSearching" RelativeSource="{RelativeSource AncestorType=controls:InviteUserContent}" Converter="{x:Static BoolConverters.Not}"/>
                                 </MultiBinding>
-                            </TextBlock.IsVisible>
-                        </TextBlock>
+                            </StackPanel.IsVisible>
+                            <ui:SymbolIcon Symbol="People"
+                                       FontSize="32"
+                                       Foreground="#3f3f46"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12"/>
+                            <TextBlock Text="Search for users"
+                                       Foreground="#52525b"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="Type a username to find people to invite"
+                                       Foreground="#3f3f46"
+                                       FontSize="12"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
 
                         <!-- Empty State: No results -->
-                        <TextBlock Text="No users found"
-                                   Classes="text-muted"
-                                   FontSize="13"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,60,0,0">
-                            <TextBlock.IsVisible>
+                        <StackPanel HorizontalAlignment="Center"
+                                    Margin="0,70,0,0">
+                            <StackPanel.IsVisible>
                                 <MultiBinding Converter="{x:Static BoolConverters.And}">
                                     <Binding Path="SearchQuery" RelativeSource="{RelativeSource AncestorType=controls:InviteUserContent}" Converter="{x:Static StringConverters.IsNotNullOrEmpty}"/>
                                     <Binding Path="IsSearching" RelativeSource="{RelativeSource AncestorType=controls:InviteUserContent}" Converter="{x:Static BoolConverters.Not}"/>
                                     <Binding Path="HasNoResults" RelativeSource="{RelativeSource AncestorType=controls:InviteUserContent}"/>
                                 </MultiBinding>
-                            </TextBlock.IsVisible>
-                        </TextBlock>
+                            </StackPanel.IsVisible>
+                            <ui:SymbolIcon Symbol="Find"
+                                       FontSize="32"
+                                       Foreground="#3f3f46"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12"/>
+                            <TextBlock Text="No users found"
+                                       Foreground="#52525b"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="Try a different search term"
+                                       Foreground="#3f3f46"
+                                       FontSize="12"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
 
                         <!-- Results List -->
                         <ItemsControl ItemsSource="{Binding SearchResults, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate>
-                                    <Button Classes="btn-transparent"
-                                            HorizontalAlignment="Stretch"
+                                    <Button HorizontalAlignment="Stretch"
                                             HorizontalContentAlignment="Stretch"
-                                            Padding="12,8"
+                                            Background="Transparent"
+                                            BorderThickness="0"
+                                            Padding="12,10"
+                                            CornerRadius="10"
                                             Command="{Binding InviteUserCommand, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}}"
                                             CommandParameter="{Binding}">
                                         <Grid ColumnDefinitions="Auto,*,Auto">
-                                            <!-- Avatar placeholder -->
-                                            <Ellipse Grid.Column="0"
-                                                     Width="36"
-                                                     Height="36"
-                                                     Fill="{StaticResource Content3Brush}"
-                                                     Margin="0,0,12,0"/>
+                                            <!-- Avatar -->
+                                            <Border Grid.Column="0"
+                                                    Width="40"
+                                                    Height="40"
+                                                    CornerRadius="20"
+                                                    Margin="0,0,14,0">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                        <GradientStop Color="#a78bfa" Offset="0"/>
+                                                        <GradientStop Color="#7c3aed" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <TextBlock Text="{Binding Username, Converter={x:Static controls:FirstLetterConverter.Instance}}"
+                                                           Foreground="White"
+                                                           FontSize="14"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
 
                                             <!-- User info -->
                                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
                                                 <TextBlock Text="{Binding EffectiveDisplayName}"
-                                                           Foreground="White"
+                                                           Foreground="#fafafa"
                                                            FontSize="14"
                                                            FontWeight="SemiBold"/>
                                                 <TextBlock Text="{Binding Username, StringFormat='@{0}'}"
-                                                           Classes="text-muted"
+                                                           Foreground="#71717a"
                                                            FontSize="12"/>
                                             </StackPanel>
 
                                             <!-- Online indicator -->
-                                            <Ellipse Grid.Column="2"
-                                                     Width="10"
-                                                     Height="10"
-                                                     Fill="{StaticResource SuccessBrush}"
-                                                     VerticalAlignment="Center"
-                                                     IsVisible="{Binding IsOnline}"/>
+                                            <StackPanel Grid.Column="2"
+                                                        Orientation="Horizontal"
+                                                        Spacing="6"
+                                                        VerticalAlignment="Center"
+                                                        IsVisible="{Binding IsOnline}">
+                                                <Ellipse Width="8"
+                                                         Height="8"
+                                                         Fill="#22c55e"/>
+                                                <TextBlock Text="Online"
+                                                           Foreground="#22c55e"
+                                                           FontSize="11"/>
+                                            </StackPanel>
                                         </Grid>
                                     </Button>
                                 </DataTemplate>
@@ -153,18 +201,15 @@
             </Border>
 
             <!-- Status Message -->
-            <TextBlock Text="{Binding StatusMessage, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}}"
-                       FontSize="12"
-                       HorizontalAlignment="Center"
-                       IsVisible="{Binding StatusMessage, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
-                <TextBlock.Foreground>
-                    <Binding Path="IsStatusError" RelativeSource="{RelativeSource AncestorType=controls:InviteUserContent}">
-                        <Binding.Converter>
-                            <controls:BoolToStatusColorConverter/>
-                        </Binding.Converter>
-                    </Binding>
-                </TextBlock.Foreground>
-            </TextBlock>
+            <Border Background="{Binding IsStatusError, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}, Converter={x:Static controls:StatusBackgroundConverter.Instance}}"
+                    CornerRadius="10"
+                    Padding="14,10"
+                    IsVisible="{Binding StatusMessage, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                <TextBlock Text="{Binding StatusMessage, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}}"
+                           Foreground="{Binding IsStatusError, RelativeSource={RelativeSource AncestorType=controls:InviteUserContent}, Converter={x:Static controls:StatusForegroundConverter.Instance}}"
+                           FontSize="13"
+                           HorizontalAlignment="Center"/>
+            </Border>
         </StackPanel>
     </Border>
 </UserControl>

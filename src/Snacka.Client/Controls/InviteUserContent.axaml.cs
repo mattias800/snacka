@@ -146,3 +146,51 @@ public class BoolToStatusColorConverter : IValueConverter
         throw new NotImplementedException();
     }
 }
+
+/// <summary>
+/// Converter for status message background color
+/// </summary>
+public class StatusBackgroundConverter : IValueConverter
+{
+    public static readonly StatusBackgroundConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        if (value is bool isError)
+        {
+            return isError
+                ? new SolidColorBrush(Color.Parse("#1aef4444")) // Error background (red tint)
+                : new SolidColorBrush(Color.Parse("#1a22c55e")); // Success background (green tint)
+        }
+        return new SolidColorBrush(Colors.Transparent);
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}
+
+/// <summary>
+/// Converter for status message text color
+/// </summary>
+public class StatusForegroundConverter : IValueConverter
+{
+    public static readonly StatusForegroundConverter Instance = new();
+
+    public object? Convert(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        if (value is bool isError)
+        {
+            return isError
+                ? new SolidColorBrush(Color.Parse("#fca5a5")) // Error text (light red)
+                : new SolidColorBrush(Color.Parse("#86efac")); // Success text (light green)
+        }
+        return new SolidColorBrush(Color.Parse("#a1a1aa"));
+    }
+
+    public object? ConvertBack(object? value, Type targetType, object? parameter, System.Globalization.CultureInfo culture)
+    {
+        throw new NotImplementedException();
+    }
+}

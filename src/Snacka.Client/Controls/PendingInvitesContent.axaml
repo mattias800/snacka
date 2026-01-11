@@ -8,13 +8,13 @@
              mc:Ignorable="d"
              x:Class="Snacka.Client.Controls.PendingInvitesContent"
              x:DataType="controls:PendingInvitesContent"
-             Width="350">
+             Width="400">
 
-    <Border Background="{StaticResource Content2Brush}"
-            CornerRadius="12"
-            Padding="16"
-            BoxShadow="0 8 32 0 #66000000">
-        <StackPanel Spacing="16">
+    <Border Background="#18181b"
+            CornerRadius="16"
+            Padding="24"
+            BoxShadow="0 25 50 -12 #40000000">
+        <StackPanel Spacing="20">
             <!-- Header -->
             <Grid>
                 <Grid.ColumnDefinitions>
@@ -23,94 +23,152 @@
                 </Grid.ColumnDefinitions>
                 <StackPanel Grid.Column="0" Spacing="4">
                     <TextBlock Text="Community Invites"
-                               Foreground="White"
-                               FontSize="18"
+                               Foreground="#fafafa"
+                               FontSize="20"
                                FontWeight="SemiBold"/>
                     <TextBlock Text="You've been invited to join these communities"
-                               Classes="text-muted"
-                               FontSize="12"
+                               Foreground="#71717a"
+                               FontSize="13"
                                TextWrapping="Wrap"/>
                 </StackPanel>
                 <Button Grid.Column="1"
-                        Classes="btn-icon"
                         Command="{Binding CloseCommand, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"
                         ToolTip.Tip="Close"
-                        Padding="4"
-                        MinWidth="24"
-                        MinHeight="24"
+                        Background="Transparent"
+                        BorderThickness="0"
+                        Padding="8"
+                        CornerRadius="8"
                         VerticalAlignment="Top">
                     <ui:SymbolIcon Symbol="Dismiss"
-                               Foreground="{StaticResource Foreground3Brush}"
-                               FontSize="14"/>
+                               Foreground="#71717a"
+                               FontSize="16"/>
                 </Button>
             </Grid>
 
             <!-- Invites List -->
-            <Border Background="{StaticResource Content1Brush}"
-                    CornerRadius="8"
-                    MinHeight="100"
-                    MaxHeight="350">
-                <ScrollViewer>
+            <Border Background="#27272a"
+                    CornerRadius="12"
+                    MinHeight="120"
+                    MaxHeight="380"
+                    ClipToBounds="True">
+                <ScrollViewer Padding="8">
                     <StackPanel>
                         <!-- Empty State -->
-                        <TextBlock Text="No pending invites"
-                                   Classes="text-muted"
-                                   FontSize="13"
-                                   HorizontalAlignment="Center"
-                                   Margin="0,40,0,0"
-                                   IsVisible="{Binding HasNoPendingInvites, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"/>
+                        <StackPanel HorizontalAlignment="Center"
+                                    Margin="0,40,0,40"
+                                    IsVisible="{Binding HasNoPendingInvites, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}">
+                            <ui:SymbolIcon Symbol="Mail"
+                                       FontSize="32"
+                                       Foreground="#3f3f46"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,0,0,12"/>
+                            <TextBlock Text="No pending invites"
+                                       Foreground="#52525b"
+                                       FontSize="14"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="Invitations will appear here"
+                                       Foreground="#3f3f46"
+                                       FontSize="12"
+                                       HorizontalAlignment="Center"
+                                       Margin="0,4,0,0"/>
+                        </StackPanel>
 
                         <!-- Loading State -->
                         <StackPanel Orientation="Horizontal"
                                     HorizontalAlignment="Center"
-                                    Spacing="8"
-                                    Margin="0,40,0,0"
+                                    Spacing="10"
+                                    Margin="0,50,0,50"
                                     IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}">
-                            <ui:ProgressRing Width="16" Height="16" IsIndeterminate="True" Foreground="{StaticResource PrimaryBrush}"/>
-                            <TextBlock Text="Loading invites..." Classes="text-muted" FontSize="13"/>
+                            <ui:ProgressRing Width="20" Height="20" IsIndeterminate="True" Foreground="#006FEE"/>
+                            <TextBlock Text="Loading invites..."
+                                       Foreground="#71717a"
+                                       FontSize="14"
+                                       VerticalAlignment="Center"/>
                         </StackPanel>
 
                         <!-- Invites List -->
                         <ItemsControl ItemsSource="{Binding PendingInvites, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}">
                             <ItemsControl.ItemTemplate>
                                 <DataTemplate x:DataType="services:CommunityInviteResponse">
-                                    <Border Padding="12" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Content2Brush}">
-                                        <Grid RowDefinitions="Auto,Auto,Auto">
+                                    <Border Background="#1a27272a"
+                                            CornerRadius="10"
+                                            Padding="14"
+                                            Margin="0,0,0,8">
+                                        <StackPanel Spacing="14">
                                             <!-- Community Name and Icon -->
-                                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12">
-                                                <Border Width="40" Height="40" CornerRadius="8" Background="{StaticResource PrimaryGradient}">
+                                            <StackPanel Orientation="Horizontal" Spacing="14">
+                                                <Border Width="48" Height="48" CornerRadius="12">
+                                                    <Border.Background>
+                                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                            <GradientStop Color="#338ef7" Offset="0"/>
+                                                            <GradientStop Color="#006FEE" Offset="1"/>
+                                                        </LinearGradientBrush>
+                                                    </Border.Background>
                                                     <TextBlock Text="{Binding CommunityName, Converter={x:Static controls:FirstLetterConverter.Instance}}"
                                                                Foreground="White"
-                                                               FontSize="16"
-                                                               FontWeight="SemiBold"
+                                                               FontSize="18"
+                                                               FontWeight="Bold"
                                                                HorizontalAlignment="Center"
                                                                VerticalAlignment="Center"/>
                                                 </Border>
-                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <StackPanel VerticalAlignment="Center" Spacing="4">
                                                     <TextBlock Text="{Binding CommunityName}"
-                                                               Foreground="White"
-                                                               FontSize="14"
+                                                               Foreground="#fafafa"
+                                                               FontSize="15"
                                                                FontWeight="SemiBold"/>
-                                                    <TextBlock Text="{Binding InvitedByEffectiveDisplayName, StringFormat='Invited by {0}'}"
-                                                               Classes="text-muted"
-                                                               FontSize="12"/>
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <ui:SymbolIcon Symbol="Contact"
+                                                                   FontSize="12"
+                                                                   Foreground="#71717a"
+                                                                   VerticalAlignment="Center"/>
+                                                        <TextBlock Text="{Binding InvitedByEffectiveDisplayName, StringFormat='Invited by {0}'}"
+                                                                   Foreground="#71717a"
+                                                                   FontSize="12"
+                                                                   VerticalAlignment="Center"/>
+                                                    </StackPanel>
                                                 </StackPanel>
                                             </StackPanel>
 
                                             <!-- Actions -->
-                                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0" HorizontalAlignment="Right">
-                                                <Button Classes="btn-secondary"
+                                            <Grid ColumnDefinitions="*,*" Margin="0,2,0,0">
+                                                <Button Grid.Column="0"
                                                         Content="Decline"
-                                                        Padding="12,6"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Center"
+                                                        Background="#27272a"
+                                                        Foreground="#a1a1aa"
+                                                        BorderThickness="0"
+                                                        Padding="14,10"
+                                                        CornerRadius="10"
+                                                        FontWeight="SemiBold"
+                                                        FontSize="13"
+                                                        Margin="0,0,4,0"
                                                         Command="{Binding DeclineInviteCommand, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"
                                                         CommandParameter="{Binding}"/>
-                                                <Button Classes="btn-primary"
+                                                <Button Grid.Column="1"
                                                         Content="Accept"
-                                                        Padding="12,6"
+                                                        HorizontalAlignment="Stretch"
+                                                        HorizontalContentAlignment="Center"
+                                                        BorderThickness="0"
+                                                        Padding="14,10"
+                                                        CornerRadius="10"
+                                                        FontWeight="SemiBold"
+                                                        FontSize="13"
+                                                        Margin="4,0,0,0"
                                                         Command="{Binding AcceptInviteCommand, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"
-                                                        CommandParameter="{Binding}"/>
-                                            </StackPanel>
-                                        </Grid>
+                                                        CommandParameter="{Binding}">
+                                                    <Button.Background>
+                                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                            <GradientStop Color="#22c55e" Offset="0"/>
+                                                            <GradientStop Color="#16a34a" Offset="1"/>
+                                                        </LinearGradientBrush>
+                                                    </Button.Background>
+                                                    <Button.Foreground>
+                                                        <SolidColorBrush Color="White"/>
+                                                    </Button.Foreground>
+                                                </Button>
+                                            </Grid>
+                                        </StackPanel>
                                     </Border>
                                 </DataTemplate>
                             </ItemsControl.ItemTemplate>
