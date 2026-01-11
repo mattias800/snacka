@@ -5,6 +5,7 @@
         x:Class="Snacka.Client.Views.MainWindow"
         x:DataType="vm:MainWindowViewModel"
         Title="Snacka"
+        Icon="/Assets/snacka-icon.png"
         Width="1200"
         Height="800"
         MinWidth="800"
