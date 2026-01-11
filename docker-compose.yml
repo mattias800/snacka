@@ -1,37 +1,37 @@
 version: '3.8'
 
 services:
-  miscord-server:
+  snacka-server:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: miscord-server
+    container_name: snacka-server
     ports:
       - "5117:5117"
     environment:
       # Database - set to false to use PostgreSQL
       - UseSqlite=${USE_SQLITE:-true}
       # PostgreSQL connection (used when UseSqlite=false)
-      - ConnectionStrings__DefaultConnection=Host=postgres;Database=miscord;Username=miscord;Password=${POSTGRES_PASSWORD:-miscord}
+      - ConnectionStrings__DefaultConnection=Host=postgres;Database=snacka;Username=snacka;Password=${POSTGRES_PASSWORD:-snacka}
       # JWT Configuration - CHANGE THIS IN PRODUCTION!
       - Jwt__SecretKey=${JWT_SECRET_KEY:-ChangeThisToASecureSecretKeyAtLeast32CharactersLong!}
-      - Jwt__Issuer=Miscord
-      - Jwt__Audience=Miscord
+      - Jwt__Issuer=Snacka
+      - Jwt__Audience=Snacka
       - Jwt__AccessTokenExpirationMinutes=60
       - Jwt__RefreshTokenExpirationDays=7
       # Server Info
-      - ServerInfo__Name=${SERVER_NAME:-Miscord Server}
+      - ServerInfo__Name=${SERVER_NAME:-Snacka Server}
       - ServerInfo__Description=${SERVER_DESCRIPTION:-A self-hosted Discord alternative}
       - ServerInfo__AllowRegistration=${ALLOW_REGISTRATION:-true}
       # Tenor GIF API (optional - enables GIF picker)
       - Tenor__ApiKey=${TENOR_API_KEY:-}
-      - Tenor__ClientKey=miscord
+      - Tenor__ClientKey=snacka
       # Logging
       - Logging__LogLevel__Default=Information
       - Logging__LogLevel__Microsoft.AspNetCore=Warning
     volumes:
       # Persist SQLite database (when using SQLite)
-      - miscord-data:/app/data
+      - snacka-data:/app/data
     depends_on:
       postgres:
         condition: service_healthy
@@ -47,16 +47,16 @@ services:
   # PostgreSQL database (optional - enable by setting USE_SQLITE=false)
   postgres:
     image: postgres:16-alpine
-    container_name: miscord-postgres
+    container_name: snacka-postgres
     environment:
-      - POSTGRES_USER=miscord
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-miscord}
-      - POSTGRES_DB=miscord
+      - POSTGRES_USER=snacka
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD:-snacka}
+      - POSTGRES_DB=snacka
     volumes:
       - postgres-data:/var/lib/postgresql/data
     restart: unless-stopped
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U miscord -d miscord"]
+      test: ["CMD-SHELL", "pg_isready -U snacka -d snacka"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -65,7 +65,7 @@ services:
       - postgres
 
 volumes:
-  miscord-data:
+  snacka-data:
     driver: local
   postgres-data:
     driver: local

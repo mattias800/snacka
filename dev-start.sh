@@ -10,9 +10,9 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 SERVER_URL="http://localhost:5117"
-CLIENT_PROJECT="src/Miscord.Client/Miscord.Client.csproj"
-SERVER_PROJECT="src/Miscord.Server/Miscord.Server.csproj"
-DB_FILE="src/Miscord.Server/miscord.db"
+CLIENT_PROJECT="src/Snacka.Client/Snacka.Client.csproj"
+SERVER_PROJECT="src/Snacka.Server/Snacka.Server.csproj"
+DB_FILE="src/Snacka.Server/snacka.db"
 
 # Test accounts (will be auto-registered if they don't exist)
 USER1_EMAIL="alice@test.com"
@@ -20,12 +20,12 @@ USER1_PASSWORD="password123"
 USER2_EMAIL="bob@test.com"
 USER2_PASSWORD="password123"
 
-echo "=== Miscord Development Startup ==="
+echo "=== Snacka Development Startup ==="
 echo ""
 
-# Kill any existing Miscord processes
-echo "Stopping any existing Miscord processes..."
-pkill -f "dotnet.*Miscord" 2>/dev/null
+# Kill any existing Snacka processes
+echo "Stopping any existing Snacka processes..."
+pkill -f "dotnet.*Snacka" 2>/dev/null
 sleep 1
 
 # Build projects first
@@ -77,7 +77,7 @@ dotnet run --project "$CLIENT_PROJECT" --no-build -- \
     --server "$SERVER_URL" \
     --email "$USER1_EMAIL" \
     --password "$USER1_PASSWORD" \
-    --title "Miscord - Alice" \
+    --title "Snacka - Alice" \
     --profile alice &
 CLIENT1_PID=$!
 echo "Client 1 PID: $CLIENT1_PID"
@@ -90,7 +90,7 @@ dotnet run --project "$CLIENT_PROJECT" --no-build -- \
     --server "$SERVER_URL" \
     --email "$USER2_EMAIL" \
     --password "$USER2_PASSWORD" \
-    --title "Miscord - Bob" \
+    --title "Snacka - Bob" \
     --profile bob &
 CLIENT2_PID=$!
 echo "Client 2 PID: $CLIENT2_PID"

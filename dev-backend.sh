@@ -4,14 +4,14 @@
 # Usage: ./dev-backend.sh
 
 SERVER_URL="http://localhost:5117"
-SERVER_PROJECT="src/Miscord.Server/Miscord.Server.csproj"
+SERVER_PROJECT="src/Snacka.Server/Snacka.Server.csproj"
 
-echo "=== Miscord Backend Startup ==="
+echo "=== Snacka Backend Startup ==="
 echo ""
 
-# Kill any existing Miscord server processes
-echo "Stopping any existing Miscord server processes..."
-pkill -f "dotnet.*Miscord.Server" 2>/dev/null
+# Kill any existing Snacka server processes
+echo "Stopping any existing Snacka server processes..."
+pkill -f "dotnet.*Snacka.Server" 2>/dev/null
 sleep 1
 
 # Build server

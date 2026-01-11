@@ -547,7 +547,7 @@ VoiceParticipants
 ## Repository Structure
 
 ```
-miscord-csharp/
+snacka/
 ├── src/
 │   ├── Snacka.Server/
 │   │   ├── Controllers/          (REST endpoints)

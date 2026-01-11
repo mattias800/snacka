@@ -21,7 +21,7 @@ function App() {
   const [step, setStep] = useState<Step>('loading')
   const [serverInfo, setServerInfo] = useState<ServerInfo | null>(null)
   const [setupData, setSetupData] = useState<SetupData>({
-    serverName: 'My Miscord Server',
+    serverName: 'My Snacka Server',
     adminUsername: '',
     adminEmail: '',
     adminPassword: '',
@@ -125,7 +125,7 @@ function App() {
             <div className="icon success-icon">✓</div>
             <h1>Server Already Set Up</h1>
             <p className="description">
-              This server has already been configured. Use the Miscord desktop app to connect.
+              This server has already been configured. Use the Snacka desktop app to connect.
             </p>
             <a href="/" className="button secondary">Go to Home</a>
           </div>
@@ -139,7 +139,7 @@ function App() {
                 <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 15l-5-5 1.41-1.41L10 14.17l7.59-7.59L19 8l-9 9z"/>
               </svg>
             </div>
-            <h1>Welcome to Miscord</h1>
+            <h1>Welcome to Snacka</h1>
             <p className="description">
               Let's set up your server. This will only take a minute.
             </p>
@@ -163,7 +163,7 @@ function App() {
                 type="text"
                 value={setupData.serverName}
                 onChange={(e) => setSetupData({ ...setupData, serverName: e.target.value })}
-                placeholder="My Miscord Server"
+                placeholder="My Snacka Server"
               />
             </div>
             <div className="button-group">
@@ -254,7 +254,7 @@ function App() {
             <div className="icon success-icon">✓</div>
             <h1>Setup Complete!</h1>
             <p className="description">
-              Your server is ready. You can now connect using the Miscord desktop app.
+              Your server is ready. You can now connect using the Snacka desktop app.
             </p>
             <div className="info-box">
               <p><strong>Server:</strong> {setupData.serverName}</p>

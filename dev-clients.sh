@@ -11,7 +11,7 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 SERVER_URL="http://localhost:5117"
-CLIENT_PROJECT="src/Miscord.Client/Miscord.Client.csproj"
+CLIENT_PROJECT="src/Snacka.Client/Snacka.Client.csproj"
 
 # Test accounts (will be auto-registered if they don't exist)
 USER1_EMAIL="alice@test.com"
@@ -19,12 +19,12 @@ USER1_PASSWORD="password123"
 USER2_EMAIL="bob@test.com"
 USER2_PASSWORD="password123"
 
-echo "=== Miscord Clients Startup ==="
+echo "=== Snacka Clients Startup ==="
 echo ""
 
-# Kill any existing Miscord client processes
-echo "Stopping any existing Miscord client processes..."
-pkill -f "dotnet.*Miscord.Client" 2>/dev/null
+# Kill any existing Snacka client processes
+echo "Stopping any existing Snacka client processes..."
+pkill -f "dotnet.*Snacka.Client" 2>/dev/null
 sleep 1
 
 # Check if server is running
@@ -54,7 +54,7 @@ dotnet run --project "$CLIENT_PROJECT" --no-build -- \
     --server "$SERVER_URL" \
     --email "$USER1_EMAIL" \
     --password "$USER1_PASSWORD" \
-    --title "Miscord - Alice" \
+    --title "Snacka - Alice" \
     --profile alice &
 CLIENT1_PID=$!
 echo "Client 1 PID: $CLIENT1_PID"
@@ -67,7 +67,7 @@ dotnet run --project "$CLIENT_PROJECT" --no-build -- \
     --server "$SERVER_URL" \
     --email "$USER2_EMAIL" \
     --password "$USER2_PASSWORD" \
-    --title "Miscord - Bob" \
+    --title "Snacka - Bob" \
     --profile bob &
 CLIENT2_PID=$!
 echo "Client 2 PID: $CLIENT2_PID"

@@ -1,5 +1,5 @@
 #!/bin/bash
-# Launcher script for Miscord Client with VLC support on macOS
+# Launcher script for Snacka Client with VLC support on macOS
 
 # Set VLC environment variables before starting .NET
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -8,4 +8,4 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 # Run the client with any passed arguments
-dotnet run --project src/Miscord.Client/Miscord.Client.csproj -- "$@"
+dotnet run --project src/Snacka.Client/Snacka.Client.csproj -- "$@"

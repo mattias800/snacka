@@ -1,69 +1,351 @@
 <Styles xmlns="https://github.com/avaloniaui"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
 
+    <!-- =====================================================
+         BUTTON STYLES - Modern 2025 Design System
+         ===================================================== -->
+
+    <!-- Primary Button - Main CTA style -->
+    <Style Selector="Button.btn-primary">
+        <Setter Property="Background" Value="#5865f2"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="16,10"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.btn-primary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#4752c4"/>
+    </Style>
+    <Style Selector="Button.btn-primary:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="#3c45a5"/>
+    </Style>
+    <Style Selector="Button.btn-primary:disabled /template/ ContentPresenter">
+        <Setter Property="Background" Value="#4752c4"/>
+        <Setter Property="Opacity" Value="0.5"/>
+    </Style>
+
+    <!-- Secondary Button - Less prominent actions -->
+    <Style Selector="Button.btn-secondary">
+        <Setter Property="Background" Value="#4e5058"/>
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="16,10"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.btn-secondary:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#5d6067"/>
+    </Style>
+    <Style Selector="Button.btn-secondary:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="#6d6f78"/>
+    </Style>
+
+    <!-- Ghost Button - Minimal style for icons/subtle actions -->
+    <Style Selector="Button.btn-ghost">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="#b5bac1"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.btn-ghost:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#383a40"/>
+    </Style>
+    <Style Selector="Button.btn-ghost:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="#4e5058"/>
+    </Style>
+
+    <!-- Danger Button - Destructive actions -->
+    <Style Selector="Button.btn-danger">
+        <Setter Property="Background" Value="#da373c"/>
+        <Setter Property="Foreground" Value="White"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="16,10"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Button.btn-danger:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#a12828"/>
+    </Style>
+    <Style Selector="Button.btn-danger:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="#8b2222"/>
+    </Style>
+
+    <!-- Icon Button - For icon-only buttons -->
+    <Style Selector="Button.btn-icon">
+        <Setter Property="Background" Value="Transparent"/>
+        <Setter Property="Foreground" Value="#80848e"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Cursor" Value="Hand"/>
+        <Setter Property="MinWidth" Value="32"/>
+        <Setter Property="MinHeight" Value="32"/>
+    </Style>
+    <Style Selector="Button.btn-icon:pointerover /template/ ContentPresenter">
+        <Setter Property="Background" Value="#383a40"/>
+    </Style>
+    <Style Selector="Button.btn-icon:pointerover">
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+    </Style>
+    <Style Selector="Button.btn-icon:pressed /template/ ContentPresenter">
+        <Setter Property="Background" Value="#4e5058"/>
+    </Style>
+
+    <!-- =====================================================
+         CARD STYLES
+         ===================================================== -->
+
+    <!-- Card - Basic card container -->
+    <Style Selector="Border.card">
+        <Setter Property="Background" Value="#2b2d31"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="BorderBrush" Value="#3f4147"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="16"/>
+    </Style>
+
+    <!-- Card Elevated - Card with shadow -->
+    <Style Selector="Border.card-elevated">
+        <Setter Property="Background" Value="#2b2d31"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="BoxShadow" Value="0 4 12 0 #66000000"/>
+        <Setter Property="Padding" Value="16"/>
+    </Style>
+
+    <!-- Card Interactive - Hoverable card -->
+    <Style Selector="Border.card-interactive">
+        <Setter Property="Background" Value="#2b2d31"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="BorderBrush" Value="#3f4147"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="Padding" Value="16"/>
+        <Setter Property="Cursor" Value="Hand"/>
+    </Style>
+    <Style Selector="Border.card-interactive:pointerover">
+        <Setter Property="Background" Value="#313338"/>
+        <Setter Property="BorderBrush" Value="#4e5058"/>
+    </Style>
+
+    <!-- =====================================================
+         TYPOGRAPHY STYLES
+         ===================================================== -->
+
+    <!-- Heading 1 -->
+    <Style Selector="TextBlock.heading-1">
+        <Setter Property="FontSize" Value="24"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+    </Style>
+
+    <!-- Heading 2 -->
+    <Style Selector="TextBlock.heading-2">
+        <Setter Property="FontSize" Value="20"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+    </Style>
+
+    <!-- Heading 3 -->
+    <Style Selector="TextBlock.heading-3">
+        <Setter Property="FontSize" Value="16"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+    </Style>
+
+    <!-- Body Text -->
+    <Style Selector="TextBlock.text-body">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+    </Style>
+
+    <!-- Secondary Text -->
+    <Style Selector="TextBlock.text-secondary">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="#b5bac1"/>
+    </Style>
+
+    <!-- Muted Text -->
+    <Style Selector="TextBlock.text-muted">
+        <Setter Property="FontSize" Value="14"/>
+        <Setter Property="Foreground" Value="#80848e"/>
+    </Style>
+
+    <!-- Small Text -->
+    <Style Selector="TextBlock.text-small">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="#b5bac1"/>
+    </Style>
+
+    <!-- Caption/Label Text -->
+    <Style Selector="TextBlock.text-caption">
+        <Setter Property="FontSize" Value="11"/>
+        <Setter Property="FontWeight" Value="Medium"/>
+        <Setter Property="Foreground" Value="#80848e"/>
+    </Style>
+
+    <!-- =====================================================
+         INPUT STYLES
+         ===================================================== -->
+
+    <!-- Default Input Style -->
+    <Style Selector="TextBox.input-default">
+        <Setter Property="Background" Value="#1e1f22"/>
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+        <Setter Property="BorderBrush" Value="#3f4147"/>
+        <Setter Property="BorderThickness" Value="1"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="12,10"/>
+    </Style>
+
+    <!-- Chat Input - Larger padding for message input -->
+    <Style Selector="TextBox.input-chat">
+        <Setter Property="Background" Value="#383a40"/>
+        <Setter Property="Foreground" Value="#f2f3f5"/>
+        <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="8"/>
+        <Setter Property="Padding" Value="16,12"/>
+    </Style>
+
+    <!-- =====================================================
+         BADGE/TAG STYLES
+         ===================================================== -->
+
+    <Style Selector="Border.badge">
+        <Setter Property="Background" Value="#5865f2"/>
+        <Setter Property="CornerRadius" Value="12"/>
+        <Setter Property="Padding" Value="8,4"/>
+    </Style>
+    <Style Selector="Border.badge TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="FontWeight" Value="SemiBold"/>
+        <Setter Property="Foreground" Value="White"/>
+    </Style>
+
+    <Style Selector="Border.tag">
+        <Setter Property="Background" Value="#383a40"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="8,4"/>
+    </Style>
+    <Style Selector="Border.tag TextBlock">
+        <Setter Property="FontSize" Value="12"/>
+        <Setter Property="Foreground" Value="#b5bac1"/>
+    </Style>
+
+    <!-- =====================================================
+         EXISTING COMPONENT STYLES (Updated)
+         ===================================================== -->
+
     <!-- Voice channel item style with hover/press highlights -->
     <Style Selector="Border.voice-channel-item">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="CornerRadius" Value="6"/>
     </Style>
     <Style Selector="Border.voice-channel-item:pointerover">
-        <Setter Property="Background" Value="#35373c"/>
+        <Setter Property="Background" Value="#383a40"/>
     </Style>
     <Style Selector="Border.voice-channel-item:pressed">
-        <Setter Property="Background" Value="#3f4248"/>
+        <Setter Property="Background" Value="#4e5058"/>
     </Style>
 
     <!-- Text channel button style -->
     <Style Selector="Button.channel-btn">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
+        <Setter Property="CornerRadius" Value="6"/>
     </Style>
     <Style Selector="Button.channel-btn:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="#35373c"/>
+        <Setter Property="Background" Value="#383a40"/>
     </Style>
     <Style Selector="Button.channel-btn:pressed /template/ ContentPresenter">
-        <Setter Property="Background" Value="#3f4248"/>
+        <Setter Property="Background" Value="#4e5058"/>
     </Style>
 
     <!-- Member list item style with hover/press highlights -->
     <Style Selector="Border.member-item">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="CornerRadius" Value="6"/>
     </Style>
     <Style Selector="Border.member-item:pointerover">
-        <Setter Property="Background" Value="#35373c"/>
+        <Setter Property="Background" Value="#383a40"/>
     </Style>
     <Style Selector="Border.member-item:pressed">
-        <Setter Property="Background" Value="#3f4248"/>
+        <Setter Property="Background" Value="#4e5058"/>
     </Style>
 
     <!-- Voice participant item style with hover/press highlights -->
     <Style Selector="Border.voice-participant">
         <Setter Property="Background" Value="Transparent"/>
-        <Setter Property="CornerRadius" Value="4"/>
-        <Setter Property="Padding" Value="4"/>
+        <Setter Property="CornerRadius" Value="6"/>
+        <Setter Property="Padding" Value="8"/>
         <Setter Property="Cursor" Value="Hand"/>
     </Style>
     <Style Selector="Border.voice-participant:pointerover">
-        <Setter Property="Background" Value="#35373c"/>
+        <Setter Property="Background" Value="#383a40"/>
     </Style>
     <Style Selector="Border.voice-participant:pressed">
-        <Setter Property="Background" Value="#3f4248"/>
+        <Setter Property="Background" Value="#4e5058"/>
     </Style>
 
     <!-- Message action button style (reply, react, edit, delete) -->
     <Style Selector="Button.msg-action-btn">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="BorderThickness" Value="0"/>
-        <Setter Property="Padding" Value="6"/>
-        <Setter Property="CornerRadius" Value="4"/>
+        <Setter Property="Padding" Value="8"/>
+        <Setter Property="CornerRadius" Value="6"/>
         <Setter Property="Cursor" Value="Hand"/>
     </Style>
     <Style Selector="Button.msg-action-btn:pointerover /template/ ContentPresenter">
-        <Setter Property="Background" Value="#40444b"/>
+        <Setter Property="Background" Value="#383a40"/>
     </Style>
     <Style Selector="Button.msg-action-btn:pressed /template/ ContentPresenter">
-        <Setter Property="Background" Value="#4f545c"/>
+        <Setter Property="Background" Value="#4e5058"/>
+    </Style>
+
+    <!-- =====================================================
+         PANEL STYLES
+         ===================================================== -->
+
+    <!-- Sidebar Panel -->
+    <Style Selector="Border.panel-sidebar">
+        <Setter Property="Background" Value="#2b2d31"/>
+    </Style>
+
+    <!-- Main Content Panel -->
+    <Style Selector="Border.panel-main">
+        <Setter Property="Background" Value="#313338"/>
+    </Style>
+
+    <!-- Header Bar -->
+    <Style Selector="Border.panel-header">
+        <Setter Property="Background" Value="#313338"/>
+        <Setter Property="BorderBrush" Value="#232428"/>
+        <Setter Property="BorderThickness" Value="0,0,0,1"/>
+        <Setter Property="Padding" Value="16,12"/>
+    </Style>
+
+    <!-- Footer Bar / Input Area -->
+    <Style Selector="Border.panel-footer">
+        <Setter Property="Background" Value="#313338"/>
+        <Setter Property="Padding" Value="16"/>
+    </Style>
+
+    <!-- =====================================================
+         DIVIDER STYLES
+         ===================================================== -->
+
+    <Style Selector="Border.divider-horizontal">
+        <Setter Property="Height" Value="1"/>
+        <Setter Property="Background" Value="#3f4147"/>
+    </Style>
+
+    <Style Selector="Border.divider-vertical">
+        <Setter Property="Width" Value="1"/>
+        <Setter Property="Background" Value="#3f4147"/>
     </Style>
 
 </Styles>

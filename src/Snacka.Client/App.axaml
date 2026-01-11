@@ -3,19 +3,80 @@
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     x:Class="Snacka.Client.App"
     RequestedThemeVariant="Dark">
+
+    <Application.Resources>
+        <!-- Color Palette - Modern 2025 Design System -->
+
+        <!-- Primary Colors -->
+        <SolidColorBrush x:Key="PrimaryBrush" Color="#5865f2"/>
+        <SolidColorBrush x:Key="PrimaryHoverBrush" Color="#4752c4"/>
+        <SolidColorBrush x:Key="PrimaryPressedBrush" Color="#3c45a5"/>
+
+        <!-- Surface Colors (Backgrounds) -->
+        <SolidColorBrush x:Key="Surface1Brush" Color="#1e1f22"/>
+        <SolidColorBrush x:Key="Surface2Brush" Color="#2b2d31"/>
+        <SolidColorBrush x:Key="Surface3Brush" Color="#313338"/>
+        <SolidColorBrush x:Key="SurfaceOverlayBrush" Color="#383a40"/>
+
+        <!-- Text Colors -->
+        <SolidColorBrush x:Key="TextPrimaryBrush" Color="#f2f3f5"/>
+        <SolidColorBrush x:Key="TextSecondaryBrush" Color="#b5bac1"/>
+        <SolidColorBrush x:Key="TextMutedBrush" Color="#80848e"/>
+
+        <!-- Border Colors -->
+        <SolidColorBrush x:Key="BorderSubtleBrush" Color="#3f4147"/>
+        <SolidColorBrush x:Key="BorderDefaultBrush" Color="#4e5058"/>
+
+        <!-- Semantic Colors -->
+        <SolidColorBrush x:Key="SuccessBrush" Color="#23a559"/>
+        <SolidColorBrush x:Key="WarningBrush" Color="#f0b232"/>
+        <SolidColorBrush x:Key="DangerBrush" Color="#da373c"/>
+        <SolidColorBrush x:Key="DangerHoverBrush" Color="#a12828"/>
+
+        <!-- Border Radius Scale -->
+        <CornerRadius x:Key="RadiusSm">6</CornerRadius>
+        <CornerRadius x:Key="RadiusMd">8</CornerRadius>
+        <CornerRadius x:Key="RadiusLg">12</CornerRadius>
+        <CornerRadius x:Key="RadiusXl">16</CornerRadius>
+
+        <!-- Shadows -->
+        <BoxShadows x:Key="Elevation1">0 1 2 0 #4D000000</BoxShadows>
+        <BoxShadows x:Key="Elevation2">0 4 12 0 #66000000</BoxShadows>
+        <BoxShadows x:Key="Elevation3">0 8 24 0 #80000000</BoxShadows>
+    </Application.Resources>
+
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Snacka.Client/Styles/ComponentStyles.axaml"/>
+
+        <!-- Global TextBox Styles -->
         <Style Selector="TextBox">
             <Setter Property="CaretBrush" Value="White"/>
             <Setter Property="SelectionBrush" Value="#5865f2"/>
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+            <Setter Property="Background" Value="{StaticResource Surface1Brush}"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderSubtleBrush}"/>
+            <Setter Property="Foreground" Value="{StaticResource TextPrimaryBrush}"/>
         </Style>
         <Style Selector="TextBox:focus /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="#202225"/>
-            <Setter Property="BorderBrush" Value="#5865f2"/>
+            <Setter Property="Background" Value="#1a1b1e"/>
+            <Setter Property="BorderBrush" Value="{StaticResource PrimaryBrush}"/>
+            <Setter Property="BorderThickness" Value="2"/>
         </Style>
         <Style Selector="TextBox:pointerover /template/ Border#PART_BorderElement">
-            <Setter Property="Background" Value="#2a2d31"/>
+            <Setter Property="Background" Value="#232428"/>
+            <Setter Property="BorderBrush" Value="{StaticResource BorderDefaultBrush}"/>
+        </Style>
+
+        <!-- Global Button Base Styles -->
+        <Style Selector="Button">
+            <Setter Property="CornerRadius" Value="{StaticResource RadiusMd}"/>
+            <Setter Property="Padding" Value="12,8"/>
+            <Setter Property="Transitions">
+                <Transitions>
+                    <BrushTransition Property="Background" Duration="0:0:0.15"/>
+                </Transitions>
+            </Setter>
         </Style>
     </Application.Styles>
 </Application>

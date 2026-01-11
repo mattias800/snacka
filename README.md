@@ -29,7 +29,7 @@ A self-hosted Discord alternative built with C# and .NET. Snacka allows users to
 ## Project Structure
 
 ```
-miscord-csharp/
+snacka/
 ├── src/
 │   ├── Snacka.Server/          # ASP.NET Core server application
 │   ├── Snacka.Client/          # Avalonia UI desktop client (Windows, macOS, Linux)

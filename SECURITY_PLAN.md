@@ -7,7 +7,7 @@ Security review findings and remediation checklist.
 ## Critical Severity (Fix Immediately)
 
 ### 1. Hardcoded JWT Secret Key
-**File:** `src/Miscord.Server/appsettings.json:18`
+**File:** `src/Snacka.Server/appsettings.json:18`
 
 **Issue:** JWT secret key is hardcoded in configuration with a development key.
 
@@ -29,7 +29,7 @@ var jwtSecret = builder.Configuration["Jwt:SecretKey"]
 ---
 
 ### 2. Unrestricted CORS Configuration
-**File:** `src/Miscord.Server/Program.cs:118-124`
+**File:** `src/Snacka.Server/Program.cs:118-124`
 
 **Issue:** CORS allows requests from ANY origin with ANY method.
 
@@ -58,7 +58,7 @@ policy.WithOrigins(allowedOrigins)
 ---
 
 ### 3. Unauthenticated File Downloads
-**File:** `src/Miscord.Server/Controllers/AttachmentsController.cs:220-227`
+**File:** `src/Snacka.Server/Controllers/AttachmentsController.cs:220-227`
 
 **Issue:** No `[Authorize]` attribute on file download endpoint.
 
@@ -102,7 +102,7 @@ public async Task<IActionResult> GetFile(string storedFileName, CancellationToke
 ---
 
 ### 4. Missing Authorization on SignalR Hub Methods
-**File:** `src/Miscord.Server/Hubs/MiscordHub.cs`
+**File:** `src/Snacka.Server/Hubs/SnackaHub.cs`
 
 **Issue:** Multiple hub methods lack authorization checks:
 
@@ -140,7 +140,7 @@ public async Task SendAnnotation(AnnotationMessage message)
 ---
 
 ### 5. DM Deletion Broadcasts to All Users
-**File:** `src/Miscord.Server/Controllers/DirectMessagesController.cs:72-75`
+**File:** `src/Snacka.Server/Controllers/DirectMessagesController.cs:72-75`
 
 **Issue:** Direct message deletion broadcasts to ALL connected users.
 
@@ -163,7 +163,7 @@ await _hubContext.Clients.Users(senderId.ToString(), recipientId.ToString())
 ## High Severity (Fix This Week)
 
 ### 6. No Rate Limiting on Authentication
-**File:** `src/Miscord.Server/Controllers/AuthController.cs:14-31`
+**File:** `src/Snacka.Server/Controllers/AuthController.cs:14-31`
 
 **Issue:** No rate limiting on login, register, or refresh token endpoints.
 
@@ -191,7 +191,7 @@ builder.Services.AddInMemoryRateLimiting();
 ---
 
 ### 7. SSRF Vulnerability in Link Preview
-**File:** `src/Miscord.Server/Services/LinkPreviewService.cs:44-52`
+**File:** `src/Snacka.Server/Services/LinkPreviewService.cs:44-52`
 
 **Issue:** No protection against Server-Side Request Forgery attacks.
 
@@ -233,7 +233,7 @@ private bool IsBlockedHost(Uri uri)
 ---
 
 ### 8. Unrestricted WebRTC Initiation
-**File:** `src/Miscord.Server/Hubs/MiscordHub.cs:755-774`
+**File:** `src/Snacka.Server/Hubs/SnackaHub.cs:755-774`
 
 **Issue:** Users can force WebRTC connections with any online user.
 
@@ -273,7 +273,7 @@ public async Task SendWebRtcOffer(Guid targetUserId, string sdp)
 ---
 
 ### 9. No Password Complexity Requirements
-**File:** `src/Miscord.Server/DTOs/AuthDtos.cs:6-7`
+**File:** `src/Snacka.Server/DTOs/AuthDtos.cs:6-7`
 
 **Issue:** Only enforces minimum length (8 chars), no complexity requirements.
 
@@ -301,7 +301,7 @@ private void ValidatePassword(string password)
 ---
 
 ### 10. No Message Content Validation
-**File:** `src/Miscord.Server/Services/MessageService.cs:52`
+**File:** `src/Snacka.Server/Services/MessageService.cs:52`
 
 **Issue:** No length limits or format validation on message content.
 
@@ -327,7 +327,7 @@ public async Task<MessageResponse> SendMessageAsync(...)
 ---
 
 ### 11. Weak Token Refresh Logic
-**File:** `src/Miscord.Server/Services/AuthService.cs:113-127`
+**File:** `src/Snacka.Server/Services/AuthService.cs:113-127`
 
 **Issue:** `ValidateLifetime = false` when validating tokens for refresh.
 
@@ -343,7 +343,7 @@ public async Task<MessageResponse> SendMessageAsync(...)
 ## Medium Severity (Fix This Month)
 
 ### 12. User Enumeration via GetOnlineUsers
-**File:** `src/Miscord.Server/Hubs/MiscordHub.cs:206-216`
+**File:** `src/Snacka.Server/Hubs/SnackaHub.cs:206-216`
 
 **Issue:** Returns ALL online users globally, not scoped to user's communities.
 
@@ -376,7 +376,7 @@ public async Task<IEnumerable<UserPresence>> GetOnlineUsers()
 ---
 
 ### 13. Missing HSTS and Security Headers
-**File:** `src/Miscord.Server/Program.cs`
+**File:** `src/Snacka.Server/Program.cs`
 
 **Issue:** Missing HSTS, CSP, X-Frame-Options, X-Content-Type-Options headers.
 
@@ -412,7 +412,7 @@ app.Use(async (context, next) =>
 ---
 
 ### 14. Missing Input Validation on Nicknames
-**File:** `src/Miscord.Server/Services/CommunityMemberService.cs:171-177`
+**File:** `src/Snacka.Server/Services/CommunityMemberService.cs:171-177`
 
 **Issue:** No length validation on nicknames.
 
@@ -427,7 +427,7 @@ if (!string.IsNullOrWhiteSpace(nickname) && nickname.Length > 32)
 ---
 
 ### 15. Inconsistent Admin Authorization Error Handling
-**File:** `src/Miscord.Server/Hubs/MiscordHub.cs:639-656`
+**File:** `src/Snacka.Server/Hubs/SnackaHub.cs:639-656`
 
 **Issue:** Some methods throw exceptions, others return silently on auth failure.
 
@@ -474,7 +474,7 @@ public async Task<ActionResult<UserProfileResponse>> UpdateProfile(...)
 ---
 
 ### 18. Development Secrets in Version Control
-**File:** `src/Miscord.Server/appsettings.json`
+**File:** `src/Snacka.Server/appsettings.json`
 
 **Issue:** Development secrets committed to repository.
 

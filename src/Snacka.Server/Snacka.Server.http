@@ -1,6 +1,6 @@
-@Miscord.Server_HostAddress = http://localhost:5117
+@Snacka.Server_HostAddress = http://localhost:5117
 
-GET {{Miscord.Server_HostAddress}}/weatherforecast/
+GET {{Snacka.Server_HostAddress}}/weatherforecast/
 Accept: application/json
 
 ###

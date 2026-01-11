@@ -42,8 +42,8 @@ The native library must export these functions (matching macOS pattern):
 ```c
 // SnackaLinuxRenderer.h
 
-#ifndef MISCORD_LINUX_RENDERER_H
-#define MISCORD_LINUX_RENDERER_H
+#ifndef SNACKA_LINUX_RENDERER_H
+#define SNACKA_LINUX_RENDERER_H
 
 #include <stdint.h>
 #include <stdbool.h>
@@ -104,7 +104,7 @@ bool va_decoder_is_available(void);
 }
 #endif
 
-#endif // MISCORD_LINUX_RENDERER_H
+#endif // SNACKA_LINUX_RENDERER_H
 ```
 
 ## Native Implementation Details

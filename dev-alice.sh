@@ -11,13 +11,13 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
 fi
 
 SERVER_URL="http://localhost:5117"
-CLIENT_PROJECT="src/Miscord.Client/Miscord.Client.csproj"
+CLIENT_PROJECT="src/Snacka.Client/Snacka.Client.csproj"
 
 # Test account (will be auto-registered if it doesn't exist)
 EMAIL="alice@test.com"
 PASSWORD="password123"
 
-echo "=== Miscord Alice Client Startup ==="
+echo "=== Snacka Alice Client Startup ==="
 echo ""
 
 # Check if server is running
@@ -47,5 +47,5 @@ dotnet run --project "$CLIENT_PROJECT" --no-build -- \
     --server "$SERVER_URL" \
     --email "$EMAIL" \
     --password "$PASSWORD" \
-    --title "Miscord - Alice" \
+    --title "Snacka - Alice" \
     --profile alice
