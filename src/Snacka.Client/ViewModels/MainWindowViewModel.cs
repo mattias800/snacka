@@ -1,3 +1,4 @@
+using System.Reactive;
 using Avalonia.Platform.Storage;
 using Snacka.Client.Services;
 using ReactiveUI;
@@ -15,15 +16,18 @@ public class MainWindowViewModel : ViewModelBase
     private readonly Services.IVideoDeviceService _videoDeviceService;
     private readonly Services.IScreenCaptureService _screenCaptureService;
     private readonly Services.IControllerService _controllerService;
+    private readonly Services.IUpdateService _updateService;
     private ViewModelBase _currentView;
     private AuthResponse? _currentUser;
     private ServerConnection? _currentServer;
     private ServerInfoResponse? _currentServerInfo;
+    private UpdateInfo? _updateInfo;
+    private bool _showUpdateBanner;
 
     // File picker provider (set from View)
     public Func<Task<IStorageFile?>>? ImageFilePickerProvider { get; set; }
 
-    public MainWindowViewModel(IApiClient apiClient, IServerConnectionStore connectionStore, ISignalRService signalR, IWebRtcService webRtc, Services.ISettingsStore settingsStore, Services.IAudioDeviceService audioDeviceService, Services.IVideoDeviceService videoDeviceService, Services.IScreenCaptureService screenCaptureService, Services.IControllerService controllerService, DevLoginConfig? devConfig = null)
+    public MainWindowViewModel(IApiClient apiClient, IServerConnectionStore connectionStore, ISignalRService signalR, IWebRtcService webRtc, Services.ISettingsStore settingsStore, Services.IAudioDeviceService audioDeviceService, Services.IVideoDeviceService videoDeviceService, Services.IScreenCaptureService screenCaptureService, Services.IControllerService controllerService, Services.IUpdateService? updateService = null, DevLoginConfig? devConfig = null)
     {
         _apiClient = apiClient;
         _connectionStore = connectionStore;
@@ -34,6 +38,23 @@ public class MainWindowViewModel : ViewModelBase
         _videoDeviceService = videoDeviceService;
         _screenCaptureService = screenCaptureService;
         _controllerService = controllerService;
+        _updateService = updateService ?? new Services.UpdateService();
+
+        // Initialize update commands
+        OpenUpdatePage = ReactiveCommand.Create(() =>
+        {
+            if (UpdateInfo != null)
+            {
+                _updateService.OpenReleasePage(UpdateInfo.ReleaseUrl);
+            }
+        });
+        DismissUpdateBanner = ReactiveCommand.Create(() =>
+        {
+            ShowUpdateBanner = false;
+        });
+
+        // Check for updates on startup
+        _ = CheckForUpdatesAsync();
 
         // Dev mode: auto-login with provided credentials
         if (devConfig is not null)
@@ -242,6 +263,34 @@ public class MainWindowViewModel : ViewModelBase
     }
 
     public bool IsLoggedIn => CurrentUser is not null;
+
+    // Update-related properties
+    public UpdateInfo? UpdateInfo
+    {
+        get => _updateInfo;
+        set => this.RaiseAndSetIfChanged(ref _updateInfo, value);
+    }
+
+    public bool ShowUpdateBanner
+    {
+        get => _showUpdateBanner;
+        set => this.RaiseAndSetIfChanged(ref _showUpdateBanner, value);
+    }
+
+    public string CurrentVersion => _updateService.CurrentVersion.ToString();
+
+    public ReactiveCommand<Unit, Unit> OpenUpdatePage { get; }
+    public ReactiveCommand<Unit, Unit> DismissUpdateBanner { get; }
+
+    private async Task CheckForUpdatesAsync()
+    {
+        var update = await _updateService.CheckForUpdateAsync();
+        if (update != null)
+        {
+            UpdateInfo = update;
+            ShowUpdateBanner = true;
+        }
+    }
 
     private ServerConnectionViewModel CreateServerConnectionViewModel()
     {

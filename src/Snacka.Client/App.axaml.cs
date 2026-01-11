@@ -45,7 +45,7 @@ public partial class App : Application
                 );
             }
 
-            var viewModel = new MainWindowViewModel(apiClient, connectionStore, signalR, webRtc, settingsStore, audioDeviceService, videoDeviceService, screenCaptureService, controllerService, devConfig);
+            var viewModel = new MainWindowViewModel(apiClient, connectionStore, signalR, webRtc, settingsStore, audioDeviceService, videoDeviceService, screenCaptureService, controllerService, devConfig: devConfig);
 
             var window = new MainWindow
             {
