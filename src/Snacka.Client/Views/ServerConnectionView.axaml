@@ -59,21 +59,9 @@
                     <StackPanel Spacing="24">
                         <!-- Logo/Brand area -->
                         <StackPanel HorizontalAlignment="Center" Spacing="16">
-                            <Border Width="72" Height="72"
-                                    CornerRadius="20"
-                                    HorizontalAlignment="Center">
-                                <Border.Background>
-                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
-                                        <GradientStop Color="#338ef7" Offset="0"/>
-                                        <GradientStop Color="#006FEE" Offset="1"/>
-                                    </LinearGradientBrush>
-                                </Border.Background>
-                                <ui:SymbolIcon Symbol="Globe"
-                                           Foreground="White"
-                                           FontSize="32"
-                                           HorizontalAlignment="Center"
-                                           VerticalAlignment="Center"/>
-                            </Border>
+                            <Image Source="/Assets/snacka-icon.png"
+                                   Width="72" Height="72"
+                                   HorizontalAlignment="Center"/>
 
                             <StackPanel Spacing="8">
                                 <TextBlock Text="Welcome to Snacka"
