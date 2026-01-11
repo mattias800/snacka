@@ -48,9 +48,9 @@ jobs:
           fi
 
   # ============================================
-  # macOS Builds
+  # macOS Build (Apple Silicon)
   # ============================================
-  build-macos-arm64:
+  build-macos:
     needs: version
     runs-on: macos-14
     steps:
@@ -102,88 +102,20 @@ jobs:
         run: |
           ./installers/macos/create-dmg.sh \
             ./output/Snacka.app \
-            ./output/Snacka-${{ needs.version.outputs.version }}-macOS-arm64.dmg \
+            ./output/Snacka-${{ needs.version.outputs.version }}-macOS.dmg \
             "Snacka"
 
       - name: Upload app bundle
         uses: actions/upload-artifact@v4
         with:
-          name: Snacka-macOS-arm64-app
+          name: Snacka-macOS-app
           path: output/Snacka.app
 
       - name: Upload DMG
         if: needs.version.outputs.is_release == 'true' || github.event.inputs.create_release == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Snacka-macOS-arm64-dmg
-          path: output/*.dmg
-
-  build-macos-x64:
-    needs: version
-    runs-on: macos-13
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Setup .NET
-        uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: ${{ env.DOTNET_VERSION }}
-
-      - name: Install Homebrew dependencies
-        run: |
-          brew install ffmpeg@6 libvpx
-          echo "$(brew --prefix ffmpeg@6)/lib" >> $GITHUB_PATH
-
-      - name: Build SnackaCapture
-        run: |
-          cd src/SnackaCapture
-          swift build -c release
-
-      - name: Build SnackaMetalRenderer
-        run: |
-          cd src/SnackaMetalRenderer
-          swift build -c release
-
-      - name: Publish Snacka.Client
-        run: |
-          dotnet publish src/Snacka.Client -c Release -r osx-x64 \
-            --self-contained \
-            -p:Version=${{ needs.version.outputs.version }} \
-            -o publish
-
-      - name: Copy native binaries
-        run: |
-          cp src/SnackaCapture/.build/x86_64-apple-macosx/release/SnackaCapture publish/
-          cp src/SnackaMetalRenderer/.build/x86_64-apple-macosx/release/libSnackaMetalRenderer.dylib publish/
-
-      - name: Create .app bundle
-        run: |
-          chmod +x installers/macos/*.sh
-          ./installers/macos/create-app-bundle.sh \
-            ./publish \
-            ./output \
-            ${{ needs.version.outputs.version }} \
-            x64
-
-      - name: Create DMG
-        if: needs.version.outputs.is_release == 'true' || github.event.inputs.create_release == 'true'
-        run: |
-          ./installers/macos/create-dmg.sh \
-            ./output/Snacka.app \
-            ./output/Snacka-${{ needs.version.outputs.version }}-macOS-x64.dmg \
-            "Snacka"
-
-      - name: Upload app bundle
-        uses: actions/upload-artifact@v4
-        with:
-          name: Snacka-macOS-x64-app
-          path: output/Snacka.app
-
-      - name: Upload DMG
-        if: needs.version.outputs.is_release == 'true' || github.event.inputs.create_release == 'true'
-        uses: actions/upload-artifact@v4
-        with:
-          name: Snacka-macOS-x64-dmg
+          name: Snacka-macOS-dmg
           path: output/*.dmg
 
   # ============================================
@@ -296,7 +228,7 @@ jobs:
   # ============================================
   release:
     if: startsWith(github.ref, 'refs/tags/v') || github.event.inputs.create_release == 'true'
-    needs: [version, build-macos-arm64, build-macos-x64, build-windows, build-linux]
+    needs: [version, build-macos, build-windows, build-linux]
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -312,9 +244,8 @@ jobs:
         run: |
           mkdir -p release-assets
 
-          # macOS DMGs
-          cp artifacts/Snacka-macOS-arm64-dmg/*.dmg release-assets/ 2>/dev/null || true
-          cp artifacts/Snacka-macOS-x64-dmg/*.dmg release-assets/ 2>/dev/null || true
+          # macOS DMG
+          cp artifacts/Snacka-macOS-dmg/*.dmg release-assets/ 2>/dev/null || true
 
           # Windows installer
           cp artifacts/Snacka-Windows-x64-installer/*.exe release-assets/ 2>/dev/null || true
@@ -330,11 +261,8 @@ jobs:
           if [ -d "Snacka-Linux-x64-portable" ]; then
             tar -czvf ../release-assets/Snacka-${{ needs.version.outputs.version }}-Linux-x64-portable.tar.gz Snacka-Linux-x64-portable
           fi
-          if [ -d "Snacka-macOS-arm64-app" ]; then
-            zip -r ../release-assets/Snacka-${{ needs.version.outputs.version }}-macOS-arm64-app.zip Snacka-macOS-arm64-app
-          fi
-          if [ -d "Snacka-macOS-x64-app" ]; then
-            zip -r ../release-assets/Snacka-${{ needs.version.outputs.version }}-macOS-x64-app.zip Snacka-macOS-x64-app
+          if [ -d "Snacka-macOS-app" ]; then
+            zip -r ../release-assets/Snacka-${{ needs.version.outputs.version }}-macOS-app.zip Snacka-macOS-app
           fi
 
           cd ..
@@ -350,14 +278,13 @@ jobs:
 
           | Platform | Installer | Portable |
           |----------|-----------|----------|
-          | **macOS (Apple Silicon)** | [DMG](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS-arm64.dmg) | [App Bundle](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS-arm64-app.zip) |
-          | **macOS (Intel)** | [DMG](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS-x64.dmg) | [App Bundle](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS-x64-app.zip) |
+          | **macOS** | [DMG](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS.dmg) | [App Bundle](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS-app.zip) |
           | **Windows** | [Installer](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-x64-Setup.exe) | [Portable ZIP](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-Windows-x64-portable.zip) |
           | **Linux** | [AppImage](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-x86_64.AppImage) | [Portable tar.gz](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-Linux-x64-portable.tar.gz) |
 
           ### Requirements
 
-          - **macOS**: macOS 11.0 (Big Sur) or later. [VLC](https://www.videolan.org/vlc/) recommended for audio playback.
+          - **macOS**: macOS 11.0 (Big Sur) or later, Apple Silicon. [VLC](https://www.videolan.org/vlc/) recommended for audio playback.
           - **Windows**: Windows 10 or later. [VLC](https://www.videolan.org/vlc/) recommended for audio playback.
           - **Linux**: Most modern distributions. Requires: `ffmpeg`, `vlc`, `libvlc-dev`
 
