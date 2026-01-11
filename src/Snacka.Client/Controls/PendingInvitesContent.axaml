@@ -1,0 +1,123 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Snacka.Client.Controls"
+             xmlns:services="using:Snacka.Client.Services"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.Controls.PendingInvitesContent"
+             x:DataType="controls:PendingInvitesContent"
+             Width="350">
+
+    <Border Background="{StaticResource Content2Brush}"
+            CornerRadius="12"
+            Padding="16"
+            BoxShadow="0 8 32 0 #66000000">
+        <StackPanel Spacing="16">
+            <!-- Header -->
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
+                <StackPanel Grid.Column="0" Spacing="4">
+                    <TextBlock Text="Community Invites"
+                               Foreground="White"
+                               FontSize="18"
+                               FontWeight="SemiBold"/>
+                    <TextBlock Text="You've been invited to join these communities"
+                               Classes="text-muted"
+                               FontSize="12"
+                               TextWrapping="Wrap"/>
+                </StackPanel>
+                <Button Grid.Column="1"
+                        Classes="btn-icon"
+                        Command="{Binding CloseCommand, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"
+                        ToolTip.Tip="Close"
+                        Padding="4"
+                        MinWidth="24"
+                        MinHeight="24"
+                        VerticalAlignment="Top">
+                    <ui:SymbolIcon Symbol="Dismiss"
+                               Foreground="{StaticResource Foreground3Brush}"
+                               FontSize="14"/>
+                </Button>
+            </Grid>
+
+            <!-- Invites List -->
+            <Border Background="{StaticResource Content1Brush}"
+                    CornerRadius="8"
+                    MinHeight="100"
+                    MaxHeight="350">
+                <ScrollViewer>
+                    <StackPanel>
+                        <!-- Empty State -->
+                        <TextBlock Text="No pending invites"
+                                   Classes="text-muted"
+                                   FontSize="13"
+                                   HorizontalAlignment="Center"
+                                   Margin="0,40,0,0"
+                                   IsVisible="{Binding HasNoPendingInvites, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"/>
+
+                        <!-- Loading State -->
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    Spacing="8"
+                                    Margin="0,40,0,0"
+                                    IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}">
+                            <ui:ProgressRing Width="16" Height="16" IsIndeterminate="True" Foreground="{StaticResource PrimaryBrush}"/>
+                            <TextBlock Text="Loading invites..." Classes="text-muted" FontSize="13"/>
+                        </StackPanel>
+
+                        <!-- Invites List -->
+                        <ItemsControl ItemsSource="{Binding PendingInvites, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:CommunityInviteResponse">
+                                    <Border Padding="12" BorderThickness="0,0,0,1" BorderBrush="{StaticResource Content2Brush}">
+                                        <Grid RowDefinitions="Auto,Auto,Auto">
+                                            <!-- Community Name and Icon -->
+                                            <StackPanel Grid.Row="0" Orientation="Horizontal" Spacing="12">
+                                                <Border Width="40" Height="40" CornerRadius="8" Background="{StaticResource PrimaryGradient}">
+                                                    <TextBlock Text="{Binding CommunityName, Converter={x:Static controls:FirstLetterConverter.Instance}}"
+                                                               Foreground="White"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                                <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                    <TextBlock Text="{Binding CommunityName}"
+                                                               Foreground="White"
+                                                               FontSize="14"
+                                                               FontWeight="SemiBold"/>
+                                                    <TextBlock Text="{Binding InvitedByEffectiveDisplayName, StringFormat='Invited by {0}'}"
+                                                               Classes="text-muted"
+                                                               FontSize="12"/>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Actions -->
+                                            <StackPanel Grid.Row="2" Orientation="Horizontal" Spacing="8" Margin="0,12,0,0" HorizontalAlignment="Right">
+                                                <Button Classes="btn-secondary"
+                                                        Content="Decline"
+                                                        Padding="12,6"
+                                                        Command="{Binding DeclineInviteCommand, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"
+                                                        CommandParameter="{Binding}"/>
+                                                <Button Classes="btn-primary"
+                                                        Content="Accept"
+                                                        Padding="12,6"
+                                                        Command="{Binding AcceptInviteCommand, RelativeSource={RelativeSource AncestorType=controls:PendingInvitesContent}}"
+                                                        CommandParameter="{Binding}"/>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </ScrollViewer>
+            </Border>
+        </StackPanel>
+    </Border>
+</UserControl>

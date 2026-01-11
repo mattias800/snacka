@@ -565,6 +565,44 @@ public class ApiClient : IApiClient
         return await GetAsync<GifSearchResponse>(url);
     }
 
+    // Community Invite methods
+    public async Task<ApiResult<List<UserSearchResult>>> SearchUsersToInviteAsync(Guid communityId, string query)
+    {
+        return await GetAsync<List<UserSearchResult>>($"/api/communities/{communityId}/users/search?q={Uri.EscapeDataString(query)}");
+    }
+
+    public async Task<ApiResult<CommunityInviteResponse>> CreateCommunityInviteAsync(Guid communityId, Guid userId)
+    {
+        return await PostAsync<CreateCommunityInviteRequest, CommunityInviteResponse>(
+            $"/api/communities/{communityId}/invites",
+            new CreateCommunityInviteRequest(userId));
+    }
+
+    public async Task<ApiResult<List<CommunityInviteResponse>>> GetCommunityInvitesAsync(Guid communityId)
+    {
+        return await GetAsync<List<CommunityInviteResponse>>($"/api/communities/{communityId}/invites");
+    }
+
+    public async Task<ApiResult<bool>> CancelCommunityInviteAsync(Guid communityId, Guid inviteId)
+    {
+        return await DeleteAsync($"/api/communities/{communityId}/invites/{inviteId}");
+    }
+
+    public async Task<ApiResult<List<CommunityInviteResponse>>> GetMyPendingInvitesAsync()
+    {
+        return await GetAsync<List<CommunityInviteResponse>>("/api/invites");
+    }
+
+    public async Task<ApiResult<CommunityInviteResponse>> AcceptInviteAsync(Guid inviteId)
+    {
+        return await PostAsync<object, CommunityInviteResponse>($"/api/invites/{inviteId}/accept", new { });
+    }
+
+    public async Task<ApiResult<CommunityInviteResponse>> DeclineInviteAsync(Guid inviteId)
+    {
+        return await PostAsync<object, CommunityInviteResponse>($"/api/invites/{inviteId}/decline", new { });
+    }
+
     // Generic HTTP helpers
     private async Task<ApiResult<T>> GetAsync<T>(string path)
     {

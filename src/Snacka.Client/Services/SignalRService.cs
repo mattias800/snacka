@@ -123,6 +123,10 @@ public interface ISignalRService : IAsyncDisposable
     // Thread events
     event Action<ThreadReplyEvent>? ThreadReplyReceived;
     event Action<ThreadMetadataUpdatedEvent>? ThreadMetadataUpdated;
+
+    // Community invite events
+    event Action<CommunityInviteReceivedEvent>? CommunityInviteReceived;
+    event Action<CommunityInviteRespondedEvent>? CommunityInviteResponded;
 }
 
 // Typing indicator event DTOs
@@ -214,6 +218,10 @@ public class SignalRService : ISignalRService
     // Thread events
     public event Action<ThreadReplyEvent>? ThreadReplyReceived;
     public event Action<ThreadMetadataUpdatedEvent>? ThreadMetadataUpdated;
+
+    // Community invite events
+    public event Action<CommunityInviteReceivedEvent>? CommunityInviteReceived;
+    public event Action<CommunityInviteRespondedEvent>? CommunityInviteResponded;
 
     public async Task ConnectAsync(string baseUrl, string accessToken)
     {
@@ -690,6 +698,19 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: ThreadMetadataUpdated - message {e.MessageId} now has {e.ReplyCount} replies");
             ThreadMetadataUpdated?.Invoke(e);
+        });
+
+        // Community invite events
+        _hubConnection.On<CommunityInviteReceivedEvent>("CommunityInviteReceived", e =>
+        {
+            Console.WriteLine($"SignalR: CommunityInviteReceived - invite to {e.CommunityName} from {e.InvitedByUsername}");
+            CommunityInviteReceived?.Invoke(e);
+        });
+
+        _hubConnection.On<CommunityInviteRespondedEvent>("CommunityInviteResponded", e =>
+        {
+            Console.WriteLine($"SignalR: CommunityInviteResponded - {e.InvitedUserUsername} {e.Status} invite to community {e.CommunityId}");
+            CommunityInviteResponded?.Invoke(e);
         });
 
         _hubConnection.Reconnecting += error =>

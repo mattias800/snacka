@@ -883,4 +883,17 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             ViewModel.HandlePushToTalk(false);
         }
     }
+
+    // ==================== Invite User Popup Handlers ====================
+
+    /// <summary>
+    /// Called when a search is requested in the invite user popup.
+    /// </summary>
+    private async void OnInviteUserSearchRequested(object? sender, string query)
+    {
+        if (ViewModel != null)
+        {
+            await ViewModel.SearchUsersToInviteAsync(query);
+        }
+    }
 }

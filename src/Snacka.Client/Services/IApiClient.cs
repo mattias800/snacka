@@ -92,6 +92,15 @@ public interface IApiClient
     // GIF Search
     Task<ApiResult<GifSearchResponse>> SearchGifsAsync(string query, int limit = 20, string? pos = null);
     Task<ApiResult<GifSearchResponse>> GetTrendingGifsAsync(int limit = 20, string? pos = null);
+
+    // Community Invites
+    Task<ApiResult<List<UserSearchResult>>> SearchUsersToInviteAsync(Guid communityId, string query);
+    Task<ApiResult<CommunityInviteResponse>> CreateCommunityInviteAsync(Guid communityId, Guid userId);
+    Task<ApiResult<List<CommunityInviteResponse>>> GetCommunityInvitesAsync(Guid communityId);
+    Task<ApiResult<bool>> CancelCommunityInviteAsync(Guid communityId, Guid inviteId);
+    Task<ApiResult<List<CommunityInviteResponse>>> GetMyPendingInvitesAsync();
+    Task<ApiResult<CommunityInviteResponse>> AcceptInviteAsync(Guid inviteId);
+    Task<ApiResult<CommunityInviteResponse>> DeclineInviteAsync(Guid inviteId);
 }
 
 public record ApiResult<T>

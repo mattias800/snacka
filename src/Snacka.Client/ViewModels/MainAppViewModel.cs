@@ -117,6 +117,20 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isPinnedPopupOpen;
     private ObservableCollection<MessageResponse> _pinnedMessages = new();
 
+    // Invite user popup state
+    private bool _isInviteUserPopupOpen;
+    private string _inviteSearchQuery = string.Empty;
+    private bool _isSearchingUsersToInvite;
+    private ObservableCollection<UserSearchResult> _inviteSearchResults = new();
+    private bool _inviteHasNoResults;
+    private string? _inviteStatusMessage;
+    private bool _isInviteStatusError;
+
+    // Pending invites popup state
+    private bool _isPendingInvitesPopupOpen;
+    private bool _isLoadingPendingInvites;
+    private ObservableCollection<CommunityInviteResponse> _pendingInvites = new();
+
     // Thread state
     private ThreadViewModel? _currentThread;
     private double _threadPanelWidth = 400;
@@ -260,6 +274,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         ShowPinnedMessagesCommand = ReactiveCommand.CreateFromTask(ShowPinnedMessagesAsync);
         ClosePinnedPopupCommand = ReactiveCommand.Create(() => { IsPinnedPopupOpen = false; });
 
+        // Invite user commands
+        OpenInviteUserPopupCommand = ReactiveCommand.Create(OpenInviteUserPopup);
+        CloseInviteUserPopupCommand = ReactiveCommand.Create(CloseInviteUserPopup);
+        InviteUserCommand = ReactiveCommand.CreateFromTask<UserSearchResult>(InviteUserAsync);
+
+        // Pending invites commands
+        OpenPendingInvitesPopupCommand = ReactiveCommand.CreateFromTask(OpenPendingInvitesPopupAsync);
+        ClosePendingInvitesPopupCommand = ReactiveCommand.Create(ClosePendingInvitesPopup);
+        AcceptInviteCommand = ReactiveCommand.CreateFromTask<CommunityInviteResponse>(AcceptInviteAsync);
+        DeclineInviteCommand = ReactiveCommand.CreateFromTask<CommunityInviteResponse>(DeclineInviteAsync);
+
         // Thread commands
         OpenThreadCommand = ReactiveCommand.CreateFromTask<MessageResponse>(OpenThreadAsync);
         CloseThreadCommand = ReactiveCommand.Create(CloseThread);
@@ -319,6 +344,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
 
         await LoadCommunitiesAsync();
+
+        // Load pending invites for the badge count
+        await LoadPendingInvitesAsync();
     }
 
     /// <summary>
@@ -665,6 +693,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                     this.RaisePropertyChanged(nameof(SortedMembers));
                 }
             }
+        });
+
+        // Community invite events
+        _signalR.CommunityInviteReceived += e => Dispatcher.UIThread.Post(async () =>
+        {
+            Console.WriteLine($"SignalR: Received invite to {e.CommunityName} from {e.InvitedByUsername}");
+            // Reload pending invites to include the new one
+            await LoadPendingInvitesAsync();
         });
 
         // Voice channel events - update VoiceChannelViewModels, VoiceParticipants, and VoiceChannelContent
@@ -1033,6 +1069,72 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     public int PinnedCount => Messages.Count(m => m.IsPinned);
+
+    // Invite user popup properties
+    public bool IsInviteUserPopupOpen
+    {
+        get => _isInviteUserPopupOpen;
+        set => this.RaiseAndSetIfChanged(ref _isInviteUserPopupOpen, value);
+    }
+
+    public string InviteSearchQuery
+    {
+        get => _inviteSearchQuery;
+        set => this.RaiseAndSetIfChanged(ref _inviteSearchQuery, value);
+    }
+
+    public bool IsSearchingUsersToInvite
+    {
+        get => _isSearchingUsersToInvite;
+        set => this.RaiseAndSetIfChanged(ref _isSearchingUsersToInvite, value);
+    }
+
+    public ObservableCollection<UserSearchResult> InviteSearchResults
+    {
+        get => _inviteSearchResults;
+        set => this.RaiseAndSetIfChanged(ref _inviteSearchResults, value);
+    }
+
+    public bool InviteHasNoResults
+    {
+        get => _inviteHasNoResults;
+        set => this.RaiseAndSetIfChanged(ref _inviteHasNoResults, value);
+    }
+
+    public string? InviteStatusMessage
+    {
+        get => _inviteStatusMessage;
+        set => this.RaiseAndSetIfChanged(ref _inviteStatusMessage, value);
+    }
+
+    public bool IsInviteStatusError
+    {
+        get => _isInviteStatusError;
+        set => this.RaiseAndSetIfChanged(ref _isInviteStatusError, value);
+    }
+
+    // Pending invites popup properties
+    public bool IsPendingInvitesPopupOpen
+    {
+        get => _isPendingInvitesPopupOpen;
+        set => this.RaiseAndSetIfChanged(ref _isPendingInvitesPopupOpen, value);
+    }
+
+    public bool IsLoadingPendingInvites
+    {
+        get => _isLoadingPendingInvites;
+        set => this.RaiseAndSetIfChanged(ref _isLoadingPendingInvites, value);
+    }
+
+    public ObservableCollection<CommunityInviteResponse> PendingInvites
+    {
+        get => _pendingInvites;
+        set => this.RaiseAndSetIfChanged(ref _pendingInvites, value);
+    }
+
+    public int PendingInviteCount => _pendingInvites.Count;
+    public bool HasPendingInvites => _pendingInvites.Count > 0;
+    public bool HasNoPendingInvites => _pendingInvites.Count == 0 && !_isLoadingPendingInvites;
 
     // Thread properties
     public ThreadViewModel? CurrentThread
@@ -1945,6 +2047,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<MessageResponse, Unit> TogglePinCommand { get; }
     public ReactiveCommand<Unit, Unit> ShowPinnedMessagesCommand { get; }
     public ReactiveCommand<Unit, Unit> ClosePinnedPopupCommand { get; }
+
+    // Invite user commands
+    public ReactiveCommand<Unit, Unit> OpenInviteUserPopupCommand { get; }
+    public ReactiveCommand<Unit, Unit> CloseInviteUserPopupCommand { get; }
+    public ReactiveCommand<UserSearchResult, Unit> InviteUserCommand { get; }
+
+    // Pending invites commands
+    public ReactiveCommand<Unit, Unit> OpenPendingInvitesPopupCommand { get; }
+    public ReactiveCommand<Unit, Unit> ClosePendingInvitesPopupCommand { get; }
+    public ReactiveCommand<CommunityInviteResponse, Unit> AcceptInviteCommand { get; }
+    public ReactiveCommand<CommunityInviteResponse, Unit> DeclineInviteCommand { get; }
 
     // Thread commands
     public ReactiveCommand<MessageResponse, Unit> OpenThreadCommand { get; }
@@ -3241,6 +3354,210 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             foreach (var message in result.Data)
                 PinnedMessages.Add(message);
         }
+    }
+
+    // Invite user methods
+    private void OpenInviteUserPopup()
+    {
+        if (SelectedCommunity is null) return;
+
+        // Reset state
+        InviteSearchQuery = string.Empty;
+        InviteSearchResults.Clear();
+        InviteHasNoResults = false;
+        InviteStatusMessage = null;
+        IsInviteStatusError = false;
+
+        IsInviteUserPopupOpen = true;
+    }
+
+    private void CloseInviteUserPopup()
+    {
+        IsInviteUserPopupOpen = false;
+    }
+
+    /// <summary>
+    /// Searches for users that can be invited to the current community.
+    /// </summary>
+    public async Task SearchUsersToInviteAsync(string query)
+    {
+        if (SelectedCommunity is null || string.IsNullOrWhiteSpace(query)) return;
+
+        IsSearchingUsersToInvite = true;
+        InviteHasNoResults = false;
+        InviteStatusMessage = null;
+
+        try
+        {
+            var result = await _apiClient.SearchUsersToInviteAsync(SelectedCommunity.Id, query);
+            if (result.Success && result.Data is not null)
+            {
+                InviteSearchResults.Clear();
+                foreach (var user in result.Data)
+                    InviteSearchResults.Add(user);
+
+                InviteHasNoResults = InviteSearchResults.Count == 0;
+            }
+            else
+            {
+                InviteStatusMessage = result.Error ?? "Failed to search users";
+                IsInviteStatusError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error searching users to invite: {ex.Message}");
+            InviteStatusMessage = "Failed to search users";
+            IsInviteStatusError = true;
+        }
+        finally
+        {
+            IsSearchingUsersToInvite = false;
+        }
+    }
+
+    private async Task InviteUserAsync(UserSearchResult user)
+    {
+        if (SelectedCommunity is null) return;
+
+        InviteStatusMessage = null;
+
+        try
+        {
+            var result = await _apiClient.CreateCommunityInviteAsync(SelectedCommunity.Id, user.Id);
+            if (result.Success)
+            {
+                InviteStatusMessage = $"Invite sent to {user.EffectiveDisplayName}";
+                IsInviteStatusError = false;
+
+                // Remove the user from search results since they now have a pending invite
+                var existingUser = InviteSearchResults.FirstOrDefault(u => u.Id == user.Id);
+                if (existingUser != null)
+                {
+                    InviteSearchResults.Remove(existingUser);
+                }
+            }
+            else
+            {
+                InviteStatusMessage = result.Error ?? "Failed to send invite";
+                IsInviteStatusError = true;
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error inviting user: {ex.Message}");
+            InviteStatusMessage = "Failed to send invite";
+            IsInviteStatusError = true;
+        }
+    }
+
+    // Pending invites methods
+    private async Task OpenPendingInvitesPopupAsync()
+    {
+        IsPendingInvitesPopupOpen = true;
+        await LoadPendingInvitesAsync();
+    }
+
+    private void ClosePendingInvitesPopup()
+    {
+        IsPendingInvitesPopupOpen = false;
+    }
+
+    private async Task LoadPendingInvitesAsync()
+    {
+        IsLoadingPendingInvites = true;
+        this.RaisePropertyChanged(nameof(HasNoPendingInvites));
+
+        try
+        {
+            var result = await _apiClient.GetMyPendingInvitesAsync();
+            if (result.Success && result.Data is not null)
+            {
+                PendingInvites.Clear();
+                foreach (var invite in result.Data)
+                    PendingInvites.Add(invite);
+
+                this.RaisePropertyChanged(nameof(PendingInviteCount));
+                this.RaisePropertyChanged(nameof(HasPendingInvites));
+                this.RaisePropertyChanged(nameof(HasNoPendingInvites));
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading pending invites: {ex.Message}");
+        }
+        finally
+        {
+            IsLoadingPendingInvites = false;
+            this.RaisePropertyChanged(nameof(HasNoPendingInvites));
+        }
+    }
+
+    private async Task AcceptInviteAsync(CommunityInviteResponse invite)
+    {
+        try
+        {
+            var result = await _apiClient.AcceptInviteAsync(invite.Id);
+            if (result.Success)
+            {
+                // Remove from pending list
+                PendingInvites.Remove(invite);
+                this.RaisePropertyChanged(nameof(PendingInviteCount));
+                this.RaisePropertyChanged(nameof(HasPendingInvites));
+                this.RaisePropertyChanged(nameof(HasNoPendingInvites));
+
+                // Reload communities to show the new one
+                await LoadCommunitiesAsync();
+
+                Console.WriteLine($"Accepted invite to {invite.CommunityName}");
+            }
+            else
+            {
+                Console.WriteLine($"Failed to accept invite: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error accepting invite: {ex.Message}");
+        }
+    }
+
+    private async Task DeclineInviteAsync(CommunityInviteResponse invite)
+    {
+        try
+        {
+            var result = await _apiClient.DeclineInviteAsync(invite.Id);
+            if (result.Success)
+            {
+                // Remove from pending list
+                PendingInvites.Remove(invite);
+                this.RaisePropertyChanged(nameof(PendingInviteCount));
+                this.RaisePropertyChanged(nameof(HasPendingInvites));
+                this.RaisePropertyChanged(nameof(HasNoPendingInvites));
+
+                Console.WriteLine($"Declined invite to {invite.CommunityName}");
+            }
+            else
+            {
+                Console.WriteLine($"Failed to decline invite: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error declining invite: {ex.Message}");
+        }
+    }
+
+    /// <summary>
+    /// Handles receiving a new community invite via SignalR.
+    /// </summary>
+    public void HandleCommunityInviteReceived(CommunityInviteReceivedEvent e)
+    {
+        Dispatcher.UIThread.Post(async () =>
+        {
+            // Reload pending invites to include the new one
+            await LoadPendingInvitesAsync();
+        });
     }
 
     // Thread methods

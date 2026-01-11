@@ -371,3 +371,56 @@ public record GifResult(
     int Width,
     int Height
 );
+
+// Community Invite Models
+public enum CommunityInviteStatus
+{
+    Pending,
+    Accepted,
+    Declined
+}
+
+public record CommunityInviteResponse(
+    Guid Id,
+    Guid CommunityId,
+    string CommunityName,
+    string? CommunityIcon,
+    Guid InvitedUserId,
+    string InvitedUserUsername,
+    string InvitedUserEffectiveDisplayName,
+    Guid InvitedById,
+    string InvitedByUsername,
+    string InvitedByEffectiveDisplayName,
+    CommunityInviteStatus Status,
+    DateTime CreatedAt,
+    DateTime? RespondedAt
+);
+
+public record CommunityInviteReceivedEvent(
+    Guid InviteId,
+    Guid CommunityId,
+    string CommunityName,
+    string? CommunityIcon,
+    Guid InvitedById,
+    string InvitedByUsername,
+    string InvitedByEffectiveDisplayName,
+    DateTime CreatedAt
+);
+
+public record CommunityInviteRespondedEvent(
+    Guid InviteId,
+    Guid CommunityId,
+    Guid InvitedUserId,
+    string InvitedUserUsername,
+    CommunityInviteStatus Status
+);
+
+public record UserSearchResult(
+    Guid Id,
+    string Username,
+    string EffectiveDisplayName,
+    string? Avatar,
+    bool IsOnline
+);
+
+public record CreateCommunityInviteRequest(Guid UserId);

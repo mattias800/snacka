@@ -26,6 +26,15 @@ public partial class CommunityListView : UserControl
     public static readonly StyledProperty<ICommand?> OpenDMsCommandProperty =
         AvaloniaProperty.Register<CommunityListView, ICommand?>(nameof(OpenDMsCommand));
 
+    public static readonly StyledProperty<ICommand?> OpenPendingInvitesCommandProperty =
+        AvaloniaProperty.Register<CommunityListView, ICommand?>(nameof(OpenPendingInvitesCommand));
+
+    public static readonly StyledProperty<int> PendingInviteCountProperty =
+        AvaloniaProperty.Register<CommunityListView, int>(nameof(PendingInviteCount));
+
+    public static readonly StyledProperty<bool> HasPendingInvitesProperty =
+        AvaloniaProperty.Register<CommunityListView, bool>(nameof(HasPendingInvites));
+
     public CommunityListView()
     {
         InitializeComponent();
@@ -59,5 +68,23 @@ public partial class CommunityListView : UserControl
     {
         get => GetValue(OpenDMsCommandProperty);
         set => SetValue(OpenDMsCommandProperty, value);
+    }
+
+    public ICommand? OpenPendingInvitesCommand
+    {
+        get => GetValue(OpenPendingInvitesCommandProperty);
+        set => SetValue(OpenPendingInvitesCommandProperty, value);
+    }
+
+    public int PendingInviteCount
+    {
+        get => GetValue(PendingInviteCountProperty);
+        set => SetValue(PendingInviteCountProperty, value);
+    }
+
+    public bool HasPendingInvites
+    {
+        get => GetValue(HasPendingInvitesProperty);
+        set => SetValue(HasPendingInvitesProperty, value);
     }
 }

@@ -5,6 +5,7 @@
              xmlns:conv="using:Snacka.Client.Converters"
              xmlns:services="using:Snacka.Client.Services"
              xmlns:views="using:Snacka.Client.Views"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
              x:Class="Snacka.Client.Views.MainAppView"
              x:DataType="vm:MainAppViewModel"
              x:CompileBindings="False">
@@ -63,17 +64,41 @@
                                     IsLoading="{Binding IsLoading}"
                                     SelectCommunityCommand="{Binding SelectCommunityCommand}"
                                     CreateCommunityCommand="{Binding CreateCommunityCommand}"
-                                    OpenDMsCommand="{Binding OpenDMsCommand}"/>
+                                    OpenDMsCommand="{Binding OpenDMsCommand}"
+                                    OpenPendingInvitesCommand="{Binding OpenPendingInvitesPopupCommand}"
+                                    PendingInviteCount="{Binding PendingInviteCount}"
+                                    HasPendingInvites="{Binding HasPendingInvites}"/>
 
         <!-- Channel List (Second Column) -->
         <Border Grid.Column="1" Background="{StaticResource Content1Brush}">
             <DockPanel>
                 <!-- Community Name Header -->
                 <Border DockPanel.Dock="Top" Background="{StaticResource Content1Brush}" Padding="16,12" BorderThickness="0,0,0,1" BorderBrush="{StaticResource BackgroundBrush}">
-                    <TextBlock Text="{Binding SelectedCommunity.Name, FallbackValue='Select a Community'}"
-                               Foreground="White"
-                               FontWeight="SemiBold"
-                               FontSize="16"/>
+                    <Grid>
+                        <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="*"/>
+                            <ColumnDefinition Width="Auto"/>
+                        </Grid.ColumnDefinitions>
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding SelectedCommunity.Name, FallbackValue='Select a Community'}"
+                                   Foreground="White"
+                                   FontWeight="SemiBold"
+                                   FontSize="16"
+                                   VerticalAlignment="Center"/>
+                        <!-- Invite User Button -->
+                        <Button Grid.Column="1"
+                                Classes="btn-icon"
+                                Command="{Binding OpenInviteUserPopupCommand}"
+                                ToolTip.Tip="Invite Users"
+                                Padding="6"
+                                MinWidth="28"
+                                MinHeight="28"
+                                IsVisible="{Binding SelectedCommunity, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <ui:SymbolIcon Symbol="People"
+                                       Foreground="{StaticResource Foreground3Brush}"
+                                       FontSize="16"/>
+                        </Button>
+                    </Grid>
                 </Border>
 
                 <!-- User Panel at Bottom (always visible, docked first to be at very bottom) -->
@@ -517,6 +542,39 @@
             <controls:PinnedMessagesContent PinnedMessages="{Binding PinnedMessages}"
                                             ClosePinnedPopupCommand="{Binding ClosePinnedPopupCommand}"
                                             TogglePinCommand="{Binding TogglePinCommand}"/>
+        </Popup>
+
+        <!-- Invite User Popup -->
+        <Popup x:Name="InviteUserPopup"
+               IsOpen="{Binding IsInviteUserPopupOpen}"
+               IsLightDismissEnabled="True"
+               Placement="Center"
+               PlacementTarget="{Binding $parent[Grid]}">
+            <controls:InviteUserContent x:Name="InviteUserContent"
+                                        CommunityName="{Binding SelectedCommunity.Name}"
+                                        SearchQuery="{Binding InviteSearchQuery, Mode=TwoWay}"
+                                        IsSearching="{Binding IsSearchingUsersToInvite}"
+                                        SearchResults="{Binding InviteSearchResults}"
+                                        HasNoResults="{Binding InviteHasNoResults}"
+                                        StatusMessage="{Binding InviteStatusMessage}"
+                                        IsStatusError="{Binding IsInviteStatusError}"
+                                        CloseCommand="{Binding CloseInviteUserPopupCommand}"
+                                        InviteUserCommand="{Binding InviteUserCommand}"
+                                        SearchRequested="OnInviteUserSearchRequested"/>
+        </Popup>
+
+        <!-- Pending Invites Popup -->
+        <Popup x:Name="PendingInvitesPopup"
+               IsOpen="{Binding IsPendingInvitesPopupOpen}"
+               IsLightDismissEnabled="True"
+               Placement="Center"
+               PlacementTarget="{Binding $parent[Grid]}">
+            <controls:PendingInvitesContent PendingInvites="{Binding PendingInvites}"
+                                            IsLoading="{Binding IsLoadingPendingInvites}"
+                                            HasNoPendingInvites="{Binding HasNoPendingInvites}"
+                                            CloseCommand="{Binding ClosePendingInvitesPopupCommand}"
+                                            AcceptInviteCommand="{Binding AcceptInviteCommand}"
+                                            DeclineInviteCommand="{Binding DeclineInviteCommand}"/>
         </Popup>
 
         <!-- Quick Switcher Popup (Cmd+K / Ctrl+K) -->

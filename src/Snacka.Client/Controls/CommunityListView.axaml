@@ -51,6 +51,43 @@
                         </Border>
                     </Button>
 
+                    <!-- Pending Invites Button -->
+                    <Button Classes="btn-ghost"
+                            Command="{Binding OpenPendingInvitesCommand, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
+                            HorizontalAlignment="Center"
+                            Margin="0,4"
+                            Padding="0"
+                            ToolTip.Tip="Pending Invites">
+                        <Grid>
+                            <Border Width="48" Height="48"
+                                    CornerRadius="18"
+                                    Background="{StaticResource Content1Brush}">
+                                <ui:SymbolIcon Symbol="Alert"
+                                           Foreground="White"
+                                           FontSize="20"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                            <!-- Badge for pending invite count -->
+                            <Border HorizontalAlignment="Right"
+                                    VerticalAlignment="Top"
+                                    Margin="0,-2,-2,0"
+                                    MinWidth="18"
+                                    Height="18"
+                                    CornerRadius="9"
+                                    Background="{StaticResource DangerBrush}"
+                                    Padding="4,0"
+                                    IsVisible="{Binding HasPendingInvites, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}">
+                                <TextBlock Text="{Binding PendingInviteCount, RelativeSource={RelativeSource AncestorType=controls:CommunityListView}}"
+                                           Foreground="White"
+                                           FontSize="10"
+                                           FontWeight="Bold"
+                                           HorizontalAlignment="Center"
+                                           VerticalAlignment="Center"/>
+                            </Border>
+                        </Grid>
+                    </Button>
+
                     <!-- Separator -->
                     <Border Width="32" Height="2" Background="{StaticResource Content1Brush}" Margin="8,10" HorizontalAlignment="Center" CornerRadius="1"/>
 
