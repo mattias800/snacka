@@ -1754,15 +1754,17 @@ public class WebRtcService : IWebRtcService
     {
         if (_isCameraOn == enabled) return;
 
-        _isCameraOn = enabled;
         Console.WriteLine($"WebRTC: Camera = {enabled}");
 
         if (enabled)
         {
+            // Start capture BEFORE setting state - if it throws, state remains false
             await StartVideoCaptureAsync();
+            _isCameraOn = true;
         }
         else
         {
+            _isCameraOn = false;
             await StopVideoCaptureAsync();
         }
 
@@ -1773,7 +1775,6 @@ public class WebRtcService : IWebRtcService
     {
         if (_isScreenSharing == enabled) return;
 
-        _isScreenSharing = enabled;
         _currentScreenShareSettings = settings;
         Console.WriteLine($"WebRTC: Screen Sharing = {enabled}");
 
@@ -1781,10 +1782,13 @@ public class WebRtcService : IWebRtcService
         {
             // Phase 2: Allow both camera and screen sharing simultaneously
             // Each goes to a separate video track
+            // Start capture BEFORE setting state - if it throws, state remains false
             await StartScreenCaptureAsync(settings);
+            _isScreenSharing = true;
         }
         else
         {
+            _isScreenSharing = false;
             await StopScreenCaptureAsync();
         }
 

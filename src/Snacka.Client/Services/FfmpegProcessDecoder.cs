@@ -47,6 +47,8 @@ public class FfmpegProcessDecoder : IDisposable
     /// </summary>
     public DecoderOutputFormat OutputFormat => _outputFormat;
 
+    private static string? _ffmpegPath;
+
     public FfmpegProcessDecoder(int width, int height, VideoCodecsEnum codec = VideoCodecsEnum.H264, DecoderOutputFormat outputFormat = DecoderOutputFormat.Rgb24)
     {
         _width = width;
@@ -61,6 +63,55 @@ public class FfmpegProcessDecoder : IDisposable
             DecoderOutputFormat.Nv12 => width * height * 3 / 2,
             _ => width * height * 3
         };
+    }
+
+    /// <summary>
+    /// Gets the path to the ffmpeg executable. Searches common paths on macOS/Linux
+    /// since app bundles don't have Homebrew in PATH.
+    /// </summary>
+    private static string GetFfmpegPath()
+    {
+        if (_ffmpegPath != null) return _ffmpegPath;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            var paths = new[]
+            {
+                "/opt/homebrew/bin/ffmpeg",
+                "/opt/homebrew/opt/ffmpeg@6/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg",
+                "/usr/local/opt/ffmpeg@6/bin/ffmpeg",
+                "/usr/bin/ffmpeg"
+            };
+
+            foreach (var path in paths)
+            {
+                if (File.Exists(path))
+                {
+                    _ffmpegPath = path;
+                    Console.WriteLine($"FfmpegProcessDecoder: Found ffmpeg at {path}");
+                    return _ffmpegPath;
+                }
+            }
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            var paths = new[] { "/usr/bin/ffmpeg", "/usr/local/bin/ffmpeg" };
+
+            foreach (var path in paths)
+            {
+                if (File.Exists(path))
+                {
+                    _ffmpegPath = path;
+                    Console.WriteLine($"FfmpegProcessDecoder: Found ffmpeg at {path}");
+                    return _ffmpegPath;
+                }
+            }
+        }
+
+        _ffmpegPath = "ffmpeg";
+        Console.WriteLine("FfmpegProcessDecoder: Using ffmpeg from PATH");
+        return _ffmpegPath;
     }
 
     public void Start()
@@ -91,11 +142,12 @@ public class FfmpegProcessDecoder : IDisposable
                         $"-f {inputFormat} -framerate 30 -i pipe:0 " +
                         $"-fps_mode passthrough -f rawvideo -pix_fmt {pixFmt} -s {_width}x{_height} pipe:1";
 
-        Console.WriteLine($"FfmpegProcessDecoder: Command: ffmpeg {ffmpegArgs}");
+        var ffmpegPath = GetFfmpegPath();
+        Console.WriteLine($"FfmpegProcessDecoder: Command: {ffmpegPath} {ffmpegArgs}");
 
         var startInfo = new ProcessStartInfo
         {
-            FileName = "ffmpeg",
+            FileName = ffmpegPath,
             Arguments = ffmpegArgs,
             RedirectStandardInput = true,
             RedirectStandardOutput = true,
@@ -213,7 +265,7 @@ public class FfmpegProcessDecoder : IDisposable
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "ffmpeg",
+                FileName = GetFfmpegPath(),
                 Arguments = "-hide_banner -hwaccels",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,

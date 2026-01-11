@@ -49,6 +49,62 @@ public class FfmpegProcessEncoder : IDisposable
     }
 
     private static string? _detectedEncoder;
+    private static string? _ffmpegPath;
+
+    /// <summary>
+    /// Gets the path to the ffmpeg executable. Searches common paths on macOS/Linux
+    /// since app bundles don't have Homebrew in PATH.
+    /// </summary>
+    private static string GetFfmpegPath()
+    {
+        if (_ffmpegPath != null) return _ffmpegPath;
+
+        if (OperatingSystem.IsMacOS())
+        {
+            // macOS app bundles don't have Homebrew in PATH
+            var paths = new[]
+            {
+                "/opt/homebrew/bin/ffmpeg",        // Apple Silicon Homebrew
+                "/opt/homebrew/opt/ffmpeg@6/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg",           // Intel Homebrew
+                "/usr/local/opt/ffmpeg@6/bin/ffmpeg",
+                "/usr/bin/ffmpeg"                  // System
+            };
+
+            foreach (var path in paths)
+            {
+                if (File.Exists(path))
+                {
+                    _ffmpegPath = path;
+                    Console.WriteLine($"FfmpegProcessEncoder: Found ffmpeg at {path}");
+                    return _ffmpegPath;
+                }
+            }
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            var paths = new[]
+            {
+                "/usr/bin/ffmpeg",
+                "/usr/local/bin/ffmpeg"
+            };
+
+            foreach (var path in paths)
+            {
+                if (File.Exists(path))
+                {
+                    _ffmpegPath = path;
+                    Console.WriteLine($"FfmpegProcessEncoder: Found ffmpeg at {path}");
+                    return _ffmpegPath;
+                }
+            }
+        }
+
+        // Fallback to PATH lookup
+        _ffmpegPath = "ffmpeg";
+        Console.WriteLine("FfmpegProcessEncoder: Using ffmpeg from PATH");
+        return _ffmpegPath;
+    }
 
     private static string GetH264EncoderArgs()
     {
@@ -119,7 +175,7 @@ public class FfmpegProcessEncoder : IDisposable
         {
             var psi = new ProcessStartInfo
             {
-                FileName = "ffmpeg",
+                FileName = GetFfmpegPath(),
                 Arguments = $"-hide_banner -encoders",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -156,9 +212,10 @@ public class FfmpegProcessEncoder : IDisposable
         // Use IVF format for VP8 (simple container we can parse)
         var outputFormat = _codec == VideoCodecsEnum.VP8 ? "ivf" : "h264";
 
+        var ffmpegPath = GetFfmpegPath();
         var startInfo = new ProcessStartInfo
         {
-            FileName = "ffmpeg",
+            FileName = ffmpegPath,
             // Ultra low-latency: no buffering, flush packets immediately
             // NV12 is native to VideoToolbox - zero conversion overhead
             Arguments = $"-fflags nobuffer -flags low_delay -strict experimental " +
