@@ -64,6 +64,8 @@ jobs:
     runs-on: macos-14
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for MinVer
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -89,7 +91,6 @@ jobs:
         run: |
           dotnet publish src/Snacka.Client -c Release -r osx-arm64 \
             --self-contained \
-            -p:Version=${{ needs.version.outputs.version }} \
             -o publish
 
       - name: Copy native binaries
@@ -135,6 +136,8 @@ jobs:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for MinVer
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -151,7 +154,6 @@ jobs:
         run: |
           dotnet publish src/Snacka.Client -c Release -r win-x64 `
             --self-contained `
-            -p:Version=${{ needs.version.outputs.version }} `
             -o publish
 
       - name: Copy SnackaCaptureWindows
@@ -196,6 +198,8 @@ jobs:
     runs-on: ubuntu-22.04
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history needed for MinVer
 
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
@@ -219,7 +223,6 @@ jobs:
         run: |
           dotnet publish src/Snacka.Client -c Release -r linux-x64 \
             --self-contained \
-            -p:Version=${{ needs.version.outputs.version }} \
             -o publish
 
       - name: Upload portable build

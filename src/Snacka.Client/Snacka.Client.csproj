@@ -7,10 +7,9 @@
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <!-- Version for auto-update checks -->
-    <Version>0.1.6</Version>
-    <AssemblyVersion>0.1.6</AssemblyVersion>
-    <FileVersion>0.1.6</FileVersion>
+    <!-- MinVer: version is derived from git tags (e.g., v0.1.6 -> 0.1.6) -->
+    <MinVerTagPrefix>v</MinVerTagPrefix>
+    <MinVerMinimumMajorMinor>0.1</MinVerMinimumMajorMinor>
     <!-- Application icon (Windows) -->
     <ApplicationIcon>snacka.ico</ApplicationIcon>
     <!-- Windows application manifest for NativeControlHost and DPI awareness -->
@@ -23,6 +22,8 @@
   </ItemGroup>
 
   <ItemGroup>
+    <!-- Automatic versioning from git tags -->
+    <PackageReference Include="MinVer" Version="6.0.0" PrivateAssets="All" />
     <PackageReference Include="Avalonia" Version="11.3.9" />
     <PackageReference Include="Avalonia.Desktop" Version="11.3.9" />
     <PackageReference Include="Avalonia.Themes.Fluent" Version="11.3.9" />
