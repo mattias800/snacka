@@ -108,6 +108,15 @@ public sealed class ChannelService : IChannelService
             .Where(c => c.CommunityId == communityId)
             .ToListAsync(cancellationToken);
 
+        // Validate: must include all channels (no partial reorders allowed)
+        if (channelIds.Count != channels.Count)
+            throw new InvalidOperationException($"Reorder request must include all {channels.Count} channels, but received {channelIds.Count}.");
+
+        // Validate: no duplicate IDs
+        var uniqueIds = new HashSet<Guid>(channelIds);
+        if (uniqueIds.Count != channelIds.Count)
+            throw new InvalidOperationException("Reorder request contains duplicate channel IDs.");
+
         // Validate all channel IDs belong to this community
         var channelDict = channels.ToDictionary(c => c.Id);
         foreach (var channelId in channelIds)
@@ -119,10 +128,7 @@ public sealed class ChannelService : IChannelService
         // Update positions based on the order in channelIds
         for (int i = 0; i < channelIds.Count; i++)
         {
-            if (channelDict.TryGetValue(channelIds[i], out var channel))
-            {
-                channel.Position = i;
-            }
+            channelDict[channelIds[i]].Position = i;
         }
 
         await _db.SaveChangesAsync(cancellationToken);

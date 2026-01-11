@@ -53,6 +53,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private List<VoiceChannelViewModel>? _originalVoiceChannelOrder;
     private Guid? _currentPreviewDraggedId;
 
+    // Track pending reorder to skip redundant SignalR updates
+    private Guid? _pendingReorderCommunityId;
+
     // Voice channels with participant tracking (robust reactive approach)
     private ObservableCollection<VoiceChannelViewModel> _voiceChannelViewModels = new();
 
@@ -421,6 +424,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             // Only update if it's for the current community
             if (SelectedCommunity?.Id != e.CommunityId) return;
+
+            // Skip if we just initiated this reorder (we already updated optimistically)
+            if (_pendingReorderCommunityId == e.CommunityId)
+            {
+                Console.WriteLine($"SignalR ChannelsReordered: Skipping (we initiated this reorder)");
+                _pendingReorderCommunityId = null;
+                return;
+            }
 
             Console.WriteLine($"SignalR ChannelsReordered: Received {e.Channels.Count} channels for community {e.CommunityId}");
 
@@ -2445,55 +2456,96 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         Console.WriteLine($"Reordering {channelIds.Count} channels");
 
+        // Store original order for rollback
+        var originalChannels = Channels.ToList();
+        var originalVoiceOrder = VoiceChannelViewModels.ToList();
+
+        // Apply optimistically - update UI immediately
+        ApplyChannelOrder(channelIds);
+        ClearPreviewState();
+
+        // Mark that we're expecting a SignalR event for this reorder
+        _pendingReorderCommunityId = SelectedCommunity.Id;
+
         try
         {
             var result = await _apiClient.ReorderChannelsAsync(SelectedCommunity.Id, channelIds);
             if (result.Success && result.Data is not null)
             {
                 Console.WriteLine($"Successfully reordered channels");
-
-                // Update local channels with new order
-                Channels.Clear();
-                foreach (var channel in result.Data)
-                {
-                    Channels.Add(channel);
-                }
-
-                // Update VoiceChannelViewModels positions
-                foreach (var voiceVm in VoiceChannelViewModels)
-                {
-                    var updatedChannel = result.Data.FirstOrDefault(c => c.Id == voiceVm.Id);
-                    if (updatedChannel is not null)
-                    {
-                        voiceVm.Position = updatedChannel.Position;
-                    }
-                }
-
-                // Re-sort VoiceChannelViewModels by Position (ObservableCollection doesn't auto-sort)
-                var sortedVoiceChannels = VoiceChannelViewModels.OrderBy(v => v.Position).ToList();
-                VoiceChannelViewModels.Clear();
-                foreach (var vm in sortedVoiceChannels)
-                {
-                    VoiceChannelViewModels.Add(vm);
-                }
-
-                // Clear preview state since we've committed the real order
-                ClearPreviewState();
-
-                this.RaisePropertyChanged(nameof(TextChannels));
-                this.RaisePropertyChanged(nameof(VoiceChannelViewModels));
+                // Server confirmed - nothing more to do (we already updated optimistically)
             }
             else
             {
-                ErrorMessage = result.Error ?? "Failed to reorder channels";
+                // Server rejected - rollback to original order
                 Console.WriteLine($"Error reordering channels: {result.Error}");
+                ErrorMessage = result.Error ?? "Failed to reorder channels";
+                RollbackChannelOrder(originalChannels, originalVoiceOrder);
+                _pendingReorderCommunityId = null;
             }
         }
         catch (Exception ex)
         {
-            ErrorMessage = $"Error reordering channels: {ex.Message}";
+            // Network error - rollback to original order
             Console.WriteLine($"Exception reordering channels: {ex}");
+            ErrorMessage = $"Error reordering channels: {ex.Message}";
+            RollbackChannelOrder(originalChannels, originalVoiceOrder);
+            _pendingReorderCommunityId = null;
         }
+    }
+
+    private void ApplyChannelOrder(List<Guid> channelIds)
+    {
+        // Create a lookup for new positions
+        var positionLookup = channelIds.Select((id, index) => (id, index))
+            .ToDictionary(x => x.id, x => x.index);
+
+        // Sort Channels by the new order
+        var sortedChannels = Channels.OrderBy(c => positionLookup.GetValueOrDefault(c.Id, int.MaxValue)).ToList();
+        Channels.Clear();
+        foreach (var channel in sortedChannels)
+        {
+            Channels.Add(channel);
+        }
+
+        // Update VoiceChannelViewModels positions and re-sort
+        foreach (var voiceVm in VoiceChannelViewModels)
+        {
+            if (positionLookup.TryGetValue(voiceVm.Id, out var newPosition))
+            {
+                voiceVm.Position = newPosition;
+            }
+        }
+
+        var sortedVoiceChannels = VoiceChannelViewModels.OrderBy(v => v.Position).ToList();
+        VoiceChannelViewModels.Clear();
+        foreach (var vm in sortedVoiceChannels)
+        {
+            VoiceChannelViewModels.Add(vm);
+        }
+
+        this.RaisePropertyChanged(nameof(TextChannels));
+        this.RaisePropertyChanged(nameof(VoiceChannelViewModels));
+    }
+
+    private void RollbackChannelOrder(List<ChannelResponse> originalChannels, List<VoiceChannelViewModel> originalVoiceOrder)
+    {
+        Console.WriteLine("Rolling back channel order");
+
+        Channels.Clear();
+        foreach (var channel in originalChannels)
+        {
+            Channels.Add(channel);
+        }
+
+        VoiceChannelViewModels.Clear();
+        foreach (var vm in originalVoiceOrder)
+        {
+            VoiceChannelViewModels.Add(vm);
+        }
+
+        this.RaisePropertyChanged(nameof(TextChannels));
+        this.RaisePropertyChanged(nameof(VoiceChannelViewModels));
     }
 
     // Preview state for drag feedback - tracks gap position, not actual reorder
