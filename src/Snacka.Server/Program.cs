@@ -320,11 +320,7 @@ using (var scope = app.Services.CreateScope())
 // This enables the server to work correctly behind reverse proxies (NGINX, etc.)
 app.UseForwardedHeaders();
 
-if (app.Environment.IsDevelopment())
-{
-    app.MapOpenApi();
-}
-else
+if (!app.Environment.IsDevelopment())
 {
     // SECURITY: Enable HSTS in production
     // Note: When behind a reverse proxy that handles SSL, HSTS headers should be set by the proxy
@@ -350,6 +346,24 @@ app.UseRateLimiter();
 
 // Serve static files (setup wizard, etc.)
 app.UseStaticFiles();
+
+// SPA fallback for setup wizard - only for routes without file extensions
+app.Use(async (context, next) =>
+{
+    await next();
+
+    // If we got a 404 and the path starts with /setup and has no file extension, serve index.html
+    if (context.Response.StatusCode == 404 &&
+        !context.Response.HasStarted &&
+        context.Request.Path.StartsWithSegments("/setup") &&
+        !Path.HasExtension(context.Request.Path.Value))
+    {
+        context.Response.StatusCode = 200;
+        context.Response.ContentType = "text/html";
+        await context.Response.SendFileAsync(
+            Path.Combine(builder.Environment.WebRootPath, "setup", "index.html"));
+    }
+});
 
 // Setup wizard middleware - redirect to /setup if server has no users
 app.Use(async (context, next) =>
@@ -387,8 +401,10 @@ app.UseAuthorization();
 app.MapControllers();
 app.MapHub<SnackaHub>("/hubs/snacka");
 
-// Serve setup wizard SPA for /setup routes (fallback for client-side routing)
-app.MapFallbackToFile("/setup/{**slug}", "setup/index.html");
+if (app.Environment.IsDevelopment())
+{
+    app.MapOpenApi();
+}
 
 app.Run();
 

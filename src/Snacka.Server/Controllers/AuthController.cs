@@ -13,8 +13,25 @@ namespace Snacka.Server.Controllers;
 public class AuthController : ControllerBase
 {
     private readonly IAuthService _authService;
+    private readonly IConfiguration _configuration;
+    private readonly IServerInviteService _inviteService;
 
-    public AuthController(IAuthService authService) => _authService = authService;
+    public AuthController(IAuthService authService, IConfiguration configuration, IServerInviteService inviteService)
+    {
+        _authService = authService;
+        _configuration = configuration;
+        _inviteService = inviteService;
+    }
+
+    [HttpGet("server-info")]
+    public async Task<ActionResult<SetupServerInfoResponse>> GetServerInfo(CancellationToken cancellationToken)
+    {
+        var hasUsers = await _inviteService.HasAnyUsersAsync(cancellationToken);
+        return Ok(new SetupServerInfoResponse(
+            NeedsSetup: !hasUsers,
+            AllowRegistration: _configuration.GetValue("ServerInfo:AllowRegistration", true)
+        ));
+    }
 
     [HttpPost("register")]
     [EnableRateLimiting("register")]
@@ -262,3 +279,5 @@ public class UsersController : ControllerBase
         return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
     }
 }
+
+public record SetupServerInfoResponse(bool NeedsSetup, bool AllowRegistration);
