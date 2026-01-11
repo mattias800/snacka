@@ -10,7 +10,8 @@ let package = Package(
         .executable(name: "SnackaCapture", targets: ["SnackaCapture"])
     ],
     dependencies: [
-        .package(url: "https://github.com/apple/swift-argument-parser.git", from: "1.2.0")
+        // Pin to 1.3.x to avoid Swift 6.0 features in 1.5+
+        .package(url: "https://github.com/apple/swift-argument-parser.git", .upToNextMinor(from: "1.3.0"))
     ],
     targets: [
         .executableTarget(
