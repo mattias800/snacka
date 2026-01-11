@@ -1,168 +1,279 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Snacka.Client.ViewModels"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
              x:Class="Snacka.Client.Views.ServerConnectionView"
              x:DataType="vm:ServerConnectionViewModel"
              x:CompileBindings="False">
-    <Border Background="#36393f" Padding="40">
-        <Grid RowDefinitions="Auto,*">
-            <StackPanel Grid.Row="0"
+
+    <!-- Beautiful gradient background -->
+    <Border>
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#09090b" Offset="0"/>
+                <GradientStop Color="#0c1929" Offset="0.5"/>
+                <GradientStop Color="#09090b" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid>
+            <!-- Subtle decorative gradient orbs -->
+            <Ellipse Width="600" Height="600"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top"
+                     Margin="-200,-200,0,0"
+                     Opacity="0.15">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#006FEE" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <Ellipse Width="500" Height="500"
+                     HorizontalAlignment="Right"
+                     VerticalAlignment="Bottom"
+                     Margin="0,0,-150,-150"
+                     Opacity="0.1">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#7c3aed" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <!-- Main content -->
+            <Grid RowDefinitions="*,Auto,*">
+                <!-- Center card -->
+                <Border Grid.Row="1"
                         HorizontalAlignment="Center"
-                        VerticalAlignment="Top"
-                        Width="450"
-                        Spacing="20">
+                        Background="#E618181b"
+                        CornerRadius="24"
+                        Padding="48,40"
+                        MinWidth="480"
+                        MaxWidth="520"
+                        BoxShadow="0 25 50 -12 #40000000">
 
-                <TextBlock Text="Connect to a Server"
-                           FontSize="28"
-                           FontWeight="Bold"
-                           Foreground="White"
-                           HorizontalAlignment="Center"/>
-
-                <TextBlock Text="Enter a server URL or paste a share link to get started"
-                           FontSize="14"
-                           Foreground="#b9bbbe"
-                           HorizontalAlignment="Center"
-                           TextWrapping="Wrap"
-                           TextAlignment="Center"/>
-
-                <!-- Server URL Input -->
-                <StackPanel Spacing="8" Margin="0,20,0,0">
-                    <TextBlock Text="SERVER ADDRESS"
-                               FontSize="12"
-                               FontWeight="Bold"
-                               Foreground="#b9bbbe"/>
-                    <TextBox Text="{Binding ServerUrl}"
-                             Watermark="http://localhost:5000 or snacka://connect/..."
-                             Background="#202225"
-                             Foreground="White"
-                             BorderThickness="0"
-                             CornerRadius="4"
-                             Padding="12"/>
-                </StackPanel>
-
-                <!-- Error Message -->
-                <TextBlock Text="{Binding ErrorMessage}"
-                           Foreground="#f04747"
-                           FontSize="14"
-                           IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                           TextWrapping="Wrap"/>
-
-                <!-- Server Info (shown after successful connection) -->
-                <Border Background="#2f3136"
-                        CornerRadius="8"
-                        Padding="16"
-                        IsVisible="{Binding IsConnected}">
-                    <StackPanel Spacing="8">
-                        <StackPanel Orientation="Horizontal" Spacing="12">
-                            <Border Background="#5865f2"
-                                    CornerRadius="8"
-                                    Width="48"
-                                    Height="48">
-                                <TextBlock Text="M"
+                    <StackPanel Spacing="24">
+                        <!-- Logo/Brand area -->
+                        <StackPanel HorizontalAlignment="Center" Spacing="16">
+                            <Border Width="72" Height="72"
+                                    CornerRadius="20"
+                                    HorizontalAlignment="Center">
+                                <Border.Background>
+                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                        <GradientStop Color="#338ef7" Offset="0"/>
+                                        <GradientStop Color="#006FEE" Offset="1"/>
+                                    </LinearGradientBrush>
+                                </Border.Background>
+                                <ui:SymbolIcon Symbol="Globe"
                                            Foreground="White"
-                                           FontSize="20"
-                                           FontWeight="Bold"
+                                           FontSize="32"
                                            HorizontalAlignment="Center"
                                            VerticalAlignment="Center"/>
                             </Border>
-                            <StackPanel VerticalAlignment="Center" Spacing="4">
-                                <TextBlock Text="{Binding ServerName}"
-                                           Foreground="White"
-                                           FontSize="16"
-                                           FontWeight="SemiBold"/>
-                                <TextBlock Text="{Binding ServerDescription}"
-                                           Foreground="#b9bbbe"
-                                           FontSize="13"
-                                           IsVisible="{Binding ServerDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Welcome to Snacka"
+                                           FontSize="28"
+                                           FontWeight="Bold"
+                                           Foreground="#fafafa"
+                                           HorizontalAlignment="Center"/>
+                                <TextBlock Text="Connect to a server to start chatting"
+                                           FontSize="15"
+                                           Foreground="#71717a"
+                                           HorizontalAlignment="Center"
+                                           TextAlignment="Center"/>
                             </StackPanel>
                         </StackPanel>
+
+                        <!-- Server URL Input -->
+                        <StackPanel Spacing="10" Margin="0,8,0,0">
+                            <TextBlock Text="SERVER ADDRESS"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       Foreground="#71717a"/>
+                            <TextBox Text="{Binding ServerUrl}"
+                                     Watermark="https://your-server.com or paste invite link"
+                                     Classes="input-default"/>
+                        </StackPanel>
+
+                        <!-- Error Message -->
+                        <Border Background="#1aef4444"
+                                CornerRadius="12"
+                                Padding="16,12"
+                                IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                            <StackPanel Orientation="Horizontal" Spacing="10">
+                                <ui:SymbolIcon Symbol="Important"
+                                           Foreground="#ef4444"
+                                           FontSize="16"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding ErrorMessage}"
+                                           Foreground="#fca5a5"
+                                           FontSize="13"
+                                           TextWrapping="Wrap"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Server Info Card (shown after successful connection) -->
+                        <Border Background="#27272a"
+                                CornerRadius="16"
+                                Padding="20"
+                                IsVisible="{Binding IsConnected}">
+                            <StackPanel Orientation="Horizontal" Spacing="16">
+                                <Border CornerRadius="14"
+                                        Width="56"
+                                        Height="56">
+                                    <Border.Background>
+                                        <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                            <GradientStop Color="#22c55e" Offset="0"/>
+                                            <GradientStop Color="#16a34a" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </Border.Background>
+                                    <ui:SymbolIcon Symbol="Checkmark"
+                                               Foreground="White"
+                                               FontSize="24"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                                </Border>
+                                <StackPanel VerticalAlignment="Center" Spacing="4">
+                                    <TextBlock Text="{Binding ServerName}"
+                                               Foreground="#fafafa"
+                                               FontSize="17"
+                                               FontWeight="SemiBold"/>
+                                    <TextBlock Text="{Binding ServerDescription}"
+                                               Foreground="#a1a1aa"
+                                               FontSize="13"
+                                               IsVisible="{Binding ServerDescription, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                    <TextBlock Text="Connected successfully"
+                                               Foreground="#22c55e"
+                                               FontSize="12"
+                                               FontWeight="Medium"/>
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+
+                        <!-- Connect Button -->
+                        <Button Classes="btn-primary"
+                                Command="{Binding ConnectCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Padding="16,14"
+                                IsVisible="{Binding IsConnected, Converter={x:Static BoolConverters.Not}}">
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <ui:SymbolIcon Symbol="Link"
+                                           Foreground="White"
+                                           FontSize="16"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding IsLoading, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="Connect"
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding IsLoading, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="Connecting..."
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"
+                                           IsVisible="{Binding IsLoading}"/>
+                            </StackPanel>
+                        </Button>
+
+                        <!-- Continue Button (shown after connection) -->
+                        <Button Command="{Binding ContinueCommand}"
+                                HorizontalAlignment="Stretch"
+                                HorizontalContentAlignment="Center"
+                                Padding="16,14"
+                                CornerRadius="12"
+                                FontWeight="SemiBold"
+                                IsVisible="{Binding IsConnected}">
+                            <Button.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                    <GradientStop Color="#4ade80" Offset="0"/>
+                                    <GradientStop Color="#22c55e" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Button.Background>
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <TextBlock Text="Continue"
+                                           Foreground="White"
+                                           FontSize="15"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <ui:SymbolIcon Symbol="ChevronRight"
+                                           Foreground="White"
+                                           FontSize="16"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </Button>
                     </StackPanel>
                 </Border>
 
-                <!-- Connect Button -->
-                <Button Command="{Binding ConnectCommand}"
-                        Background="#5865f2"
-                        Foreground="White"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Padding="12"
-                        CornerRadius="4"
-                        FontWeight="SemiBold"
-                        IsVisible="{Binding IsConnected, Converter={x:Static BoolConverters.Not}}">
-                    <Button.Content>
-                        <Panel>
-                            <TextBlock Text="Connect" IsVisible="{Binding IsLoading, Converter={x:Static BoolConverters.Not}}"/>
-                            <TextBlock Text="Connecting..." IsVisible="{Binding IsLoading}"/>
-                        </Panel>
-                    </Button.Content>
-                </Button>
-
-                <!-- Continue Button (shown after connection) -->
-                <Button Command="{Binding ContinueCommand}"
-                        Background="#3ba55c"
-                        Foreground="White"
-                        HorizontalAlignment="Stretch"
-                        HorizontalContentAlignment="Center"
-                        Padding="12"
-                        CornerRadius="4"
-                        FontWeight="SemiBold"
-                        IsVisible="{Binding IsConnected}">
-                    <TextBlock Text="Continue" VerticalAlignment="Center"/>
-                </Button>
-            </StackPanel>
-
-            <!-- Saved Servers List -->
-            <StackPanel Grid.Row="1"
+                <!-- Saved Servers at bottom -->
+                <Border Grid.Row="2"
                         HorizontalAlignment="Center"
-                        VerticalAlignment="Bottom"
-                        Width="450"
-                        Margin="0,0,0,40"
+                        VerticalAlignment="Top"
+                        Margin="0,32,0,0"
+                        MaxWidth="520"
                         IsVisible="{Binding SavedServers.Count}">
-                <TextBlock Text="SAVED SERVERS"
-                           FontSize="12"
-                           FontWeight="Bold"
-                           Foreground="#72767d"
-                           Margin="0,0,0,12"/>
+                    <StackPanel Spacing="12">
+                        <TextBlock Text="RECENT SERVERS"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#52525b"
+                                   HorizontalAlignment="Center"/>
 
-                <ItemsControl x:Name="SavedServersList" ItemsSource="{Binding SavedServers}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate>
-                            <Button Command="{Binding #SavedServersList.DataContext.SelectServerCommand}"
-                                    CommandParameter="{Binding}"
-                                    Background="#2f3136"
-                                    Padding="12"
-                                    Margin="0,4"
-                                    CornerRadius="4"
-                                    HorizontalAlignment="Stretch"
-                                    HorizontalContentAlignment="Stretch">
-                                <Grid ColumnDefinitions="Auto,*">
-                                    <Border Background="#5865f2"
-                                            CornerRadius="6"
-                                            Width="40"
-                                            Height="40"
-                                            Margin="0,0,12,0">
-                                        <TextBlock Text="S"
-                                                   Foreground="White"
-                                                   FontSize="16"
-                                                   FontWeight="Bold"
-                                                   HorizontalAlignment="Center"
-                                                   VerticalAlignment="Center"/>
-                                    </Border>
-                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                        <TextBlock Text="{Binding Name}"
-                                                   Foreground="White"
-                                                   FontSize="14"
-                                                   FontWeight="SemiBold"/>
-                                        <TextBlock Text="{Binding Url}"
-                                                   Foreground="#72767d"
-                                                   FontSize="12"/>
-                                    </StackPanel>
-                                </Grid>
-                            </Button>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
-            </StackPanel>
+                        <ItemsControl x:Name="SavedServersList" ItemsSource="{Binding SavedServers}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" Spacing="12" HorizontalAlignment="Center"/>
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate>
+                                    <Button Command="{Binding #SavedServersList.DataContext.SelectServerCommand}"
+                                            CommandParameter="{Binding}"
+                                            Classes="btn-ghost"
+                                            Padding="16,12"
+                                            CornerRadius="14">
+                                        <StackPanel Orientation="Horizontal" Spacing="12">
+                                            <Border CornerRadius="10"
+                                                    Width="40"
+                                                    Height="40">
+                                                <Border.Background>
+                                                    <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                                        <GradientStop Color="#a78bfa" Offset="0"/>
+                                                        <GradientStop Color="#7c3aed" Offset="1"/>
+                                                    </LinearGradientBrush>
+                                                </Border.Background>
+                                                <TextBlock Text="S"
+                                                           Foreground="White"
+                                                           FontSize="16"
+                                                           FontWeight="Bold"
+                                                           HorizontalAlignment="Center"
+                                                           VerticalAlignment="Center"/>
+                                            </Border>
+                                            <StackPanel VerticalAlignment="Center" Spacing="2">
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="#fafafa"
+                                                           FontSize="14"
+                                                           FontWeight="SemiBold"/>
+                                                <TextBlock Text="{Binding Url}"
+                                                           Foreground="#52525b"
+                                                           FontSize="11"
+                                                           MaxWidth="150"
+                                                           TextTrimming="CharacterEllipsis"/>
+                                            </StackPanel>
+                                        </StackPanel>
+                                    </Button>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </Border>
+            </Grid>
         </Grid>
     </Border>
 </UserControl>

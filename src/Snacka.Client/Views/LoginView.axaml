@@ -1,87 +1,191 @@
 <UserControl xmlns="https://github.com/avaloniaui"
              xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
              xmlns:vm="using:Snacka.Client.ViewModels"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
              x:Class="Snacka.Client.Views.LoginView"
              x:DataType="vm:LoginViewModel"
              x:CompileBindings="False">
-    <Border Background="#36393f" Padding="40">
-        <StackPanel HorizontalAlignment="Center"
+
+    <!-- Beautiful gradient background -->
+    <Border>
+        <Border.Background>
+            <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                <GradientStop Color="#09090b" Offset="0"/>
+                <GradientStop Color="#0c1929" Offset="0.5"/>
+                <GradientStop Color="#09090b" Offset="1"/>
+            </LinearGradientBrush>
+        </Border.Background>
+
+        <Grid>
+            <!-- Subtle decorative gradient orbs -->
+            <Ellipse Width="600" Height="600"
+                     HorizontalAlignment="Left"
+                     VerticalAlignment="Top"
+                     Margin="-200,-200,0,0"
+                     Opacity="0.15">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#006FEE" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <Ellipse Width="500" Height="500"
+                     HorizontalAlignment="Right"
+                     VerticalAlignment="Bottom"
+                     Margin="0,0,-150,-150"
+                     Opacity="0.1">
+                <Ellipse.Fill>
+                    <RadialGradientBrush>
+                        <GradientStop Color="#7c3aed" Offset="0"/>
+                        <GradientStop Color="Transparent" Offset="1"/>
+                    </RadialGradientBrush>
+                </Ellipse.Fill>
+            </Ellipse>
+
+            <!-- Main content -->
+            <Border HorizontalAlignment="Center"
                     VerticalAlignment="Center"
-                    Width="400"
-                    Spacing="20">
+                    Background="#E618181b"
+                    CornerRadius="24"
+                    Padding="48,40"
+                    MinWidth="440"
+                    MaxWidth="480"
+                    BoxShadow="0 25 50 -12 #40000000">
 
-            <TextBlock Text="Welcome back!"
-                       FontSize="28"
-                       FontWeight="Bold"
-                       Foreground="White"
-                       HorizontalAlignment="Center"/>
+                <StackPanel Spacing="24">
+                    <!-- Welcome header -->
+                    <StackPanel HorizontalAlignment="Center" Spacing="12">
+                        <Border Width="64" Height="64"
+                                CornerRadius="18"
+                                HorizontalAlignment="Center">
+                            <Border.Background>
+                                <LinearGradientBrush StartPoint="0%,0%" EndPoint="100%,100%">
+                                    <GradientStop Color="#a78bfa" Offset="0"/>
+                                    <GradientStop Color="#7c3aed" Offset="1"/>
+                                </LinearGradientBrush>
+                            </Border.Background>
+                            <ui:SymbolIcon Symbol="Contact"
+                                       Foreground="White"
+                                       FontSize="28"
+                                       HorizontalAlignment="Center"
+                                       VerticalAlignment="Center"/>
+                        </Border>
 
-            <TextBlock Text="We're so excited to see you again!"
-                       FontSize="14"
-                       Foreground="#b9bbbe"
-                       HorizontalAlignment="Center"/>
+                        <StackPanel Spacing="6">
+                            <TextBlock Text="Welcome back!"
+                                       FontSize="26"
+                                       FontWeight="Bold"
+                                       Foreground="#fafafa"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="Sign in to continue to Snacka"
+                                       FontSize="14"
+                                       Foreground="#71717a"
+                                       HorizontalAlignment="Center"/>
+                        </StackPanel>
+                    </StackPanel>
 
-            <StackPanel Spacing="8" Margin="0,20,0,0">
-                <TextBlock Text="EMAIL"
-                           FontSize="12"
-                           FontWeight="Bold"
-                           Foreground="#b9bbbe"/>
-                <TextBox Text="{Binding Email}"
-                         Watermark="Enter your email"
-                         Background="#202225"
-                         Foreground="White"
-                         BorderThickness="0"
-                         CornerRadius="4"
-                         Padding="12"/>
-            </StackPanel>
+                    <!-- Email Input -->
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="EMAIL"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#71717a"/>
+                        <TextBox Text="{Binding Email}"
+                                 Watermark="you@example.com"
+                                 Classes="input-default"/>
+                    </StackPanel>
 
-            <StackPanel Spacing="8">
-                <TextBlock Text="PASSWORD"
-                           FontSize="12"
-                           FontWeight="Bold"
-                           Foreground="#b9bbbe"/>
-                <TextBox Text="{Binding Password}"
-                         PasswordChar="*"
-                         Watermark="Enter your password"
-                         Background="#202225"
-                         Foreground="White"
-                         BorderThickness="0"
-                         CornerRadius="4"
-                         Padding="12"/>
-            </StackPanel>
+                    <!-- Password Input -->
+                    <StackPanel Spacing="10">
+                        <TextBlock Text="PASSWORD"
+                                   FontSize="11"
+                                   FontWeight="SemiBold"
+                                   Foreground="#71717a"/>
+                        <TextBox Text="{Binding Password}"
+                                 PasswordChar="*"
+                                 Watermark="Enter your password"
+                                 Classes="input-default"/>
+                    </StackPanel>
 
-            <TextBlock Text="{Binding ErrorMessage}"
-                       Foreground="#f04747"
-                       FontSize="14"
-                       IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"
-                       TextWrapping="Wrap"/>
+                    <!-- Error Message -->
+                    <Border Background="#1aef4444"
+                            CornerRadius="12"
+                            Padding="16,12"
+                            IsVisible="{Binding ErrorMessage, Converter={x:Static StringConverters.IsNotNullOrEmpty}}">
+                        <StackPanel Orientation="Horizontal" Spacing="10">
+                            <ui:SymbolIcon Symbol="Important"
+                                       Foreground="#ef4444"
+                                       FontSize="16"
+                                       VerticalAlignment="Center"/>
+                            <TextBlock Text="{Binding ErrorMessage}"
+                                       Foreground="#fca5a5"
+                                       FontSize="13"
+                                       TextWrapping="Wrap"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
 
-            <Button Command="{Binding LoginCommand}"
-                    Content="Log In"
-                    Background="#5865f2"
-                    Foreground="White"
-                    HorizontalAlignment="Stretch"
-                    HorizontalContentAlignment="Center"
-                    Padding="12"
-                    CornerRadius="4"
-                    FontWeight="SemiBold"
-                    IsEnabled="{Binding !IsLoading}"/>
+                    <!-- Login Button -->
+                    <Button Classes="btn-primary"
+                            Command="{Binding LoginCommand}"
+                            HorizontalAlignment="Stretch"
+                            HorizontalContentAlignment="Center"
+                            Padding="16,14"
+                            IsEnabled="{Binding !IsLoading}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ui:SymbolIcon Symbol="ChevronRight"
+                                       Foreground="White"
+                                       FontSize="16"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding !IsLoading}"/>
+                            <TextBlock Text="Sign In"
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding !IsLoading}"/>
+                            <TextBlock Text="Signing in..."
+                                       FontSize="15"
+                                       FontWeight="SemiBold"
+                                       VerticalAlignment="Center"
+                                       IsVisible="{Binding IsLoading}"/>
+                        </StackPanel>
+                    </Button>
 
-            <StackPanel Orientation="Horizontal"
-                        HorizontalAlignment="Center"
-                        Spacing="4"
-                        IsVisible="{Binding CanRegister}">
-                <TextBlock Text="Need an account?"
-                           Foreground="#b9bbbe"
-                           FontSize="14"/>
-                <Button Command="{Binding SwitchToRegisterCommand}"
-                        Content="Register"
-                        Background="Transparent"
-                        Foreground="#00aff4"
-                        BorderThickness="0"
-                        Padding="0"
-                        Cursor="Hand"/>
-            </StackPanel>
-        </StackPanel>
+                    <!-- Register Link -->
+                    <Border Background="#18181b"
+                            CornerRadius="12"
+                            Padding="16,14"
+                            IsVisible="{Binding CanRegister}">
+                        <StackPanel Orientation="Horizontal"
+                                    HorizontalAlignment="Center"
+                                    Spacing="6">
+                            <TextBlock Text="Don't have an account?"
+                                       Foreground="#71717a"
+                                       FontSize="14"
+                                       VerticalAlignment="Center"/>
+                            <Button Command="{Binding SwitchToRegisterCommand}"
+                                    Background="Transparent"
+                                    BorderThickness="0"
+                                    Padding="4,0"
+                                    Cursor="Hand">
+                                <TextBlock Text="Create one"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center">
+                                    <TextBlock.Foreground>
+                                        <LinearGradientBrush StartPoint="0%,50%" EndPoint="100%,50%">
+                                            <GradientStop Color="#338ef7" Offset="0"/>
+                                            <GradientStop Color="#006FEE" Offset="1"/>
+                                        </LinearGradientBrush>
+                                    </TextBlock.Foreground>
+                                </TextBlock>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </Border>
+        </Grid>
     </Border>
 </UserControl>
