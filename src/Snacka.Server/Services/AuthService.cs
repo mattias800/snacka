@@ -2,6 +2,7 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.RegularExpressions;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Options;
 using Microsoft.IdentityModel.Tokens;
@@ -11,11 +12,15 @@ using Snacka.Shared.Models;
 
 namespace Snacka.Server.Services;
 
-public sealed class AuthService : IAuthService
+public sealed partial class AuthService : IAuthService
 {
     private readonly SnackaDbContext _db;
     private readonly JwtSettings _jwtSettings;
     private readonly IServerInviteService _inviteService;
+
+    // SECURITY: Password complexity regex - requires uppercase, lowercase, digit, and special character
+    [GeneratedRegex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;':"",./<>?\\`~]).{8,}$")]
+    private static partial Regex PasswordComplexityRegex();
 
     public AuthService(SnackaDbContext db, IOptions<JwtSettings> jwtSettings, IServerInviteService inviteService)
     {
@@ -24,8 +29,29 @@ public sealed class AuthService : IAuthService
         _inviteService = inviteService;
     }
 
+    /// <summary>
+    /// SECURITY: Validates password complexity requirements.
+    /// Throws InvalidOperationException if password doesn't meet requirements.
+    /// </summary>
+    private static void ValidatePasswordComplexity(string password)
+    {
+        if (string.IsNullOrEmpty(password) || password.Length < 8)
+        {
+            throw new InvalidOperationException("Password must be at least 8 characters long.");
+        }
+
+        if (!PasswordComplexityRegex().IsMatch(password))
+        {
+            throw new InvalidOperationException(
+                "Password must contain at least one uppercase letter, one lowercase letter, one digit, and one special character.");
+        }
+    }
+
     public async Task<AuthResponse> RegisterAsync(RegisterRequest request, CancellationToken cancellationToken = default)
     {
+        // SECURITY: Validate password complexity
+        ValidatePasswordComplexity(request.Password);
+
         // Validate invite code
         var invite = await _inviteService.ValidateInviteCodeAsync(request.InviteCode, cancellationToken);
         
@@ -151,6 +177,9 @@ public sealed class AuthService : IAuthService
 
     public async Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default)
     {
+        // SECURITY: Validate password complexity
+        ValidatePasswordComplexity(request.NewPassword);
+
         var user = await _db.Users.FindAsync([userId], cancellationToken);
         if (user is null)
             throw new InvalidOperationException("User not found.");

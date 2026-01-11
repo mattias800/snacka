@@ -183,9 +183,17 @@ public class SnackaHub : Hub
         var userId = GetUserId();
         if (userId is null) return [];
 
-        var onlineUsers = await _db.Users
-            .Where(u => u.IsOnline)
-            .Select(u => new UserPresence(u.Id, u.Username, true))
+        // SECURITY: Only return online users from communities the current user is a member of
+        // This prevents user enumeration across the entire server
+        var userCommunityIds = await _db.UserCommunities
+            .Where(uc => uc.UserId == userId)
+            .Select(uc => uc.CommunityId)
+            .ToListAsync();
+
+        var onlineUsers = await _db.UserCommunities
+            .Where(uc => userCommunityIds.Contains(uc.CommunityId) && uc.User.IsOnline)
+            .Select(uc => new UserPresence(uc.UserId, uc.User.Username, true))
+            .Distinct()
             .ToListAsync();
 
         return onlineUsers;

@@ -207,6 +207,14 @@ builder.Services.AddOpenApi();
 // Add SignalR
 builder.Services.AddSignalR();
 
+// SECURITY: Configure HSTS for production
+builder.Services.AddHsts(options =>
+{
+    options.MaxAge = TimeSpan.FromDays(365);
+    options.IncludeSubDomains = true;
+    options.Preload = true;
+});
+
 // Configure CORS - restrict to configured origins in production
 var allowedOrigins = builder.Configuration.GetSection("AllowedOrigins").Get<string[]>();
 
@@ -295,6 +303,22 @@ if (app.Environment.IsDevelopment())
 {
     app.MapOpenApi();
 }
+else
+{
+    // SECURITY: Enable HSTS in production
+    app.UseHsts();
+}
+
+// SECURITY: Add security headers to all responses
+app.Use(async (context, next) =>
+{
+    context.Response.Headers.Append("X-Content-Type-Options", "nosniff");
+    context.Response.Headers.Append("X-Frame-Options", "DENY");
+    context.Response.Headers.Append("X-XSS-Protection", "1; mode=block");
+    context.Response.Headers.Append("Referrer-Policy", "strict-origin-when-cross-origin");
+    context.Response.Headers.Append("Permissions-Policy", "camera=(), microphone=(self), geolocation=()");
+    await next();
+});
 
 app.UseHttpsRedirection();
 app.UseCors("AllowConfigured");

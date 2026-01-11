@@ -1,4 +1,5 @@
 using System.Net;
+using System.Net.Sockets;
 using System.Text.Json;
 using System.Text.RegularExpressions;
 using Snacka.Shared.Models;
@@ -20,6 +21,21 @@ public partial class LinkPreviewService : ILinkPreviewService
         @"(?:youtube\.com/watch\?v=|youtu\.be/|youtube\.com/embed/)([a-zA-Z0-9_-]{11})",
         RegexOptions.Compiled | RegexOptions.IgnoreCase);
 
+    // SECURITY: Blocked hostnames to prevent SSRF attacks
+    private static readonly HashSet<string> BlockedHosts = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "localhost",
+        "127.0.0.1",
+        "0.0.0.0",
+        "::1",
+        "[::1]",
+        "169.254.169.254",           // AWS/GCP/Azure metadata
+        "metadata.google.internal",   // GCP metadata
+        "metadata.goog",              // GCP metadata alternate
+        "100.100.100.200",            // Alibaba Cloud metadata
+        "192.0.0.192",                // Azure metadata (link-local)
+    };
+
     public LinkPreviewService(HttpClient httpClient, ILogger<LinkPreviewService> logger)
     {
         _httpClient = httpClient;
@@ -31,6 +47,134 @@ public partial class LinkPreviewService : ILinkPreviewService
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36");
         _httpClient.DefaultRequestHeaders.Accept.ParseAdd("text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8");
         _httpClient.DefaultRequestHeaders.AcceptLanguage.ParseAdd("en-US,en;q=0.5");
+    }
+
+    /// <summary>
+    /// SECURITY: Check if a URL is potentially dangerous (SSRF protection).
+    /// Returns true if the URL should be blocked.
+    /// </summary>
+    private async Task<bool> IsBlockedUrlAsync(Uri uri)
+    {
+        // Check hostname against blocklist
+        if (BlockedHosts.Contains(uri.Host))
+        {
+            _logger.LogWarning("SSRF protection: Blocked request to {Host}", uri.Host);
+            return true;
+        }
+
+        // Check if hostname is an IP address and validate it
+        if (IPAddress.TryParse(uri.Host, out var ip))
+        {
+            if (IsPrivateOrReservedIp(ip))
+            {
+                _logger.LogWarning("SSRF protection: Blocked request to private/reserved IP {IP}", ip);
+                return true;
+            }
+        }
+        else
+        {
+            // Resolve hostname to IP addresses and check each one
+            try
+            {
+                var addresses = await Dns.GetHostAddressesAsync(uri.Host);
+                foreach (var address in addresses)
+                {
+                    if (IsPrivateOrReservedIp(address))
+                    {
+                        _logger.LogWarning("SSRF protection: Blocked request to {Host} which resolves to private IP {IP}",
+                            uri.Host, address);
+                        return true;
+                    }
+                }
+            }
+            catch (SocketException)
+            {
+                // DNS resolution failed - could be intentional or network issue
+                // Block to be safe
+                _logger.LogWarning("SSRF protection: Could not resolve {Host}, blocking request", uri.Host);
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// SECURITY: Check if an IP address is private, reserved, or otherwise dangerous.
+    /// </summary>
+    private static bool IsPrivateOrReservedIp(IPAddress ip)
+    {
+        var bytes = ip.GetAddressBytes();
+
+        // IPv4 checks
+        if (ip.AddressFamily == AddressFamily.InterNetwork && bytes.Length == 4)
+        {
+            // 10.0.0.0/8 - Private
+            if (bytes[0] == 10)
+                return true;
+
+            // 172.16.0.0/12 - Private
+            if (bytes[0] == 172 && bytes[1] >= 16 && bytes[1] <= 31)
+                return true;
+
+            // 192.168.0.0/16 - Private
+            if (bytes[0] == 192 && bytes[1] == 168)
+                return true;
+
+            // 127.0.0.0/8 - Loopback
+            if (bytes[0] == 127)
+                return true;
+
+            // 169.254.0.0/16 - Link-local (includes cloud metadata)
+            if (bytes[0] == 169 && bytes[1] == 254)
+                return true;
+
+            // 0.0.0.0/8 - Current network
+            if (bytes[0] == 0)
+                return true;
+
+            // 100.64.0.0/10 - Carrier-grade NAT
+            if (bytes[0] == 100 && bytes[1] >= 64 && bytes[1] <= 127)
+                return true;
+
+            // 192.0.0.0/24 - IETF Protocol Assignments
+            if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 0)
+                return true;
+
+            // 192.0.2.0/24 - TEST-NET-1
+            if (bytes[0] == 192 && bytes[1] == 0 && bytes[2] == 2)
+                return true;
+
+            // 198.51.100.0/24 - TEST-NET-2
+            if (bytes[0] == 198 && bytes[1] == 51 && bytes[2] == 100)
+                return true;
+
+            // 203.0.113.0/24 - TEST-NET-3
+            if (bytes[0] == 203 && bytes[1] == 0 && bytes[2] == 113)
+                return true;
+        }
+
+        // IPv6 checks
+        if (ip.AddressFamily == AddressFamily.InterNetworkV6)
+        {
+            // ::1 - Loopback
+            if (ip.Equals(IPAddress.IPv6Loopback))
+                return true;
+
+            // :: - Unspecified
+            if (ip.Equals(IPAddress.IPv6None))
+                return true;
+
+            // fe80::/10 - Link-local
+            if (bytes.Length >= 2 && bytes[0] == 0xfe && (bytes[1] & 0xc0) == 0x80)
+                return true;
+
+            // fc00::/7 - Unique local addresses
+            if (bytes.Length >= 1 && (bytes[0] & 0xfe) == 0xfc)
+                return true;
+        }
+
+        return false;
     }
 
     public async Task<LinkPreview?> GetLinkPreviewAsync(string url, CancellationToken cancellationToken = default)
@@ -91,6 +235,12 @@ public partial class LinkPreviewService : ILinkPreviewService
 
     private async Task<LinkPreview?> FetchPreviewAsync(Uri uri, CancellationToken cancellationToken)
     {
+        // SECURITY: Check for SSRF attacks before making any request
+        if (await IsBlockedUrlAsync(uri))
+        {
+            return null;
+        }
+
         // Check for YouTube URLs and use oEmbed API
         var youtubeMatch = YouTubeRegex.Match(uri.ToString());
         if (youtubeMatch.Success)

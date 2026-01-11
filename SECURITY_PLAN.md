@@ -198,9 +198,10 @@ builder.Services.AddInMemoryRateLimiting();
 **Risk:** Attacker can scan internal network, access cloud metadata (169.254.169.254), internal services.
 
 **Fix:**
-- [ ] Block private/reserved IP ranges
-- [ ] Block localhost and loopback addresses
-- [ ] Block cloud metadata endpoints
+- [x] Block private/reserved IP ranges (10.x, 172.16-31.x, 192.168.x, etc.)
+- [x] Block localhost and loopback addresses (127.x, ::1)
+- [x] Block cloud metadata endpoints (169.254.169.254, metadata.google.internal, etc.)
+- [x] DNS resolution check to catch hostnames that resolve to private IPs
 
 ```csharp
 private static readonly string[] BlockedHosts =
@@ -279,8 +280,9 @@ public async Task SendWebRtcOffer(Guid targetUserId, string sdp)
 **Risk:** Weak passwords vulnerable to dictionary attacks.
 
 **Fix:**
-- [ ] Add password complexity validation
-- [ ] Require uppercase, lowercase, number, and special character
+- [x] Add password complexity validation with regex
+- [x] Require uppercase, lowercase, number, and special character
+- [x] Applied to both registration and password change
 
 ```csharp
 // AuthService.cs
@@ -348,7 +350,7 @@ public async Task<MessageResponse> SendMessageAsync(...)
 **Risk:** Privacy violation, user enumeration.
 
 **Fix:**
-- [ ] Scope online users to user's communities only
+- [x] Scope online users to user's communities only
 
 ```csharp
 public async Task<IEnumerable<UserPresence>> GetOnlineUsers()
@@ -379,8 +381,8 @@ public async Task<IEnumerable<UserPresence>> GetOnlineUsers()
 **Issue:** Missing HSTS, CSP, X-Frame-Options, X-Content-Type-Options headers.
 
 **Fix:**
-- [ ] Add HSTS configuration
-- [ ] Add security headers middleware
+- [x] Add HSTS configuration (1 year max-age, includeSubDomains, preload)
+- [x] Add security headers middleware (X-Content-Type-Options, X-Frame-Options, X-XSS-Protection, Referrer-Policy, Permissions-Policy)
 
 ```csharp
 // Program.cs
@@ -503,11 +505,11 @@ dotnet user-secrets set "Jwt:SecretKey" "your-dev-secret"
 - [x] #10 - Add message content validation
 
 ### Priority 3 - This Month
-- [ ] #7 - SSRF protection in link preview
-- [ ] #9 - Password complexity requirements
+- [x] #7 - SSRF protection in link preview
+- [x] #9 - Password complexity requirements
 - [ ] #11 - Token refresh improvements
-- [ ] #12 - Scope GetOnlineUsers to communities
-- [ ] #13 - Security headers
+- [x] #12 - Scope GetOnlineUsers to communities
+- [x] #13 - Security headers
 
 ### Priority 4 - Ongoing
 - [ ] #14 - Nickname validation
