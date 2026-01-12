@@ -204,30 +204,32 @@ For even lower latency (~1-5ms), bypass FFmpeg entirely with API-specific captur
 
 #### Architecture: One Tool Per Encoding API
 
+All tools named after the encoding API they use:
+
 ```
 src/
-├── SnackaCapture/                    # macOS (ScreenCaptureKit + VideoToolbox)
-├── SnackaCaptureWindows/             # Windows (Desktop Duplication + NV12 output) - CURRENT
+├── SnackaCaptureVideoToolbox/        # macOS (ScreenCaptureKit + VideoToolbox)
+├── SnackaCaptureNvenc/               # Windows/Linux (NVENC SDK)
+├── SnackaCaptureAmf/                 # Windows (AMD AMF SDK)
+├── SnackaCaptureMediaFoundation/     # Windows (Intel QSV)
+├── SnackaCaptureVaapi/               # Linux (VA-API for Intel/AMD)
+├── SnackaCapturePipeWire/            # Linux (PipeWire + VA-API for Wayland)
 │
-├── SnackaCaptureNvenc/               # Windows/Linux (NVENC SDK) - PLANNED
-├── SnackaCaptureAmf/                 # Windows (AMD AMF SDK) - PLANNED
-├── SnackaCaptureMediaFoundation/     # Windows (Intel QSV fallback) - PLANNED
-│
-├── SnackaCaptureVaapi/               # Linux (VA-API for Intel/AMD) - PLANNED
-└── SnackaCapturePipeWire/            # Linux (PipeWire capture + VA-API) - PLANNED
+└── SnackaCaptureWindows/             # Windows fallback (NV12 output, uses ffmpeg) - CURRENT
 ```
 
 #### Tool Selection at Runtime
 
 ```
-WebRtcService selects tool based on detected GPU:
-├── macOS           → SnackaCapture (VideoToolbox)
-├── Windows NVIDIA  → SnackaCaptureNvenc (NVENC SDK)
-├── Windows AMD     → SnackaCaptureAmf (AMF SDK)
-├── Windows Intel   → SnackaCaptureMediaFoundation (QSV)
-├── Windows fallback→ SnackaCaptureWindows (current, uses ffmpeg)
-├── Linux NVIDIA    → SnackaCaptureNvenc (NVENC SDK)
-├── Linux Intel/AMD → SnackaCaptureVaapi (VA-API)
+WebRtcService selects tool based on platform and detected GPU:
+├── macOS           → SnackaCaptureVideoToolbox
+├── Windows NVIDIA  → SnackaCaptureNvenc
+├── Windows AMD     → SnackaCaptureAmf
+├── Windows Intel   → SnackaCaptureMediaFoundation
+├── Windows fallback→ SnackaCaptureWindows (NV12 + ffmpeg)
+├── Linux NVIDIA    → SnackaCaptureNvenc
+├── Linux Intel/AMD → SnackaCaptureVaapi
+├── Linux Wayland   → SnackaCapturePipeWire
 └── Linux fallback  → ffmpeg x11grab
 ```
 
@@ -235,12 +237,14 @@ WebRtcService selects tool based on detected GPU:
 
 | Tool | Platform | Effort | Latency Gain |
 |------|----------|--------|--------------|
-| SnackaCapture + VideoToolbox | macOS | 1-2 days | ~10-15ms |
+| SnackaCaptureVideoToolbox | macOS | 1-2 days | ~10-15ms |
 | SnackaCaptureNvenc | Windows/Linux | 3-4 days | ~10-15ms |
 | SnackaCaptureAmf | Windows | 2-3 days | ~10-15ms |
 | SnackaCaptureMediaFoundation | Windows | 2-3 days | ~10-15ms |
 | SnackaCaptureVaapi | Linux | 3-4 days | ~10-15ms |
 | SnackaCapturePipeWire | Linux | 1-2 weeks | Native Wayland |
+
+Note: Current `SnackaCapture` folder will be renamed to `SnackaCaptureVideoToolbox`.
 
 #### Benefits of Separate Tools
 
@@ -343,12 +347,13 @@ Compare to current: ~150-200ms (not playable for fast games)
 
 ```
 src/
-├── SnackaCapture/              # macOS (Swift) ✅
-│   ├── Package.swift           # ScreenCaptureKit + VideoToolbox (direct H.264 planned)
+├── SnackaCaptureVideoToolbox/  # macOS (Swift) ✅ (currently named SnackaCapture, to be renamed)
+│   ├── Package.swift           # ScreenCaptureKit + VideoToolbox
 │   └── Sources/
-│       └── SnackaCapture/
+│       └── SnackaCaptureVideoToolbox/
 │           ├── SnackaCaptureApp.swift
 │           ├── ScreenCapturer.swift
+│           ├── VideoToolboxEncoder.swift  # PLANNED - direct H.264 encoding
 │           ├── SourceLister.swift
 │           └── Models.swift
 │
@@ -389,7 +394,7 @@ src/
 │   └── src/
 │       └── ...
 │
-├── SnackaCapturePipeWire/      # Linux native (C/Rust) - PLANNED
+├── SnackaCapturePipeWire/      # Linux Wayland (C/Rust) - PLANNED
 │   └── ...                     # PipeWire capture + VA-API encoding
 │
 └── Snacka.Client/
