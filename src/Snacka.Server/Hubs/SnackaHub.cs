@@ -48,28 +48,37 @@ public class SnackaHub : Hub
             UserConnections[userId.Value] = Context.ConnectionId;
         }
 
-        var user = await _db.Users.FindAsync(userId.Value);
-        if (user is not null)
+        try
         {
-            user.IsOnline = true;
-            user.UpdatedAt = DateTime.UtcNow;
-            await _db.SaveChangesAsync();
-
-            // Notify all clients about user coming online
-            await Clients.Others.SendAsync("UserOnline", new UserPresence(user.Id, user.Username, true));
-
-            // Add user to their community groups
-            var communityIds = await _db.UserCommunities
-                .Where(uc => uc.UserId == userId.Value)
-                .Select(uc => uc.CommunityId)
-                .ToListAsync();
-
-            foreach (var communityId in communityIds)
+            var user = await _db.Users.FindAsync(userId.Value);
+            if (user is not null)
             {
-                await Groups.AddToGroupAsync(Context.ConnectionId, $"community:{communityId}");
-            }
+                user.IsOnline = true;
+                user.UpdatedAt = DateTime.UtcNow;
+                await _db.SaveChangesAsync();
 
-            _logger.LogInformation("User {Username} connected", user.Username);
+                // Notify all clients about user coming online
+                await Clients.Others.SendAsync("UserOnline", new UserPresence(user.Id, user.Username, true));
+
+                // Add user to their community groups
+                var communityIds = await _db.UserCommunities
+                    .Where(uc => uc.UserId == userId.Value)
+                    .Select(uc => uc.CommunityId)
+                    .ToListAsync();
+
+                foreach (var communityId in communityIds)
+                {
+                    await Groups.AddToGroupAsync(Context.ConnectionId, $"community:{communityId}");
+                }
+
+                _logger.LogInformation("User {Username} connected", user.Username);
+            }
+        }
+        catch (Exception ex)
+        {
+            _logger.LogWarning(ex, "Failed to update user online status during connect for user {UserId}", userId.Value);
+            // Continue with connection - user is authenticated but status update failed
+            // They can still use the app, status will be wrong until next reconnect
         }
 
         await base.OnConnectedAsync();
@@ -94,36 +103,84 @@ public class SnackaHub : Hub
 
         if (userId is not null)
         {
-            // Leave any voice channels on disconnect
-            var currentChannel = await _voiceService.GetUserCurrentChannelAsync(userId.Value);
-            if (currentChannel.HasValue)
+            // Leave any voice channels on disconnect - wrap in try-catch for DB resilience
+            try
             {
-                // Get the channel to find its community
-                var channel = await _db.Channels
-                    .FirstOrDefaultAsync(c => c.Id == currentChannel.Value);
-
-                // Remove SFU session
-                _sfuService.RemoveSession(currentChannel.Value, userId.Value);
-
-                await _voiceService.LeaveChannelAsync(currentChannel.Value, userId.Value);
-
-                // Notify ALL users in the community
-                if (channel is not null)
+                var currentChannel = await _voiceService.GetUserCurrentChannelAsync(userId.Value);
+                if (currentChannel.HasValue)
                 {
-                    await Clients.Group($"community:{channel.CommunityId}")
-                        .SendAsync("VoiceParticipantLeft", new VoiceParticipantLeftEvent(currentChannel.Value, userId.Value));
+                    // Remove SFU session first (in-memory, won't fail)
+                    _sfuService.RemoveSession(currentChannel.Value, userId.Value);
+
+                    // Get the channel to find its community
+                    Guid? communityId = null;
+                    try
+                    {
+                        var channel = await _db.Channels
+                            .FirstOrDefaultAsync(c => c.Id == currentChannel.Value);
+                        communityId = channel?.CommunityId;
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to get channel info during disconnect for user {UserId}", userId.Value);
+                    }
+
+                    try
+                    {
+                        await _voiceService.LeaveChannelAsync(currentChannel.Value, userId.Value);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to leave voice channel during disconnect for user {UserId}", userId.Value);
+                    }
+
+                    // Notify users in the community (best effort)
+                    if (communityId.HasValue)
+                    {
+                        try
+                        {
+                            await Clients.Group($"community:{communityId.Value}")
+                                .SendAsync("VoiceParticipantLeft", new VoiceParticipantLeftEvent(currentChannel.Value, userId.Value));
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to notify voice participant left for user {UserId}", userId.Value);
+                        }
+                    }
                 }
             }
-
-            var user = await _db.Users.FindAsync(userId.Value);
-            if (user is not null)
+            catch (Exception ex)
             {
-                user.IsOnline = false;
-                user.UpdatedAt = DateTime.UtcNow;
-                await _db.SaveChangesAsync();
+                _logger.LogWarning(ex, "Failed to get current voice channel during disconnect for user {UserId}", userId.Value);
+                // Continue with disconnect handling even if voice cleanup fails
+            }
 
-                await Clients.Others.SendAsync("UserOffline", new UserPresence(user.Id, user.Username, false));
-                _logger.LogInformation("User {Username} disconnected", user.Username);
+            // Update user online status - wrap in try-catch for DB resilience
+            try
+            {
+                var user = await _db.Users.FindAsync(userId.Value);
+                if (user is not null)
+                {
+                    user.IsOnline = false;
+                    user.UpdatedAt = DateTime.UtcNow;
+                    await _db.SaveChangesAsync();
+
+                    await Clients.Others.SendAsync("UserOffline", new UserPresence(user.Id, user.Username, false));
+                    _logger.LogInformation("User {Username} disconnected", user.Username);
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to update user offline status for user {UserId}", userId.Value);
+                // Still try to notify clients even if DB update failed
+                try
+                {
+                    await Clients.Others.SendAsync("UserOffline", new UserPresence(userId.Value, "Unknown", false));
+                }
+                catch
+                {
+                    // Ignore notification failures
+                }
             }
         }
 
