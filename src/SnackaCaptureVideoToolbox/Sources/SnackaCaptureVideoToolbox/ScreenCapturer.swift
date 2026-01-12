@@ -3,6 +3,7 @@ import ScreenCaptureKit
 import CoreMedia
 import CoreVideo
 import AVFoundation
+import VideoToolbox
 
 /// Main screen capture class using ScreenCaptureKit
 class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
@@ -16,9 +17,13 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
     private let videoOutput = FileHandle.standardOutput
     private let audioOutput = FileHandle.standardError
 
+    // H.264 encoder (only used when config.encodeH264 is true)
+    private var encoder: VideoToolboxEncoder?
+
     // Frame timing
     private var frameCount: UInt64 = 0
     private var audioSampleCount: UInt64 = 0
+    private var encodedFrameCount: UInt64 = 0
 
     // Audio format info (detected from first audio frame)
     private var audioSampleRate: UInt32 = 48000
@@ -47,13 +52,13 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             // Try to find by bundle identifier first, then by application name
             if let appToExclude = content.applications.first(where: { $0.bundleIdentifier == excludeAppId }) {
                 excludedApps.append(appToExclude)
-                fputs("SnackaCapture: Will exclude audio from '\(appToExclude.applicationName)' (bundle: \(excludeAppId))\n", stderr)
+                fputs("SnackaCaptureVideoToolbox: Will exclude audio from '\(appToExclude.applicationName)' (bundle: \(excludeAppId))\n", stderr)
             } else if let appToExclude = content.applications.first(where: { $0.applicationName == excludeAppId }) {
                 excludedApps.append(appToExclude)
-                fputs("SnackaCapture: Will exclude audio from '\(appToExclude.applicationName)' (by name)\n", stderr)
+                fputs("SnackaCaptureVideoToolbox: Will exclude audio from '\(appToExclude.applicationName)' (by name)\n", stderr)
             } else {
-                fputs("SnackaCapture: WARNING - Could not find app to exclude: '\(excludeAppId)'\n", stderr)
-                fputs("SnackaCapture: Available apps: \(content.applications.map { "\($0.applicationName) (\($0.bundleIdentifier))" }.joined(separator: ", "))\n", stderr)
+                fputs("SnackaCaptureVideoToolbox: WARNING - Could not find app to exclude: '\(excludeAppId)'\n", stderr)
+                fputs("SnackaCaptureVideoToolbox: Available apps: \(content.applications.map { "\($0.applicationName) (\($0.bundleIdentifier))" }.joined(separator: ", "))\n", stderr)
             }
         }
 
@@ -70,7 +75,7 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             } else {
                 filter = SCContentFilter(display: display, excludingApplications: excludedApps, exceptingWindows: [])
             }
-            fputs("SnackaCapture: Capturing display \(index) (\(display.width)x\(display.height))\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: Capturing display \(index) (\(display.width)x\(display.height))\n", stderr)
 
         case .window(let id):
             guard let window = content.windows.first(where: { $0.windowID == CGWindowID(id) }) else {
@@ -78,7 +83,7 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             }
             // Note: Window capture doesn't support excludingApplications - audio comes from the window's app only
             filter = SCContentFilter(desktopIndependentWindow: window)
-            fputs("SnackaCapture: Capturing window '\(window.title ?? "Unknown")'\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: Capturing window '\(window.title ?? "Unknown")'\n", stderr)
 
         case .application(let bundleId):
             guard let app = content.applications.first(where: { $0.bundleIdentifier == bundleId }) else {
@@ -90,7 +95,7 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             // Capture all windows of this application (audio comes only from this app)
             let appWindows = content.windows.filter { $0.owningApplication?.bundleIdentifier == bundleId }
             filter = SCContentFilter(display: display, including: [app], exceptingWindows: [])
-            fputs("SnackaCapture: Capturing application '\(app.applicationName)' (\(appWindows.count) windows)\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: Capturing application '\(app.applicationName)' (\(appWindows.count) windows)\n", stderr)
         }
 
         // Configure stream
@@ -103,7 +108,7 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
         // Use NV12 (YUV 4:2:0) - native format for H264 encoding, no conversion needed
         streamConfig.pixelFormat = kCVPixelFormatType_420YpCbCr8BiPlanarVideoRange
         streamConfig.showsCursor = true
-        fputs("SnackaCapture: Using NV12 pixel format (hardware-accelerated path)\n", stderr)
+        fputs("SnackaCaptureVideoToolbox: Using NV12 pixel format (hardware-accelerated path)\n", stderr)
 
         // Audio settings
         if config.captureAudio {
@@ -111,7 +116,16 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             streamConfig.excludesCurrentProcessAudio = config.excludeCurrentProcessAudio
             streamConfig.sampleRate = 48000
             streamConfig.channelCount = 2
-            fputs("SnackaCapture: Audio capture enabled (48kHz stereo)\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: Audio capture enabled (48kHz stereo)\n", stderr)
+        }
+
+        // Initialize H.264 encoder if requested
+        if config.encodeH264 {
+            encoder = VideoToolboxEncoder(width: config.width, height: config.height, fps: config.fps, bitrateMbps: config.bitrateMbps)
+            try encoder?.start { [weak self] nalData, isKeyframe in
+                self?.handleEncodedFrame(nalData: nalData, isKeyframe: isKeyframe)
+            }
+            fputs("SnackaCaptureVideoToolbox: H.264 encoder initialized\n", stderr)
         }
 
         // Create and start stream
@@ -124,7 +138,7 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
 
         try await stream?.startCapture()
         isRunning = true
-        fputs("SnackaCapture: Capture started\n", stderr)
+        fputs("SnackaCaptureVideoToolbox: Capture started\n", stderr)
 
         // Handle termination signals
         setupSignalHandlers()
@@ -137,7 +151,14 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
         try? await stream?.stopCapture()
         stream = nil
 
-        fputs("SnackaCapture: Capture stopped (frames: \(frameCount), audio samples: \(audioSampleCount))\n", stderr)
+        // Stop encoder if running
+        encoder?.stop()
+        encoder = nil
+
+        let statsMsg = config.encodeH264
+            ? "frames: \(frameCount), encoded: \(encodedFrameCount), audio samples: \(audioSampleCount)"
+            : "frames: \(frameCount), audio samples: \(audioSampleCount)"
+        fputs("SnackaCaptureVideoToolbox: Capture stopped (\(statsMsg))\n", stderr)
         runContinuation?.resume()
     }
 
@@ -150,7 +171,7 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
     // MARK: - SCStreamDelegate
 
     func stream(_ stream: SCStream, didStopWithError error: Error) {
-        fputs("SnackaCapture: Stream stopped with error: \(error.localizedDescription)\n", stderr)
+        fputs("SnackaCaptureVideoToolbox: Stream stopped with error: \(error.localizedDescription)\n", stderr)
         Task {
             await stop()
         }
@@ -177,7 +198,26 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
     private func handleVideoFrame(_ sampleBuffer: CMSampleBuffer) {
         guard let pixelBuffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
 
-        // Lock the pixel buffer
+        frameCount += 1
+
+        // If encoding is enabled, pass the pixel buffer directly to the encoder
+        if config.encodeH264, let encoder = encoder {
+            let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
+            let duration = CMSampleBufferGetDuration(sampleBuffer)
+            do {
+                try encoder.encode(pixelBuffer: pixelBuffer, presentationTime: pts, duration: duration)
+                if frameCount <= 5 || frameCount % 100 == 0 {
+                    let width = CVPixelBufferGetWidth(pixelBuffer)
+                    let height = CVPixelBufferGetHeight(pixelBuffer)
+                    fputs("SnackaCaptureVideoToolbox: Video frame \(frameCount) (\(width)x\(height) -> encoder)\n", stderr)
+                }
+            } catch {
+                fputs("SnackaCaptureVideoToolbox: Error encoding frame: \(error)\n", stderr)
+            }
+            return
+        }
+
+        // Raw NV12 output path (no encoding)
         CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
         defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
 
@@ -187,7 +227,7 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
         // NV12 is bi-planar: Y plane (full res) + UV plane (half res interleaved)
         // Total size: width * height * 1.5 bytes
         guard CVPixelBufferGetPlaneCount(pixelBuffer) == 2 else {
-            fputs("SnackaCapture: Unexpected plane count: \(CVPixelBufferGetPlaneCount(pixelBuffer))\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: Unexpected plane count: \(CVPixelBufferGetPlaneCount(pixelBuffer))\n", stderr)
             return
         }
 
@@ -231,12 +271,27 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
         // Write NV12 data to stdout - no conversion, just pass through
         do {
             try videoOutput.write(contentsOf: nv12Data)
-            frameCount += 1
             if frameCount <= 5 || frameCount % 100 == 0 {
-                fputs("SnackaCapture: Video frame \(frameCount) (\(width)x\(height) NV12, \(totalSize) bytes)\n", stderr)
+                fputs("SnackaCaptureVideoToolbox: Video frame \(frameCount) (\(width)x\(height) NV12, \(totalSize) bytes)\n", stderr)
             }
         } catch {
-            fputs("SnackaCapture: Error writing video frame: \(error)\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: Error writing video frame: \(error)\n", stderr)
+        }
+    }
+
+    /// Handles encoded H.264 NAL units from the VideoToolbox encoder.
+    private func handleEncodedFrame(nalData: Data, isKeyframe: Bool) {
+        guard isRunning else { return }
+
+        do {
+            try videoOutput.write(contentsOf: nalData)
+            encodedFrameCount += 1
+            if encodedFrameCount <= 5 || encodedFrameCount % 100 == 0 {
+                let keyframeStr = isKeyframe ? " (keyframe)" : ""
+                fputs("SnackaCaptureVideoToolbox: Encoded frame \(encodedFrameCount), \(nalData.count) bytes\(keyframeStr)\n", stderr)
+            }
+        } catch {
+            fputs("SnackaCaptureVideoToolbox: Error writing encoded frame: \(error)\n", stderr)
         }
     }
 
@@ -290,10 +345,10 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             try audioOutput.write(contentsOf: normalizedData)
             audioSampleCount += UInt64(outputFrameCount)
             if audioSampleCount <= 1000 || audioSampleCount % 48000 == 0 {
-                fputs("SnackaCapture: Audio samples: \(audioSampleCount)\n", stderr)
+                fputs("SnackaCaptureVideoToolbox: Audio samples: \(audioSampleCount)\n", stderr)
             }
         } catch {
-            fputs("SnackaCapture: Error writing audio: \(error)\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: Error writing audio: \(error)\n", stderr)
         }
     }
 
@@ -448,12 +503,12 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
         }
 
         // Also log to stderr for backwards compatibility
-        fputs("SnackaCapture: Audio format detected - \(audioSampleRate)Hz, \(audioBitsPerSample)-bit, \(audioChannels) ch, \(isFloat ? "float" : "int"), \(audioBytesPerSample) bytes/frame\n", stderr)
+        fputs("SnackaCaptureVideoToolbox: Audio format detected - \(audioSampleRate)Hz, \(audioBitsPerSample)-bit, \(audioChannels) ch, \(isFloat ? "float" : "int"), \(audioBytesPerSample) bytes/frame\n", stderr)
 
         // Warn if ScreenCaptureKit didn't honor our sample rate request
         if audioSampleRate != 48000 {
             writeLog("WARNING: Requested 48000Hz but got \(audioSampleRate)Hz - will resample")
-            fputs("SnackaCapture: WARNING - Requested 48000Hz but got \(audioSampleRate)Hz. Audio will be resampled.\n", stderr)
+            fputs("SnackaCaptureVideoToolbox: WARNING - Requested 48000Hz but got \(audioSampleRate)Hz. Audio will be resampled.\n", stderr)
         }
     }
 
@@ -478,11 +533,11 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
 
     private func setupSignalHandlers() {
         signal(SIGINT) { _ in
-            fputs("\nSnackaCapture: Received SIGINT\n", stderr)
+            fputs("\nSnackaCaptureVideoToolbox: Received SIGINT\n", stderr)
             exit(0)
         }
         signal(SIGTERM) { _ in
-            fputs("\nSnackaCapture: Received SIGTERM\n", stderr)
+            fputs("\nSnackaCaptureVideoToolbox: Received SIGTERM\n", stderr)
             exit(0)
         }
     }

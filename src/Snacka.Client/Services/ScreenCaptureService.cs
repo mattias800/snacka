@@ -6,29 +6,29 @@ using System.Text.RegularExpressions;
 
 namespace Snacka.Client.Services;
 
-#region SnackaCapture JSON Models
+#region SnackaCaptureVideoToolbox JSON Models
 
-internal record SnackaCaptureSourceList(
-    [property: JsonPropertyName("displays")] List<SnackaCaptureDisplay> Displays,
-    [property: JsonPropertyName("windows")] List<SnackaCaptureWindow> Windows,
-    [property: JsonPropertyName("applications")] List<SnackaCaptureApplication> Applications
+internal record SnackaCaptureVideoToolboxSourceList(
+    [property: JsonPropertyName("displays")] List<SnackaCaptureVideoToolboxDisplay> Displays,
+    [property: JsonPropertyName("windows")] List<SnackaCaptureVideoToolboxWindow> Windows,
+    [property: JsonPropertyName("applications")] List<SnackaCaptureVideoToolboxApplication> Applications
 );
 
-internal record SnackaCaptureDisplay(
+internal record SnackaCaptureVideoToolboxDisplay(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("width")] int Width,
     [property: JsonPropertyName("height")] int Height
 );
 
-internal record SnackaCaptureWindow(
+internal record SnackaCaptureVideoToolboxWindow(
     [property: JsonPropertyName("id")] string Id,
     [property: JsonPropertyName("name")] string Name,
     [property: JsonPropertyName("appName")] string AppName,
     [property: JsonPropertyName("bundleId")] string? BundleId
 );
 
-internal record SnackaCaptureApplication(
+internal record SnackaCaptureVideoToolboxApplication(
     [property: JsonPropertyName("bundleId")] string BundleId,
     [property: JsonPropertyName("name")] string Name
 );
@@ -37,23 +37,23 @@ internal record SnackaCaptureApplication(
 
 /// <summary>
 /// Cross-platform service for enumerating screen capture sources (displays, windows, and applications).
-/// - macOS: Displays, windows, and applications via SnackaCapture (ScreenCaptureKit)
+/// - macOS: Displays, windows, and applications via SnackaCaptureVideoToolbox (ScreenCaptureKit)
 /// - Windows: Displays and windows via SnackaCaptureWindows (Desktop Duplication API)
 /// - Linux: Displays and windows
 /// </summary>
 public class ScreenCaptureService : IScreenCaptureService
 {
-    private SnackaCaptureSourceList? _cachedMacOSSources;
+    private SnackaCaptureVideoToolboxSourceList? _cachedMacOSSources;
     private bool _macOSSourcesCacheAttempted;
-    private string? _snackaCapturePath;
+    private string? _snackaCaptureVideoToolboxPath;
 
     // Windows-specific
-    private SnackaCaptureSourceList? _cachedWindowsSources;
+    private SnackaCaptureVideoToolboxSourceList? _cachedWindowsSources;
     private bool _windowsSourcesCacheAttempted;
     private string? _snackaCaptureWindowsPath;
 
     /// <summary>
-    /// Ensures we've attempted to load macOS sources via SnackaCapture.
+    /// Ensures we've attempted to load macOS sources via SnackaCaptureVideoToolbox.
     /// Call this before checking _cachedMacOSSources.
     /// </summary>
     private void EnsureMacOSSourcesCached()
@@ -66,7 +66,7 @@ public class ScreenCaptureService : IScreenCaptureService
     }
     public IReadOnlyList<ScreenCaptureSource> GetAvailableSources()
     {
-        // On macOS, try to get all sources at once via SnackaCapture
+        // On macOS, try to get all sources at once via SnackaCaptureVideoToolbox
         if (OperatingSystem.IsMacOS())
         {
             RefreshMacOSSources();
@@ -140,32 +140,32 @@ public class ScreenCaptureService : IScreenCaptureService
     #region macOS Implementation
 
     /// <summary>
-    /// Gets the path to SnackaCapture binary if available.
+    /// Gets the path to SnackaCaptureVideoToolbox binary if available.
     /// </summary>
-    private string? GetSnackaCapturePath()
+    private string? GetSnackaCaptureVideoToolboxPath()
     {
-        if (_snackaCapturePath != null)
-            return _snackaCapturePath;
+        if (_snackaCaptureVideoToolboxPath != null)
+            return _snackaCaptureVideoToolboxPath;
 
         var appDir = AppDomain.CurrentDomain.BaseDirectory;
 
         var searchPaths = new[]
         {
             // Bundled with app
-            Path.Combine(appDir, "SnackaCapture"),
+            Path.Combine(appDir, "SnackaCaptureVideoToolbox"),
             // Swift 6+ architecture-specific build paths (arm64-apple-macosx)
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "arm64-apple-macosx", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "arm64-apple-macosx", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "arm64-apple-macosx", "debug", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "arm64-apple-macosx", "debug", "SnackaCapture"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "debug", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "debug", "SnackaCaptureVideoToolbox"),
             // Legacy Swift build paths (fallback)
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "debug", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "debug", "SnackaCapture"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "debug", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "debug", "SnackaCaptureVideoToolbox"),
         };
 
-        Console.WriteLine($"ScreenCaptureService: Looking for SnackaCapture, appDir={appDir}");
+        Console.WriteLine($"ScreenCaptureService: Looking for SnackaCaptureVideoToolbox, appDir={appDir}");
         foreach (var path in searchPaths)
         {
             var fullPath = Path.GetFullPath(path);
@@ -173,30 +173,30 @@ public class ScreenCaptureService : IScreenCaptureService
             Console.WriteLine($"ScreenCaptureService:   Checking {fullPath} -> {(exists ? "FOUND" : "not found")}");
             if (exists)
             {
-                Console.WriteLine($"ScreenCaptureService: Using SnackaCapture at {fullPath}");
-                _snackaCapturePath = fullPath;
+                Console.WriteLine($"ScreenCaptureService: Using SnackaCaptureVideoToolbox at {fullPath}");
+                _snackaCaptureVideoToolboxPath = fullPath;
                 return fullPath;
             }
         }
 
-        Console.WriteLine("ScreenCaptureService: SnackaCapture not found in any search path!");
+        Console.WriteLine("ScreenCaptureService: SnackaCaptureVideoToolbox not found in any search path!");
         return null;
     }
 
     /// <summary>
-    /// Refreshes the cached macOS sources by running SnackaCapture list --json.
+    /// Refreshes the cached macOS sources by running SnackaCaptureVideoToolbox list --json.
     /// </summary>
     private void RefreshMacOSSources()
     {
         Console.WriteLine("ScreenCaptureService: RefreshMacOSSources() called");
-        var snackaPath = GetSnackaCapturePath();
+        var snackaPath = GetSnackaCaptureVideoToolboxPath();
         if (snackaPath == null)
         {
-            Console.WriteLine("ScreenCaptureService: SnackaCapture not found, cannot enumerate windows/apps");
+            Console.WriteLine("ScreenCaptureService: SnackaCaptureVideoToolbox not found, cannot enumerate windows/apps");
             _cachedMacOSSources = null;
             return;
         }
-        Console.WriteLine($"ScreenCaptureService: Using SnackaCapture at: {snackaPath}");
+        Console.WriteLine($"ScreenCaptureService: Using SnackaCaptureVideoToolbox at: {snackaPath}");
 
         try
         {
@@ -223,34 +223,34 @@ public class ScreenCaptureService : IScreenCaptureService
 
             if (!string.IsNullOrEmpty(stderr))
             {
-                Console.WriteLine($"ScreenCaptureService: SnackaCapture stderr: {stderr}");
+                Console.WriteLine($"ScreenCaptureService: SnackaCaptureVideoToolbox stderr: {stderr}");
             }
 
             if (process.ExitCode != 0)
             {
-                Console.WriteLine($"ScreenCaptureService: SnackaCapture exited with code {process.ExitCode}");
+                Console.WriteLine($"ScreenCaptureService: SnackaCaptureVideoToolbox exited with code {process.ExitCode}");
                 _cachedMacOSSources = null;
                 return;
             }
 
-            _cachedMacOSSources = JsonSerializer.Deserialize<SnackaCaptureSourceList>(output);
-            Console.WriteLine($"ScreenCaptureService: SnackaCapture found {_cachedMacOSSources?.Displays.Count ?? 0} displays, " +
+            _cachedMacOSSources = JsonSerializer.Deserialize<SnackaCaptureVideoToolboxSourceList>(output);
+            Console.WriteLine($"ScreenCaptureService: SnackaCaptureVideoToolbox found {_cachedMacOSSources?.Displays.Count ?? 0} displays, " +
                               $"{_cachedMacOSSources?.Windows.Count ?? 0} windows, " +
                               $"{_cachedMacOSSources?.Applications.Count ?? 0} applications");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"ScreenCaptureService: Failed to get sources via SnackaCapture - {ex.Message}");
+            Console.WriteLine($"ScreenCaptureService: Failed to get sources via SnackaCaptureVideoToolbox - {ex.Message}");
             _cachedMacOSSources = null;
         }
     }
 
     private IReadOnlyList<ScreenCaptureSource> GetDisplaysMacOS()
     {
-        // Ensure we've tried to load sources via SnackaCapture
+        // Ensure we've tried to load sources via SnackaCaptureVideoToolbox
         EnsureMacOSSourcesCached();
 
-        // Try to use SnackaCapture if available
+        // Try to use SnackaCaptureVideoToolbox if available
         if (_cachedMacOSSources != null)
         {
             var displays = _cachedMacOSSources.Displays.Select(d =>
@@ -263,7 +263,7 @@ public class ScreenCaptureService : IScreenCaptureService
             foreach (var d in displays)
                 Console.WriteLine($"  - {d.Name}");
 
-            Console.WriteLine($"ScreenCaptureService: Found {displays.Count} displays via SnackaCapture (macOS)");
+            Console.WriteLine($"ScreenCaptureService: Found {displays.Count} displays via SnackaCaptureVideoToolbox (macOS)");
             return displays;
         }
 
@@ -273,10 +273,10 @@ public class ScreenCaptureService : IScreenCaptureService
 
     private IReadOnlyList<ScreenCaptureSource> GetWindowsMacOS()
     {
-        // Ensure we've tried to load sources via SnackaCapture
+        // Ensure we've tried to load sources via SnackaCaptureVideoToolbox
         EnsureMacOSSourcesCached();
 
-        // Use SnackaCapture if available
+        // Use SnackaCaptureVideoToolbox if available
         if (_cachedMacOSSources != null)
         {
             var windows = _cachedMacOSSources.Windows.Select(w =>
@@ -298,21 +298,21 @@ public class ScreenCaptureService : IScreenCaptureService
                 );
             }).ToList();
 
-            Console.WriteLine($"ScreenCaptureService: Found {windows.Count} windows via SnackaCapture (macOS)");
+            Console.WriteLine($"ScreenCaptureService: Found {windows.Count} windows via SnackaCaptureVideoToolbox (macOS)");
             return windows;
         }
 
-        // Window enumeration without SnackaCapture is not supported on macOS
-        Console.WriteLine("ScreenCaptureService: Window enumeration requires SnackaCapture on macOS");
+        // Window enumeration without SnackaCaptureVideoToolbox is not supported on macOS
+        Console.WriteLine("ScreenCaptureService: Window enumeration requires SnackaCaptureVideoToolbox on macOS");
         return Array.Empty<ScreenCaptureSource>();
     }
 
     private IReadOnlyList<ScreenCaptureSource> GetApplicationsMacOS()
     {
-        // Ensure we've tried to load sources via SnackaCapture
+        // Ensure we've tried to load sources via SnackaCaptureVideoToolbox
         EnsureMacOSSourcesCached();
 
-        // Use SnackaCapture if available
+        // Use SnackaCaptureVideoToolbox if available
         if (_cachedMacOSSources != null)
         {
             var apps = _cachedMacOSSources.Applications
@@ -327,12 +327,12 @@ public class ScreenCaptureService : IScreenCaptureService
                 .OrderBy(a => a.Name)
                 .ToList();
 
-            Console.WriteLine($"ScreenCaptureService: Found {apps.Count} applications via SnackaCapture (macOS)");
+            Console.WriteLine($"ScreenCaptureService: Found {apps.Count} applications via SnackaCaptureVideoToolbox (macOS)");
             return apps;
         }
 
-        // Application enumeration without SnackaCapture is not supported
-        Console.WriteLine("ScreenCaptureService: Application enumeration requires SnackaCapture on macOS");
+        // Application enumeration without SnackaCaptureVideoToolbox is not supported
+        Console.WriteLine("ScreenCaptureService: Application enumeration requires SnackaCaptureVideoToolbox on macOS");
         return Array.Empty<ScreenCaptureSource>();
     }
 
@@ -527,7 +527,7 @@ for (i, display) in displays.enumerated() {
                 return;
             }
 
-            _cachedWindowsSources = JsonSerializer.Deserialize<SnackaCaptureSourceList>(output);
+            _cachedWindowsSources = JsonSerializer.Deserialize<SnackaCaptureVideoToolboxSourceList>(output);
             Console.WriteLine($"ScreenCaptureService: SnackaCaptureWindows found {_cachedWindowsSources?.Displays.Count ?? 0} displays, " +
                               $"{_cachedWindowsSources?.Windows.Count ?? 0} windows");
         }

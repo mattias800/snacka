@@ -43,6 +43,22 @@ struct CaptureConfig {
     let captureAudio: Bool
     let excludeCurrentProcessAudio: Bool
     let excludeAppBundleId: String?  // Bundle ID of app to exclude from audio capture
+    let encodeH264: Bool             // If true, output H.264 NAL units instead of raw NV12
+    let bitrateMbps: Int             // Encoding bitrate in Mbps (only used when encodeH264=true)
+
+    init(source: CaptureSourceType, width: Int, height: Int, fps: Int, captureAudio: Bool,
+         excludeCurrentProcessAudio: Bool, excludeAppBundleId: String?,
+         encodeH264: Bool = false, bitrateMbps: Int = 6) {
+        self.source = source
+        self.width = width
+        self.height = height
+        self.fps = fps
+        self.captureAudio = captureAudio
+        self.excludeCurrentProcessAudio = excludeCurrentProcessAudio
+        self.excludeAppBundleId = excludeAppBundleId
+        self.encodeH264 = encodeH264
+        self.bitrateMbps = bitrateMbps
+    }
 }
 
 // MARK: - Output Protocol

@@ -179,21 +179,22 @@ public class WebRtcService : IWebRtcService
     private FfmpegProcessEncoder? _screenEncoder;
     private CancellationTokenSource? _screenCts;
     private Task? _screenCaptureTask;
-    private Task? _screenAudioTask;  // For reading audio from SnackaCapture
+    private Task? _screenAudioTask;  // For reading audio from native capture
     private bool _isScreenSharing;
-    private bool _isUsingSnackaCapture;  // True when using native capture with audio
+    private bool _isUsingNativeCapture;  // True when using native capture with audio
+    private bool _isUsingDirectH264;      // True when native capture outputs H.264 directly (--encode mode)
     private ScreenShareSettings? _currentScreenShareSettings;
     // Default screen share settings (used as fallback)
     private const int DefaultScreenWidth = 1920;
     private const int DefaultScreenHeight = 1080;
     private const int DefaultScreenFps = 30;
-    // SnackaCapture audio packet header
+    // Native capture audio packet header (shared by macOS and Windows capture tools)
     private const uint SnackaCaptureAudioMagic = 0x4D434150;  // "MCAP" in little-endian
     // Screen audio encoding - Opus at 48kHz stereo
     private uint _screenAudioTimestamp;
     private AudioEncoder? _screenAudioEncoder;
     private AudioFormat? _screenAudioFormat;
-    private const int ScreenAudioSampleRate = 48000;  // SnackaCapture outputs 48kHz
+    private const int ScreenAudioSampleRate = 48000;  // Native capture outputs 48kHz
     private const int ScreenAudioChannels = 2;        // Stereo for screen share (music, videos, games)
     private const int AudioPacketDurationMs = 20;     // 20ms audio packets
     // Opus at 48kHz stereo: 48000 * 0.020 * 2 = 1920 samples per packet (960 per channel)
@@ -1866,17 +1867,17 @@ public class WebRtcService : IWebRtcService
         {
             Console.WriteLine($"WebRTC: Starting screen capture... (source: {source?.Name ?? "default"}, {screenWidth}x{screenHeight} @ {screenFps}fps)");
 
-            // Check if we should use native capture (macOS SnackaCapture or Windows SnackaCaptureWindows)
+            // Check if we should use native capture (macOS SnackaCaptureVideoToolbox or Windows SnackaCaptureWindows)
             string? nativeCapturePath = null;
             string nativeCaptureArgs = "";
             var captureAudio = settings?.IncludeAudio ?? false;
 
-            if (ShouldUseSnackaCapture())
+            if (ShouldUseSnackaCaptureVideoToolbox())
             {
-                nativeCapturePath = GetSnackaCapturePath();
+                nativeCapturePath = GetSnackaCaptureVideoToolboxPath();
                 if (nativeCapturePath != null)
                 {
-                    nativeCaptureArgs = GetSnackaCaptureArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
+                    nativeCaptureArgs = GetSnackaCaptureVideoToolboxArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
                 }
             }
             else if (ShouldUseSnackaCaptureWindows())
@@ -1888,17 +1889,27 @@ public class WebRtcService : IWebRtcService
                 }
             }
 
-            _isUsingSnackaCapture = nativeCapturePath != null;
+            _isUsingNativeCapture = nativeCapturePath != null;
+            // SnackaCaptureVideoToolbox with --encode outputs H.264 directly
+            _isUsingDirectH264 = ShouldUseSnackaCaptureVideoToolbox() && nativeCapturePath != null;
 
-            // Create encoder with appropriate pixel format:
-            // - NV12 for native capture (hardware-accelerated)
-            // - BGR24 for ffmpeg fallback (software path)
-            var inputPixelFormat = _isUsingSnackaCapture ? "nv12" : "bgr24";
-            _screenEncoder = new FfmpegProcessEncoder(screenWidth, screenHeight, screenFps, VideoCodecsEnum.H264, inputPixelFormat);
-            _screenEncoder.OnEncodedFrame += OnScreenVideoEncoded;
-            _screenEncoder.Start();
+            // Only create ffmpeg encoder if we're not getting direct H.264
+            if (!_isUsingDirectH264)
+            {
+                // Create encoder with appropriate pixel format:
+                // - NV12 for native capture (hardware-accelerated)
+                // - BGR24 for ffmpeg fallback (software path)
+                var inputPixelFormat = _isUsingNativeCapture ? "nv12" : "bgr24";
+                _screenEncoder = new FfmpegProcessEncoder(screenWidth, screenHeight, screenFps, VideoCodecsEnum.H264, inputPixelFormat);
+                _screenEncoder.OnEncodedFrame += OnScreenVideoEncoded;
+                _screenEncoder.Start();
+            }
+            else
+            {
+                Console.WriteLine("WebRTC: Using direct H.264 encoding from VideoToolbox (bypassing ffmpeg)");
+            }
 
-            if (_isUsingSnackaCapture)
+            if (_isUsingNativeCapture)
             {
                 // Use native capture with audio support
                 var args = nativeCaptureArgs;
@@ -1955,10 +1966,21 @@ public class WebRtcService : IWebRtcService
 
                 // Start reading screen frames and audio
                 _screenCts = new CancellationTokenSource();
-                _screenCaptureTask = Task.Run(() => ScreenCaptureLoop(_screenCts.Token, screenWidth, screenHeight, screenFps));
+
+                // Use appropriate capture loop based on encoding mode
+                if (_isUsingDirectH264)
+                {
+                    // Direct H.264 mode: read AVCC format NAL units
+                    _screenCaptureTask = Task.Run(() => ScreenCaptureH264Loop(_screenCts.Token, screenFps));
+                }
+                else
+                {
+                    // Raw NV12 mode: read frames and send to ffmpeg encoder
+                    _screenCaptureTask = Task.Run(() => ScreenCaptureLoop(_screenCts.Token, screenWidth, screenHeight, screenFps));
+                }
                 _screenAudioTask = Task.Run(() => ScreenAudioLoop(_screenCts.Token));
 
-                Console.WriteLine($"WebRTC: Screen capture started with native capture (audio: {captureAudio})");
+                Console.WriteLine($"WebRTC: Screen capture started with native capture (audio: {captureAudio}, directH264: {_isUsingDirectH264})");
             }
             else
             {
@@ -2069,10 +2091,10 @@ public class WebRtcService : IWebRtcService
     }
 
     /// <summary>
-    /// Checks if SnackaCapture (native ScreenCaptureKit) should be used.
+    /// Checks if SnackaCaptureVideoToolbox (native ScreenCaptureKit) should be used.
     /// Returns true on macOS 13+ where we have the native capture tool.
     /// </summary>
-    private bool ShouldUseSnackaCapture()
+    private bool ShouldUseSnackaCaptureVideoToolbox()
     {
         if (!OperatingSystem.IsMacOS()) return false;
 
@@ -2082,15 +2104,15 @@ public class WebRtcService : IWebRtcService
         var darwinVersion = Environment.OSVersion.Version.Major;
         if (darwinVersion < 22)
         {
-            Console.WriteLine($"WebRTC: macOS Darwin version {darwinVersion} < 22, SnackaCapture requires macOS 13+");
+            Console.WriteLine($"WebRTC: macOS Darwin version {darwinVersion} < 22, SnackaCaptureVideoToolbox requires macOS 13+");
             return false;
         }
 
         // Check if the binary exists
-        var snackaCapturePath = GetSnackaCapturePath();
+        var snackaCapturePath = GetSnackaCaptureVideoToolboxPath();
         if (snackaCapturePath != null && File.Exists(snackaCapturePath))
         {
-            Console.WriteLine($"WebRTC: SnackaCapture available at {snackaCapturePath}");
+            Console.WriteLine($"WebRTC: SnackaCaptureVideoToolbox available at {snackaCapturePath}");
             return true;
         }
 
@@ -2126,11 +2148,11 @@ public class WebRtcService : IWebRtcService
     }
 
     /// <summary>
-    /// Gets the path to the SnackaCapture binary.
+    /// Gets the path to the SnackaCaptureVideoToolbox binary.
     /// </summary>
-    private string? GetSnackaCapturePath()
+    private string? GetSnackaCaptureVideoToolboxPath()
     {
-        // Look for SnackaCapture in several locations:
+        // Look for SnackaCaptureVideoToolbox in several locations:
         // 1. Same directory as the app (bundled)
         // 2. Swift 6+ architecture-specific build paths (arm64-apple-macosx)
         // 3. Legacy Swift build paths (fallback)
@@ -2140,17 +2162,17 @@ public class WebRtcService : IWebRtcService
         var candidates = new[]
         {
             // Bundled with app
-            Path.Combine(appDir, "SnackaCapture"),
+            Path.Combine(appDir, "SnackaCaptureVideoToolbox"),
             // Swift 6+ architecture-specific build paths (arm64-apple-macosx)
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "arm64-apple-macosx", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "arm64-apple-macosx", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "arm64-apple-macosx", "debug", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "arm64-apple-macosx", "debug", "SnackaCapture"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "debug", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "arm64-apple-macosx", "debug", "SnackaCaptureVideoToolbox"),
             // Legacy Swift build paths (fallback)
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "release", "SnackaCapture"),
-            Path.Combine(appDir, "..", "SnackaCapture", ".build", "debug", "SnackaCapture"),
-            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCapture", ".build", "debug", "SnackaCapture"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "release", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "SnackaCaptureVideoToolbox", ".build", "debug", "SnackaCaptureVideoToolbox"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureVideoToolbox", ".build", "debug", "SnackaCaptureVideoToolbox"),
         };
 
         foreach (var candidate in candidates)
@@ -2158,12 +2180,12 @@ public class WebRtcService : IWebRtcService
             var fullPath = Path.GetFullPath(candidate);
             if (File.Exists(fullPath))
             {
-                Console.WriteLine($"WebRTC: Found SnackaCapture at {fullPath}");
+                Console.WriteLine($"WebRTC: Found SnackaCaptureVideoToolbox at {fullPath}");
                 return fullPath;
             }
         }
 
-        Console.WriteLine("WebRTC: SnackaCapture not found, will use ffmpeg");
+        Console.WriteLine("WebRTC: SnackaCaptureVideoToolbox not found, will use ffmpeg");
         return null;
     }
 
@@ -2240,9 +2262,9 @@ public class WebRtcService : IWebRtcService
     }
 
     /// <summary>
-    /// Builds SnackaCapture command arguments based on source and settings.
+    /// Builds SnackaCaptureVideoToolbox command arguments based on source and settings.
     /// </summary>
-    private string GetSnackaCaptureArgs(ScreenCaptureSource? source, int width, int height, int fps, bool captureAudio)
+    private string GetSnackaCaptureVideoToolboxArgs(ScreenCaptureSource? source, int width, int height, int fps, bool captureAudio)
     {
         var args = new List<string> { "capture" };
 
@@ -2272,7 +2294,7 @@ public class WebRtcService : IWebRtcService
         if (captureAudio)
         {
             args.Add("--audio");
-            args.Add("--exclude-self");  // Don't capture SnackaCapture's own audio
+            args.Add("--exclude-self");  // Don't capture SnackaCaptureVideoToolbox's own audio
 
             // Exclude Snacka.Client's audio to prevent capturing other users' voices
             // Try to get the bundle ID - for .NET apps this may be the process name or a custom ID
@@ -2284,6 +2306,10 @@ public class WebRtcService : IWebRtcService
                 Console.WriteLine($"WebRTC: Will exclude audio from app: {bundleId}");
             }
         }
+
+        // Use direct H.264 encoding via VideoToolbox (bypasses ffmpeg)
+        args.Add("--encode");
+        args.Add("--bitrate 6");  // 6 Mbps for screen share
 
         return string.Join(" ", args);
     }
@@ -2321,7 +2347,7 @@ public class WebRtcService : IWebRtcService
     }
 
     /// <summary>
-    /// Reads audio packets from SnackaCapture's stderr.
+    /// Reads audio packets from native capture's stderr.
     /// Audio format: 16-byte header (magic + sampleCount + timestamp) followed by PCM data.
     /// Note: stderr may also contain log messages, so we need to scan for the magic number.
     /// </summary>
@@ -2448,7 +2474,7 @@ public class WebRtcService : IWebRtcService
 
                     if (audioPacketCount == 0)
                     {
-                        Console.WriteLine("WebRTC: Detected v1 audio header format - assuming 16-bit stereo 48kHz. Rebuild SnackaCapture for proper format detection.");
+                        Console.WriteLine("WebRTC: Detected v1 audio header format - assuming 16-bit stereo 48kHz. Rebuild native capture tool for proper format detection.");
                     }
                 }
 
@@ -2503,7 +2529,7 @@ public class WebRtcService : IWebRtcService
     /// <summary>
     /// Processes screen share audio: encodes audio to Opus and sends via dedicated screen audio track.
     /// Uses SendRtpRaw with screen audio SSRC to keep it separate from microphone audio.
-    /// SnackaCapture normalizes all audio to 48kHz 16-bit stereo before sending.
+    /// Native capture tools normalize all audio to 48kHz 16-bit stereo before sending.
     /// </summary>
     private void ProcessScreenShareAudio(byte[] pcmData, uint sampleCount, uint sampleRate, byte bitsPerSample, byte channelCount, bool isFloat)
     {
@@ -2516,7 +2542,7 @@ public class WebRtcService : IWebRtcService
 
         var format = _screenAudioFormat.Value;
 
-        // Input: 48kHz 16-bit stereo from SnackaCapture (normalized at capture stage)
+        // Input: 48kHz 16-bit stereo from native capture (normalized at capture stage)
         // Output: Opus at 48kHz STEREO for high-quality screen share audio (music, videos, games)
 
         // Read stereo samples directly (interleaved L,R,L,R,...)
@@ -2606,7 +2632,7 @@ public class WebRtcService : IWebRtcService
     {
         // NV12: 1.5 bytes per pixel (Y plane + UV plane at half resolution)
         // BGR24: 3 bytes per pixel
-        var isNv12 = _isUsingSnackaCapture;
+        var isNv12 = _isUsingNativeCapture;
         var frameSize = isNv12 ? (width * height * 3 / 2) : (width * height * 3);
         var buffer = new byte[frameSize];
         var frameCount = 0;
@@ -2674,6 +2700,150 @@ public class WebRtcService : IWebRtcService
         Console.WriteLine($"WebRTC: Screen capture loop ended after {frameCount} frames");
     }
 
+    /// <summary>
+    /// Reads H.264 NAL units in AVCC format (4-byte big-endian length prefix) from native capture
+    /// and sends them to WebRTC. This bypasses ffmpeg encoding entirely.
+    /// </summary>
+    private void ScreenCaptureH264Loop(CancellationToken token, int fps)
+    {
+        var frameCount = 0;
+        var nalUnitCount = 0;
+        var lengthBuffer = new byte[4];
+
+        // RTP timestamp increment per frame (90kHz clock / fps)
+        var rtpDuration = (uint)(90000 / fps);
+
+        Console.WriteLine($"WebRTC: Direct H.264 capture loop starting @ {fps}fps (AVCC format)");
+
+        try
+        {
+            var stream = _screenCaptureProcess?.StandardOutput.BaseStream;
+            if (stream == null) return;
+
+            // Accumulate NAL units into a frame (until we see next I-frame or timeout)
+            var frameData = new MemoryStream();
+            var annexBPrefix = new byte[] { 0x00, 0x00, 0x00, 0x01 };
+            var lastFrameTime = DateTime.UtcNow;
+            var isKeyframeInProgress = false;
+
+            while (!token.IsCancellationRequested && _screenCaptureProcess != null && !_screenCaptureProcess.HasExited)
+            {
+                // Read 4-byte length prefix (big-endian)
+                var bytesRead = 0;
+                while (bytesRead < 4 && !token.IsCancellationRequested)
+                {
+                    var read = stream.Read(lengthBuffer, bytesRead, 4 - bytesRead);
+                    if (read == 0) break;
+                    bytesRead += read;
+                }
+
+                if (bytesRead < 4) break;
+
+                // Parse big-endian length
+                var nalLength = (lengthBuffer[0] << 24) | (lengthBuffer[1] << 16) |
+                               (lengthBuffer[2] << 8) | lengthBuffer[3];
+
+                if (nalLength <= 0 || nalLength > 10_000_000) // Sanity check: max 10MB NAL unit
+                {
+                    Console.WriteLine($"WebRTC: Invalid NAL length {nalLength}, skipping");
+                    continue;
+                }
+
+                // Read NAL unit data
+                var nalData = new byte[nalLength];
+                bytesRead = 0;
+                while (bytesRead < nalLength && !token.IsCancellationRequested)
+                {
+                    var read = stream.Read(nalData, bytesRead, nalLength - bytesRead);
+                    if (read == 0) break;
+                    bytesRead += read;
+                }
+
+                if (bytesRead < nalLength) break;
+
+                nalUnitCount++;
+
+                // Determine NAL unit type
+                var nalType = nalData[0] & 0x1F;
+                var isKeyframeNal = nalType == 7 || nalType == 8 || nalType == 5; // SPS, PPS, or IDR
+
+                // If this is a new keyframe and we have accumulated data, send previous frame
+                if (nalType == 7 && frameData.Length > 0) // SPS indicates start of new I-frame
+                {
+                    // Send accumulated frame
+                    var frameBytes = frameData.ToArray();
+                    frameCount++;
+
+                    if (frameCount <= 5 || frameCount % 100 == 0)
+                    {
+                        Console.WriteLine($"WebRTC: Sending H.264 frame {frameCount}, NALs={nalUnitCount}, size={frameBytes.Length}");
+                    }
+
+                    OnScreenVideoEncoded(rtpDuration, frameBytes);
+
+                    // Reset for new frame
+                    frameData.SetLength(0);
+                    isKeyframeInProgress = true;
+                }
+                else if (!isKeyframeNal && isKeyframeInProgress && nalType != 1)
+                {
+                    // Non-slice NAL after keyframe NALs - end of keyframe
+                    isKeyframeInProgress = false;
+                }
+
+                // Append NAL unit in Annex-B format (00 00 00 01 prefix)
+                frameData.Write(annexBPrefix, 0, 4);
+                frameData.Write(nalData, 0, nalData.Length);
+
+                // For P-frames (non-keyframes), send immediately after slice NAL
+                if (nalType == 1 && !isKeyframeInProgress) // Non-IDR slice
+                {
+                    var frameBytes = frameData.ToArray();
+                    frameCount++;
+
+                    if (frameCount <= 5 || frameCount % 100 == 0)
+                    {
+                        Console.WriteLine($"WebRTC: Sending H.264 P-frame {frameCount}, size={frameBytes.Length}");
+                    }
+
+                    OnScreenVideoEncoded(rtpDuration, frameBytes);
+                    frameData.SetLength(0);
+                }
+                else if (nalType == 5) // IDR slice - send I-frame now
+                {
+                    var frameBytes = frameData.ToArray();
+                    frameCount++;
+
+                    if (frameCount <= 5 || frameCount % 100 == 0)
+                    {
+                        Console.WriteLine($"WebRTC: Sending H.264 I-frame {frameCount}, size={frameBytes.Length}");
+                    }
+
+                    OnScreenVideoEncoded(rtpDuration, frameBytes);
+                    frameData.SetLength(0);
+                    isKeyframeInProgress = false;
+                }
+            }
+
+            // Send any remaining data
+            if (frameData.Length > 0)
+            {
+                var frameBytes = frameData.ToArray();
+                frameCount++;
+                OnScreenVideoEncoded(rtpDuration, frameBytes);
+            }
+        }
+        catch (Exception ex)
+        {
+            if (!token.IsCancellationRequested)
+            {
+                Console.WriteLine($"WebRTC: H.264 capture loop error: {ex.Message}");
+            }
+        }
+
+        Console.WriteLine($"WebRTC: H.264 capture loop ended after {frameCount} frames, {nalUnitCount} NAL units");
+    }
+
     private async Task StopScreenCaptureAsync()
     {
         Console.WriteLine("WebRTC: Stopping screen capture...");
@@ -2695,7 +2865,7 @@ public class WebRtcService : IWebRtcService
             _screenCaptureTask = null;
         }
 
-        // Wait for audio task (if using SnackaCapture)
+        // Wait for audio task (if using native capture)
         if (_screenAudioTask != null)
         {
             try
@@ -2712,7 +2882,8 @@ public class WebRtcService : IWebRtcService
 
         _screenCts?.Dispose();
         _screenCts = null;
-        _isUsingSnackaCapture = false;
+        _isUsingNativeCapture = false;
+        _isUsingDirectH264 = false;
 
         if (_screenCaptureProcess != null)
         {

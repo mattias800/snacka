@@ -3,7 +3,7 @@ import Foundation
 
 @main
 @available(macOS 13.0, *)
-struct SnackaCapture: AsyncParsableCommand {
+struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
         abstract: "Screen and audio capture tool using ScreenCaptureKit",
         subcommands: [List.self, Capture.self],
@@ -82,6 +82,12 @@ struct Capture: AsyncParsableCommand {
     @Option(name: .long, help: "Bundle ID of app to exclude from audio capture")
     var excludeApp: String?
 
+    @Flag(name: .long, help: "Output H.264 encoded video (instead of raw NV12)")
+    var encode = false
+
+    @Option(name: .long, help: "Encoding bitrate in Mbps (default: 6)")
+    var bitrate: Int = 6
+
     func validate() throws {
         let sourceCount = [display != nil, window != nil, app != nil].filter { $0 }.count
         if sourceCount == 0 {
@@ -119,11 +125,14 @@ struct Capture: AsyncParsableCommand {
             fps: fps,
             captureAudio: audio,
             excludeCurrentProcessAudio: excludeSelf,
-            excludeAppBundleId: excludeApp
+            excludeAppBundleId: excludeApp,
+            encodeH264: encode,
+            bitrateMbps: bitrate
         )
 
         // Log to stderr so it doesn't interfere with video output
-        fputs("SnackaCapture: Starting capture \(width)x\(height) @ \(fps)fps, audio=\(audio)\n", stderr)
+        let outputFormat = encode ? "H.264 @ \(bitrate)Mbps" : "NV12"
+        fputs("SnackaCaptureVideoToolbox: Starting capture \(width)x\(height) @ \(fps)fps, audio=\(audio), output=\(outputFormat)\n", stderr)
 
         let capturer = ScreenCapturer(config: config)
         try await capturer.start()

@@ -2,12 +2,12 @@
 import PackageDescription
 
 let package = Package(
-    name: "SnackaCapture",
+    name: "SnackaCaptureVideoToolbox",
     platforms: [
         .macOS(.v13)  // ScreenCaptureKit audio requires macOS 13+
     ],
     products: [
-        .executable(name: "SnackaCapture", targets: ["SnackaCapture"])
+        .executable(name: "SnackaCaptureVideoToolbox", targets: ["SnackaCaptureVideoToolbox"])
     ],
     dependencies: [
         // Pin to 1.3.x to avoid Swift 6.0 features in 1.5+
@@ -15,7 +15,7 @@ let package = Package(
     ],
     targets: [
         .executableTarget(
-            name: "SnackaCapture",
+            name: "SnackaCaptureVideoToolbox",
             dependencies: [
                 .product(name: "ArgumentParser", package: "swift-argument-parser")
             ],
@@ -23,7 +23,8 @@ let package = Package(
                 .linkedFramework("ScreenCaptureKit"),
                 .linkedFramework("CoreMedia"),
                 .linkedFramework("CoreVideo"),
-                .linkedFramework("AVFoundation")
+                .linkedFramework("AVFoundation"),
+                .linkedFramework("VideoToolbox")
             ]
         )
     ]
