@@ -6,16 +6,17 @@ This document outlines the cross-platform screen capture strategy and future gam
 
 ## Current State
 
-### macOS
-- **Video**: ffmpeg with avfoundation (`Capture screen N`)
-- **Audio**: None (no system audio capture)
-- **Encoding**: Software H.264 via ffmpeg
-- **Latency**: ~100-150ms end-to-end
+### macOS ✅
+- **Video**: SnackaCapture (Swift) with ScreenCaptureKit on macOS 13+, ffmpeg fallback on older
+- **Audio**: System audio via ScreenCaptureKit (app-specific filtering supported)
+- **Encoding**: Software H.264 via ffmpeg (NV12 input from native capture)
+- **Latency**: ~80-120ms end-to-end
 
-### Windows
-- **Video**: ffmpeg with gdigrab
-- **Audio**: None
+### Windows 🟡
+- **Video**: ffmpeg with gdigrab (SnackaCaptureWindows ready but not integrated)
+- **Audio**: None currently (WASAPI capture ready in SnackaCaptureWindows)
 - **Encoding**: Software H.264 via ffmpeg
+- **Source listing**: Uses SnackaCaptureWindows for display/window enumeration
 
 ### Linux
 - **Video**: ffmpeg with x11grab
@@ -102,40 +103,34 @@ SnackaCapture capture --window 12345 --width 1920 --height 1080 --fps 30 --audio
 
 ---
 
-### 1.2 Windows - SnackaCapture (C++ or C#)
+### 1.2 Windows - SnackaCaptureWindows (C++) 🟡 PARTIAL
 
-**Status**: Not started
+**Status**: Native tool complete, WebRtcService integration pending
 
-**Technology Options**:
+**Location**: `src/SnackaCaptureWindows/`
 
-| API | Pros | Cons |
-|-----|------|------|
-| Windows.Graphics.Capture | Modern, efficient, UWP | Requires Win10 1803+ |
-| DXGI Desktop Duplication | Low-level, fast | Complex, no audio |
-| BitBlt/GDI | Simple, universal | Slow, CPU-intensive |
+**Technology**: DXGI Desktop Duplication API + WASAPI loopback
 
-**Recommended**: Windows.Graphics.Capture + WASAPI loopback
+**Features** (implemented in native tool):
+- [x] Display capture (Desktop Duplication API with D3D11)
+- [x] Window capture
+- [x] System audio capture (WASAPI loopback)
+- [x] NV12 video output to stdout (GPU color conversion)
+- [x] PCM audio output with packet headers
+- [x] JSON source listing
+- [x] ScreenCaptureService integration for source listing
 
-**Audio Capture**: WASAPI loopback capture is straightforward on Windows - it captures all system audio without special drivers.
+**Integration Tasks**:
+- [x] SnackaCaptureWindows CLI tool complete
+- [x] ScreenCaptureService uses SnackaCaptureWindows for source listing
+- [ ] Update WebRtcService to use SnackaCaptureWindows for capture (currently uses ffmpeg gdigrab)
+- [ ] Parse audio packets from stderr (same format as macOS)
 
-**Implementation Options**:
-
-1. **C++ CLI tool** (like macOS Swift version)
-   - Pros: Native performance, direct API access
-   - Cons: Separate build system, more complex
-
-2. **C# with CsWin32** (P/Invoke source generator)
-   - Pros: Same language as main app, could be integrated directly
-   - Cons: Interop overhead (minimal)
-
-3. **Rust CLI tool**
-   - Pros: Cross-platform potential, memory safety
-   - Cons: Another language in the stack
-
-**Suggested CLI Interface** (same as macOS):
+**CLI Interface** (implemented):
 ```bash
-SnackaCapture.exe list --json
-SnackaCapture.exe capture --display 0 --width 1920 --height 1080 --fps 30 --audio
+SnackaCaptureWindows.exe list --json
+SnackaCaptureWindows.exe --display 0 --width 1920 --height 1080 --fps 30 --audio
+SnackaCaptureWindows.exe --window 12345678 --audio
 ```
 
 ---
@@ -309,7 +304,7 @@ Compare to current: ~150-200ms (not playable for fast games)
 3. ✅ Screen share audio transmission (PT 112, separate Opus decoder in UserAudioMixer)
 
 ### Medium Priority
-4. ⬜ Windows SnackaCapture with WGC + WASAPI
+4. 🟡 Windows SnackaCaptureWindows - native tool complete, WebRtcService integration pending
 5. ⬜ Linux SnackaCapture with PipeWire
 6. ⬜ Hardware encoding (VideoToolbox first)
 
@@ -334,8 +329,16 @@ src/
 │           ├── SourceLister.swift
 │           └── Models.swift
 │
-├── SnackaCapture.Windows/      # Windows (C++ or C#) - Future
-│   └── ...
+├── SnackaCaptureWindows/       # Windows (C++) ✅
+│   ├── CMakeLists.txt
+│   └── src/
+│       ├── main.cpp              # CLI entry point
+│       ├── DisplayCapturer.cpp/h # Desktop Duplication API
+│       ├── WindowCapturer.cpp/h  # Window capture
+│       ├── AudioCapturer.cpp/h   # WASAPI loopback
+│       ├── ColorConverter.cpp/h  # GPU color conversion
+│       ├── SourceLister.cpp/h    # JSON source listing
+│       └── Protocol.h            # Audio packet protocol
 │
 ├── SnackaCapture.Linux/        # Linux (C or Rust) - Future
 │   └── ...
@@ -361,7 +364,11 @@ src/
 - [x] macOS: SnackaCapture captures specific app with its audio only
 - [x] macOS: Audio transmitted alongside screen share video
 - [x] macOS: Fallback to ffmpeg on macOS < 13
-- [ ] Windows: Capture with WASAPI audio
+- [x] Windows: SnackaCaptureWindows captures display with Desktop Duplication API
+- [x] Windows: SnackaCaptureWindows captures windows
+- [x] Windows: SnackaCaptureWindows captures WASAPI audio
+- [x] Windows: ScreenCaptureService uses SnackaCaptureWindows for source listing
+- [ ] Windows: WebRtcService integrated with SnackaCaptureWindows for capture
 - [ ] Linux: Capture with PipeWire audio
 
 ### Phase 2: Hardware Encoding
