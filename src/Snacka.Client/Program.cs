@@ -1,5 +1,6 @@
 using Avalonia;
 using Avalonia.ReactiveUI;
+using Snacka.Client.Services;
 using Snacka.Client.Services.HardwareVideo;
 using Velopack;
 
@@ -20,6 +21,23 @@ public sealed class Program
         // Velopack must be first - handles install/update hooks
         VelopackApp.Build().Run();
 
+        // Parse profile argument early so we can use it for logging
+        for (int i = 0; i < args.Length - 1; i++)
+        {
+            if (args[i] == "--profile")
+            {
+                Profile = args[i + 1];
+                break;
+            }
+        }
+        if (string.IsNullOrEmpty(Profile))
+        {
+            Profile = Environment.GetEnvironmentVariable("SNACKA_PROFILE");
+        }
+
+        // Initialize logging early to capture all console output
+        LogService.Initialize(Profile);
+
         // Set VLC environment variables FIRST, before anything else loads
         SetupVlcEnvironment();
 
@@ -33,7 +51,8 @@ public sealed class Program
             return;
         }
 
-        // Parse dev mode arguments: --server URL --email EMAIL --password PASSWORD --title TITLE --profile NAME
+        // Parse dev mode arguments: --server URL --email EMAIL --password PASSWORD --title TITLE
+        // Note: --profile is parsed earlier for logging initialization
         for (int i = 0; i < args.Length - 1; i++)
         {
             switch (args[i])
@@ -51,15 +70,9 @@ public sealed class Program
                     DevWindowTitle = args[++i];
                     break;
                 case "--profile":
-                    Profile = args[++i];
+                    i++; // Skip, already parsed
                     break;
             }
-        }
-
-        // Allow SNACKA_PROFILE env var as fallback
-        if (string.IsNullOrEmpty(Profile))
-        {
-            Profile = Environment.GetEnvironmentVariable("SNACKA_PROFILE");
         }
 
         BuildAvaloniaApp().StartWithClassicDesktopLifetime(args);
