@@ -1,6 +1,7 @@
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.HttpOverrides;
 using Microsoft.AspNetCore.RateLimiting;
 using Microsoft.EntityFrameworkCore;
@@ -113,6 +114,17 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
     ?? throw new InvalidOperationException("DefaultConnection is not configured. See appsettings.json or use docker-compose.dev.yml for development.");
 builder.Services.AddDbContext<SnackaDbContext>(options =>
     options.UseNpgsql(connectionString));
+
+// Add separate DbContext for DataProtection keys (ensures auth tokens survive container restarts)
+builder.Services.AddDbContext<DataProtectionDbContext>(options =>
+    options.UseNpgsql(connectionString));
+
+// Configure DataProtection to persist keys to the database
+// This prevents the "Storing keys in a directory that may not be persisted" warning
+// and ensures users stay logged in across container restarts
+builder.Services.AddDataProtection()
+    .PersistKeysToDbContext<DataProtectionDbContext>()
+    .SetApplicationName("Snacka");
 
 // Add authentication
 builder.Services.AddAuthentication(options =>
@@ -252,6 +264,10 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<SnackaDbContext>();
     db.Database.Migrate();
 
+    // Migrate DataProtection keys table (ensures keys persist across container restarts)
+    var dataProtectionDb = scope.ServiceProvider.GetRequiredService<DataProtectionDbContext>();
+    dataProtectionDb.Database.Migrate();
+
     // In development, ensure there are unlimited bootstrap invites for easy testing
     if (app.Environment.IsDevelopment())
     {
@@ -348,9 +364,13 @@ app.Use(async (context, next) =>
     await next();
 });
 
-// HTTPS redirection - works correctly with reverse proxies when X-Forwarded-Proto is set
-// The forwarded headers middleware sets the request scheme based on X-Forwarded-Proto
-app.UseHttpsRedirection();
+// HTTPS redirection - only in development where we might access the API directly
+// In production, the reverse proxy (NGINX, etc.) handles SSL termination and redirects
+// Skipping this in production avoids the "Failed to determine the https port" warning
+if (app.Environment.IsDevelopment())
+{
+    app.UseHttpsRedirection();
+}
 app.UseCors("AllowConfigured");
 app.UseRateLimiter();
 

@@ -20,3 +20,16 @@ public class DesignTimeDbContextFactory : IDesignTimeDbContextFactory<SnackaDbCo
         return new SnackaDbContext(optionsBuilder.Options);
     }
 }
+
+/// <summary>
+/// Factory for creating DataProtectionDbContext at design time for EF Core migrations.
+/// </summary>
+public class DataProtectionDesignTimeDbContextFactory : IDesignTimeDbContextFactory<DataProtectionDbContext>
+{
+    public DataProtectionDbContext CreateDbContext(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<DataProtectionDbContext>();
+        optionsBuilder.UseNpgsql("Host=localhost;Port=5435;Database=snacka;Username=snacka;Password=snacka");
+        return new DataProtectionDbContext(optionsBuilder.Options);
+    }
+}
