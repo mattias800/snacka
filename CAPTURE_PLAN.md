@@ -169,66 +169,44 @@ snacka-capture capture --display 0 --width 1920 --height 1080 --fps 30 --audio
 
 ---
 
-## Phase 2: Hardware Encoding
+## Phase 2: Hardware Encoding ✅ IMPLEMENTED (via FFmpeg)
 
-### Goal
-Replace software H.264 encoding with hardware encoders for lower latency and CPU usage.
+### Current Implementation
+Hardware encoding is implemented via FFmpeg with automatic encoder detection.
 
 ### Current Encoding Pipeline
 ```
-Raw BGR24 → ffmpeg (CPU) → H.264 NAL units → WebRTC
-           ~20-50ms
+Native Capture (NV12) → ffmpeg (hardware encoder) → H.264 NAL units → WebRTC
+                        ~5-15ms (hardware)
 ```
 
-### Target Encoding Pipeline
-```
-Raw frames → Hardware Encoder → H.264 NAL units → WebRTC
-              ~2-5ms
-```
+### Implemented Hardware Encoders
 
-### Platform-Specific Hardware Encoders
+| Platform | Encoder | Status |
+|----------|---------|--------|
+| macOS | h264_videotoolbox | ✅ Auto-enabled |
+| Windows | h264_nvenc (NVIDIA) | ✅ Auto-detect |
+| Windows | h264_amf (AMD) | ✅ Auto-detect |
+| Windows | h264_qsv (Intel) | ✅ Auto-detect |
+| Linux | h264_vaapi | ✅ Auto-detect |
+| All | libx264 (software) | ✅ Fallback |
 
-| Platform | API | Hardware |
-|----------|-----|----------|
-| macOS | VideoToolbox | Apple Silicon / Intel QSV |
-| Windows | Media Foundation | NVENC, AMD AMF, Intel QSV |
-| Linux | VAAPI / NVENC | Intel, AMD, NVIDIA |
+### Encoder Settings (Low-Latency Optimized)
+- **No B-frames** (`-bf 0`) - Critical for low latency
+- **Baseline profile** - No B-frame support needed
+- **Realtime mode** - Prioritize speed over quality
+- **Fast keyframes** - 10-60 frames for quick stream start
+- **Small buffer** - Reduce buffering delay
 
-### 2.1 macOS VideoToolbox Integration
+### Future Optimization: Direct Hardware Encoding
 
-**Optimization Path**:
-1. ScreenCaptureKit provides IOSurface (GPU memory)
-2. Pass IOSurface directly to VideoToolbox (no CPU copy!)
-3. VideoToolbox outputs H.264 NAL units
-4. Send to WebRTC
+For even lower latency (~2-5ms), bypass FFmpeg entirely:
 
-**Latency Savings**: ~30-50ms (eliminates BGR24 conversion + CPU encoding)
+**macOS**: Modify SnackaCapture to output H.264 directly via VTCompressionSession
+**Windows**: Modify SnackaCaptureWindows to output H.264 via Media Foundation
+**Linux**: Use VA-API or NVENC directly
 
-**Implementation**:
-- Modify SnackaCapture to optionally output H.264 directly
-- Add `--encode h264` flag
-- Use VTCompressionSession with IOSurface input
-
-### 2.2 Windows Hardware Encoding
-
-**Options**:
-- **NVENC** (NVIDIA): Lowest latency, best for gaming
-- **AMD AMF**: Good performance on AMD GPUs
-- **Intel Quick Sync**: Available on Intel iGPUs
-
-**Implementation**:
-- Use Media Foundation Transform (MFT) for unified API
-- Or direct NVENC/AMF for lowest latency
-
-### 2.3 Linux Hardware Encoding
-
-**Options**:
-- **VAAPI**: Intel and AMD (mesa)
-- **NVENC**: NVIDIA (proprietary driver)
-
-**Implementation**:
-- FFmpeg with VAAPI/NVENC backend
-- Or GStreamer with hardware plugins
+This would eliminate the ffmpeg process overhead and enable zero-copy encoding from GPU capture surfaces.
 
 ---
 
@@ -306,13 +284,15 @@ Compare to current: ~150-200ms (not playable for fast games)
 ### Medium Priority
 4. ✅ Windows SnackaCaptureWindows with Desktop Duplication + WASAPI
 5. ⬜ Linux SnackaCapture with PipeWire
-6. ⬜ Hardware encoding (VideoToolbox first)
+6. ✅ Hardware encoding via ffmpeg (VideoToolbox, NVENC, AMF, QSV, VA-API)
+7. ⬜ Hardware decoding on Windows (SnackaWindowsRenderer.dll)
+8. ⬜ Hardware decoding on Linux (libSnackaLinuxRenderer.so)
 
 ### Lower Priority (Game Streaming)
-7. ⬜ WebRTC latency tuning
-8. ⬜ SRT transport option
-9. ⬜ Input forwarding
-10. ⬜ Game streaming UI/UX
+9. ⬜ WebRTC latency tuning
+10. ⬜ SRT transport option
+11. ⬜ Input forwarding
+12. ⬜ Game streaming UI/UX
 
 ---
 
@@ -374,9 +354,17 @@ src/
 - [ ] Linux: Capture with PipeWire audio
 
 ### Phase 2: Hardware Encoding
-- [ ] macOS: VideoToolbox encoding works
-- [ ] Latency reduced by 30-50ms
-- [ ] CPU usage significantly lower
+- [x] macOS: VideoToolbox encoding works (h264_videotoolbox via ffmpeg)
+- [x] Windows: NVENC/AMF/QSV auto-detection works (h264_nvenc, h264_amf, h264_qsv via ffmpeg)
+- [x] Linux: VA-API encoding works (h264_vaapi via ffmpeg)
+- [x] Software fallback (libx264) when hardware unavailable
+- [x] Low-latency settings: no B-frames, fast keyframe interval, realtime mode
+- [ ] Direct hardware encoding (bypass ffmpeg) - not implemented
+
+### Phase 2b: Hardware Decoding (Zero-Copy Playback)
+- [x] macOS: VideoToolbox + Metal rendering (SnackaMetalRenderer - fully implemented)
+- [ ] Windows: Media Foundation + D3D11 (SnackaWindowsRenderer.dll - stub only)
+- [ ] Linux: VA-API + EGL (libSnackaLinuxRenderer.so - stub only)
 
 ### Phase 3: Low-Latency Transport
 - [ ] WebRTC tuned for lower latency
