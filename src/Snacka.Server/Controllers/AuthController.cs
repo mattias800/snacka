@@ -2,8 +2,12 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.RateLimiting;
+using Microsoft.AspNetCore.SignalR;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Snacka.Server.Data;
 using Snacka.Server.DTOs;
+using Snacka.Server.Hubs;
 using Snacka.Server.Services;
 
 namespace Snacka.Server.Controllers;
@@ -15,12 +19,21 @@ public class AuthController : ControllerBase
     private readonly IAuthService _authService;
     private readonly IConfiguration _configuration;
     private readonly IServerInviteService _inviteService;
+    private readonly IHubContext<SnackaHub> _hubContext;
+    private readonly SnackaDbContext _db;
 
-    public AuthController(IAuthService authService, IConfiguration configuration, IServerInviteService inviteService)
+    public AuthController(
+        IAuthService authService,
+        IConfiguration configuration,
+        IServerInviteService inviteService,
+        IHubContext<SnackaHub> hubContext,
+        SnackaDbContext db)
     {
         _authService = authService;
         _configuration = configuration;
         _inviteService = inviteService;
+        _hubContext = hubContext;
+        _db = db;
     }
 
     [HttpGet("server-info")]
@@ -43,6 +56,27 @@ public class AuthController : ControllerBase
         try
         {
             var response = await _authService.RegisterAsync(request, cancellationToken);
+
+            // Broadcast to all connected clients that a new user registered
+            // This allows admin panels to update in real-time
+            var newUser = await _db.Users
+                .Include(u => u.InvitedBy)
+                .FirstOrDefaultAsync(u => u.Id == response.UserId, cancellationToken);
+
+            if (newUser != null)
+            {
+                var adminUserResponse = new AdminUserResponse(
+                    newUser.Id,
+                    newUser.Username,
+                    newUser.Email,
+                    newUser.IsServerAdmin,
+                    newUser.IsOnline,
+                    newUser.CreatedAt,
+                    newUser.InvitedBy?.Username
+                );
+                await _hubContext.Clients.All.SendAsync("UserRegistered", adminUserResponse, cancellationToken);
+            }
+
             return Ok(response);
         }
         catch (InvalidOperationException ex)

@@ -129,6 +129,9 @@ public interface ISignalRService : IAsyncDisposable
     // Community invite events
     event Action<CommunityInviteReceivedEvent>? CommunityInviteReceived;
     event Action<CommunityInviteRespondedEvent>? CommunityInviteResponded;
+
+    // Admin user management events
+    event Action<AdminUserResponse>? UserRegistered;
 }
 
 // Typing indicator event DTOs
@@ -259,6 +262,9 @@ public class SignalRService : ISignalRService
     // Community invite events
     public event Action<CommunityInviteReceivedEvent>? CommunityInviteReceived;
     public event Action<CommunityInviteRespondedEvent>? CommunityInviteResponded;
+
+    // Admin user management events
+    public event Action<AdminUserResponse>? UserRegistered;
 
     private void OnRetryScheduled(TimeSpan delay)
     {
@@ -791,6 +797,13 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: CommunityInviteResponded - {e.InvitedUserUsername} {e.Status} invite to community {e.CommunityId}");
             CommunityInviteResponded?.Invoke(e);
+        });
+
+        // Admin user management events
+        _hubConnection.On<AdminUserResponse>("UserRegistered", e =>
+        {
+            Console.WriteLine($"SignalR: UserRegistered - {e.Username}");
+            UserRegistered?.Invoke(e);
         });
 
         _hubConnection.Reconnecting += error =>

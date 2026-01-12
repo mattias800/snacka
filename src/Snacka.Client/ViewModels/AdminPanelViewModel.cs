@@ -1,13 +1,15 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Avalonia.Threading;
 using Snacka.Client.Services;
 using ReactiveUI;
 
 namespace Snacka.Client.ViewModels;
 
-public class AdminPanelViewModel : ViewModelBase
+public class AdminPanelViewModel : ViewModelBase, IDisposable
 {
     private readonly IApiClient _apiClient;
+    private readonly ISignalRService? _signalRService;
 
     private bool _isLoadingInvites;
     private bool _isLoadingUsers;
@@ -21,9 +23,10 @@ public class AdminPanelViewModel : ViewModelBase
     // Server feature flags
     private readonly bool _gifsEnabled;
 
-    public AdminPanelViewModel(IApiClient apiClient, bool gifsEnabled = false)
+    public AdminPanelViewModel(IApiClient apiClient, ISignalRService? signalRService = null, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
+        _signalRService = signalRService;
         _gifsEnabled = gifsEnabled;
 
         Invites = new ObservableCollection<InviteViewModel>();
@@ -35,9 +38,36 @@ public class AdminPanelViewModel : ViewModelBase
         RefreshUsersCommand = ReactiveCommand.CreateFromTask(LoadUsersAsync);
         SelectTabCommand = ReactiveCommand.Create<string>(tab => SelectedTab = tab);
 
+        // Subscribe to real-time user registration events
+        if (_signalRService != null)
+        {
+            _signalRService.UserRegistered += OnUserRegistered;
+        }
+
         // Load data
         _ = LoadInvitesAsync();
         _ = LoadUsersAsync();
+    }
+
+    private void OnUserRegistered(AdminUserResponse newUser)
+    {
+        // Add new user to the list on the UI thread
+        Dispatcher.UIThread.Post(() =>
+        {
+            // Check if user already exists (avoid duplicates)
+            if (Users.All(u => u.Id != newUser.Id))
+            {
+                Users.Add(new UserViewModel(newUser, _apiClient, async () => await LoadUsersAsync()));
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_signalRService != null)
+        {
+            _signalRService.UserRegistered -= OnUserRegistered;
+        }
     }
 
     public ObservableCollection<InviteViewModel> Invites { get; }

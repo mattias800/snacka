@@ -1866,12 +1866,32 @@ public class WebRtcService : IWebRtcService
         {
             Console.WriteLine($"WebRTC: Starting screen capture... (source: {source?.Name ?? "default"}, {screenWidth}x{screenHeight} @ {screenFps}fps)");
 
-            // Check if we should use SnackaCapture (native ScreenCaptureKit on macOS 13+)
-            var snackaCapturePath = ShouldUseSnackaCapture() ? GetSnackaCapturePath() : null;
-            _isUsingSnackaCapture = snackaCapturePath != null;
+            // Check if we should use native capture (macOS SnackaCapture or Windows SnackaCaptureWindows)
+            string? nativeCapturePath = null;
+            string nativeCaptureArgs = "";
+            var captureAudio = settings?.IncludeAudio ?? false;
+
+            if (ShouldUseSnackaCapture())
+            {
+                nativeCapturePath = GetSnackaCapturePath();
+                if (nativeCapturePath != null)
+                {
+                    nativeCaptureArgs = GetSnackaCaptureArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
+                }
+            }
+            else if (ShouldUseSnackaCaptureWindows())
+            {
+                nativeCapturePath = GetSnackaCaptureWindowsPath();
+                if (nativeCapturePath != null)
+                {
+                    nativeCaptureArgs = GetSnackaCaptureWindowsArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
+                }
+            }
+
+            _isUsingSnackaCapture = nativeCapturePath != null;
 
             // Create encoder with appropriate pixel format:
-            // - NV12 for SnackaCapture (hardware-accelerated, native to VideoToolbox)
+            // - NV12 for native capture (hardware-accelerated)
             // - BGR24 for ffmpeg fallback (software path)
             var inputPixelFormat = _isUsingSnackaCapture ? "nv12" : "bgr24";
             _screenEncoder = new FfmpegProcessEncoder(screenWidth, screenHeight, screenFps, VideoCodecsEnum.H264, inputPixelFormat);
@@ -1880,9 +1900,8 @@ public class WebRtcService : IWebRtcService
 
             if (_isUsingSnackaCapture)
             {
-                // Use SnackaCapture for native capture with audio support
-                var captureAudio = settings?.IncludeAudio ?? false;
-                var args = GetSnackaCaptureArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
+                // Use native capture with audio support
+                var args = nativeCaptureArgs;
 
                 // Initialize Opus encoder for screen audio if audio capture is enabled
                 if (captureAudio)
@@ -1917,13 +1936,13 @@ public class WebRtcService : IWebRtcService
                     }
                 }
 
-                Console.WriteLine($"WebRTC: Using SnackaCapture: {snackaCapturePath} {args}");
+                Console.WriteLine($"WebRTC: Using native capture: {nativeCapturePath} {args}");
 
                 _screenCaptureProcess = new Process
                 {
                     StartInfo = new ProcessStartInfo
                     {
-                        FileName = snackaCapturePath,
+                        FileName = nativeCapturePath,
                         Arguments = args,
                         UseShellExecute = false,
                         RedirectStandardOutput = true,
@@ -1939,7 +1958,7 @@ public class WebRtcService : IWebRtcService
                 _screenCaptureTask = Task.Run(() => ScreenCaptureLoop(_screenCts.Token, screenWidth, screenHeight, screenFps));
                 _screenAudioTask = Task.Run(() => ScreenAudioLoop(_screenCts.Token));
 
-                Console.WriteLine("WebRTC: Screen capture started with SnackaCapture (audio enabled)");
+                Console.WriteLine($"WebRTC: Screen capture started with native capture (audio: {captureAudio})");
             }
             else
             {
@@ -2079,6 +2098,34 @@ public class WebRtcService : IWebRtcService
     }
 
     /// <summary>
+    /// Checks if SnackaCaptureWindows (native Desktop Duplication + WASAPI) should be used.
+    /// Returns true on Windows 10+ where we have the native capture tool.
+    /// </summary>
+    private bool ShouldUseSnackaCaptureWindows()
+    {
+        if (!OperatingSystem.IsWindows()) return false;
+
+        // Windows 10 build 1803+ required for Desktop Duplication API
+        // Environment.OSVersion.Version.Build >= 17134 for Win10 1803
+        var build = Environment.OSVersion.Version.Build;
+        if (build < 17134)
+        {
+            Console.WriteLine($"WebRTC: Windows build {build} < 17134, SnackaCaptureWindows requires Windows 10 1803+");
+            return false;
+        }
+
+        // Check if the binary exists
+        var capturePath = GetSnackaCaptureWindowsPath();
+        if (capturePath != null && File.Exists(capturePath))
+        {
+            Console.WriteLine($"WebRTC: SnackaCaptureWindows available at {capturePath}");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Gets the path to the SnackaCapture binary.
     /// </summary>
     private string? GetSnackaCapturePath()
@@ -2118,6 +2165,78 @@ public class WebRtcService : IWebRtcService
 
         Console.WriteLine("WebRTC: SnackaCapture not found, will use ffmpeg");
         return null;
+    }
+
+    /// <summary>
+    /// Gets the path to the SnackaCaptureWindows binary.
+    /// </summary>
+    private string? GetSnackaCaptureWindowsPath()
+    {
+        // Look for SnackaCaptureWindows in several locations:
+        // 1. Same directory as the app (bundled)
+        // 2. CMake build paths (Release/Debug)
+
+        var appDir = AppContext.BaseDirectory;
+
+        var candidates = new[]
+        {
+            // Bundled with app
+            Path.Combine(appDir, "SnackaCaptureWindows.exe"),
+            // CMake build paths
+            Path.Combine(appDir, "..", "SnackaCaptureWindows", "build", "bin", "SnackaCaptureWindows.exe"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureWindows", "build", "bin", "SnackaCaptureWindows.exe"),
+            Path.Combine(appDir, "..", "SnackaCaptureWindows", "build", "bin", "Release", "SnackaCaptureWindows.exe"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureWindows", "build", "bin", "Release", "SnackaCaptureWindows.exe"),
+            Path.Combine(appDir, "..", "SnackaCaptureWindows", "build", "bin", "Debug", "SnackaCaptureWindows.exe"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureWindows", "build", "bin", "Debug", "SnackaCaptureWindows.exe"),
+        };
+
+        foreach (var candidate in candidates)
+        {
+            var fullPath = Path.GetFullPath(candidate);
+            if (File.Exists(fullPath))
+            {
+                Console.WriteLine($"WebRTC: Found SnackaCaptureWindows at {fullPath}");
+                return fullPath;
+            }
+        }
+
+        Console.WriteLine("WebRTC: SnackaCaptureWindows not found, will use ffmpeg");
+        return null;
+    }
+
+    /// <summary>
+    /// Builds SnackaCaptureWindows command arguments based on source and settings.
+    /// </summary>
+    private string GetSnackaCaptureWindowsArgs(ScreenCaptureSource? source, int width, int height, int fps, bool captureAudio)
+    {
+        var args = new List<string>();
+
+        // Source type - Windows version doesn't have a "capture" subcommand
+        if (source == null || source.Type == ScreenCaptureSourceType.Display)
+        {
+            var displayIndex = source?.Id ?? "0";
+            args.Add($"--display {displayIndex}");
+        }
+        else if (source.Type == ScreenCaptureSourceType.Window)
+        {
+            // Windows uses HWND (window handle) for window capture
+            args.Add($"--window {source.Id}");
+        }
+        // Note: Application capture not supported on Windows yet
+
+        // Resolution and framerate
+        args.Add($"--width {width}");
+        args.Add($"--height {height}");
+        args.Add($"--fps {fps}");
+
+        // Audio - WASAPI loopback captures all system audio
+        if (captureAudio)
+        {
+            args.Add("--audio");
+        }
+
+        return string.Join(" ", args);
     }
 
     /// <summary>

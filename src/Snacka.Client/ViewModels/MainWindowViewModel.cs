@@ -510,6 +510,7 @@ public class MainWindowViewModel : ViewModelBase
             videoDeviceService: _videoDeviceService,
             controllerService: _controllerService,
             apiClient: _apiClient,
+            signalRService: _signalR,
             onAccountDeleted: OnLogout,
             isServerAdmin: CurrentUser.IsServerAdmin,
             selectImageFile: ImageFilePickerProvider,

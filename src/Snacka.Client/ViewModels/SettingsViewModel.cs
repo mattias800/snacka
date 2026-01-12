@@ -23,6 +23,7 @@ public class SettingsViewModel : ViewModelBase
         IVideoDeviceService videoDeviceService,
         IControllerService? controllerService = null,
         IApiClient? apiClient = null,
+        ISignalRService? signalRService = null,
         Action? onAccountDeleted = null,
         bool isServerAdmin = false,
         Func<Task<IStorageFile?>>? selectImageFile = null,
@@ -57,7 +58,7 @@ public class SettingsViewModel : ViewModelBase
 
         if (apiClient is not null && isServerAdmin)
         {
-            AdminPanelViewModel = new AdminPanelViewModel(apiClient, gifsEnabled);
+            AdminPanelViewModel = new AdminPanelViewModel(apiClient, signalRService, gifsEnabled);
         }
 
         AboutSettingsViewModel = new AboutSettingsViewModel();
