@@ -285,14 +285,15 @@ Compare to current: ~150-200ms (not playable for fast games)
 4. ✅ Windows SnackaCaptureWindows with Desktop Duplication + WASAPI
 5. ⬜ Linux SnackaCapture with PipeWire
 6. ✅ Hardware encoding via ffmpeg (VideoToolbox, NVENC, AMF, QSV, VA-API)
-7. ⬜ Hardware decoding on Windows (SnackaWindowsRenderer.dll)
-8. ⬜ Hardware decoding on Linux (libSnackaLinuxRenderer.so)
+7. ✅ GPU video rendering (Metal on macOS, OpenGL on Windows/Linux)
+8. ⬜ Hardware H.264 decoding on Windows (SnackaWindowsRenderer.dll - optional optimization)
+9. ⬜ Hardware H.264 decoding on Linux (libSnackaLinuxRenderer.so - optional optimization)
 
 ### Lower Priority (Game Streaming)
-9. ⬜ WebRTC latency tuning
-10. ⬜ SRT transport option
-11. ⬜ Input forwarding
-12. ⬜ Game streaming UI/UX
+10. ⬜ WebRTC latency tuning
+11. ⬜ SRT transport option
+12. ⬜ Input forwarding
+13. ⬜ Game streaming UI/UX
 
 ---
 
@@ -361,10 +362,20 @@ src/
 - [x] Low-latency settings: no B-frames, fast keyframe interval, realtime mode
 - [ ] Direct hardware encoding (bypass ffmpeg) - not implemented
 
-### Phase 2b: Hardware Decoding (Zero-Copy Playback)
-- [x] macOS: VideoToolbox + Metal rendering (SnackaMetalRenderer - fully implemented)
-- [ ] Windows: Media Foundation + D3D11 (SnackaWindowsRenderer.dll - stub only)
-- [ ] Linux: VA-API + EGL (libSnackaLinuxRenderer.so - stub only)
+### Phase 2b: GPU Video Rendering
+- [x] macOS: Metal rendering (MetalVideoRenderer)
+- [x] Windows: OpenGL rendering (OpenGLVideoRenderer via Silk.NET)
+- [x] Linux: OpenGL rendering (OpenGLVideoRenderer via Silk.NET)
+- [x] NV12 → RGB conversion on GPU (all platforms)
+- [x] Automatic fallback to software rendering if GPU fails
+
+### Phase 2c: Hardware H.264 Decoding (Future - Zero-Copy)
+- [x] macOS: VideoToolbox decoder (SnackaMetalRenderer - fully implemented)
+- [ ] Windows: Media Foundation decoder (SnackaWindowsRenderer.dll - stub only)
+- [ ] Linux: VA-API decoder (libSnackaLinuxRenderer.so - stub only)
+
+Note: Hardware decoding would allow H.264 → GPU texture without CPU copy.
+Currently, ffmpeg decodes to NV12 (CPU) → GPU upload → render.
 
 ### Phase 3: Low-Latency Transport
 - [ ] WebRTC tuned for lower latency
