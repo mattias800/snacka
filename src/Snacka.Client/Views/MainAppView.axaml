@@ -124,7 +124,10 @@
                                                   IsDrawingAllowedForViewers="{Binding IsDrawingAllowedForViewers, Mode=TwoWay}"
                                                   ToggleCameraCommand="{Binding ToggleCameraCommand}"
                                                   ToggleScreenShareCommand="{Binding ToggleScreenShareCommand}"
-                                                  LeaveVoiceChannelCommand="{Binding LeaveVoiceChannelCommand}"/>
+                                                  LeaveVoiceChannelCommand="{Binding LeaveVoiceChannelCommand}"
+                                                  ShowVoiceVideoOverlayCommand="{Binding ShowVoiceVideoOverlayCommand}"
+                                                  IsVoiceInDifferentCommunity="{Binding IsVoiceInDifferentCommunity}"
+                                                  VoiceCommunityName="{Binding VoiceCommunityName}"/>
 
                 <!-- Channel List -->
                 <controls:ChannelListView Margin="8,8,0,0"
@@ -153,7 +156,8 @@
                                           PreviewReorderCommand="{Binding PreviewReorderCommand}"
                                           CancelPreviewCommand="{Binding CancelPreviewCommand}"
                                           VoiceChannelClicked="OnVoiceChannelClicked"
-                                          VoiceChannelViewRequested="OnVoiceChannelViewRequested"/>
+                                          VoiceChannelViewRequested="OnVoiceChannelViewRequested"
+                                          ParticipantDoubleClicked="OnParticipantDoubleClicked"/>
             </DockPanel>
         </Border>
 
@@ -165,30 +169,24 @@
                       ResizeBehavior="PreviousAndNext"
                       Cursor="SizeWestEast"/>
 
-        <!-- Main Content Area (Chat, Voice Channel, or DM) -->
+        <!-- Main Content Area (Chat, DM, or Voice Channel) -->
         <Grid Grid.Column="3">
             <!-- DM Content (shown when viewing DM conversation) -->
             <controls:DMContentView IsVisible="{Binding IsViewingDM}"
                                     ViewModel="{Binding DMContent}"/>
 
-            <!-- Voice Channel Content (shown when viewing voice channel, but not DM) -->
-            <controls:VoiceChannelContentView SelectedVoiceChannel="{Binding SelectedVoiceChannelForViewing}"
+            <!-- Voice Channel Content (shown when viewing voice channel) -->
+            <controls:VoiceChannelContentView IsVisible="{Binding IsViewingVoiceChannel}"
+                                              SelectedVoiceChannel="{Binding SelectedVoiceChannelForViewing}"
                                               ShowAudioDeviceWarning="{Binding ShowAudioDeviceWarning}"
                                               VoiceChannelContent="{Binding VoiceChannelContent}"
                                               OpenSettingsCommand="{Binding OpenSettingsCommand}"
                                               WatchScreenShareRequested="OnVoiceChannelWatchScreenShare"
                                               StopWatchingRequested="OnVoiceChannelStopWatching"
                                               FullscreenRequested="OnVoiceChannelFullscreen"
-                                              VideoTileDoubleTapped="OnVoiceChannelVideoTileDoubleTapped">
-                <controls:VoiceChannelContentView.IsVisible>
-                    <MultiBinding Converter="{x:Static BoolConverters.And}">
-                        <Binding Path="IsViewingVoiceChannel"/>
-                        <Binding Path="IsViewingDM" Converter="{x:Static BoolConverters.Not}"/>
-                    </MultiBinding>
-                </controls:VoiceChannelContentView.IsVisible>
-            </controls:VoiceChannelContentView>
+                                              VideoTileDoubleTapped="OnVoiceChannelVideoTileDoubleTapped"/>
 
-            <!-- Chat Area (shown when not viewing voice channel or DM) -->
+            <!-- Chat Area (shown when not viewing DM or voice channel) -->
             <controls:ChatAreaView x:Name="ChatArea"
                                    ChannelName="{Binding SelectedChannel.Name}"
                                    ChannelTopic="{Binding SelectedChannel.Topic}"
@@ -236,8 +234,8 @@
                                    CloseMentionPopup="OnChatAreaCloseMentionPopup">
                 <controls:ChatAreaView.IsVisible>
                     <MultiBinding Converter="{x:Static BoolConverters.And}">
-                        <Binding Path="IsViewingVoiceChannel" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="IsViewingDM" Converter="{x:Static BoolConverters.Not}"/>
+                        <Binding Path="IsViewingVoiceChannel" Converter="{x:Static BoolConverters.Not}"/>
                     </MultiBinding>
                 </controls:ChatAreaView.IsVisible>
             </controls:ChatAreaView>
@@ -297,6 +295,58 @@
             <views:ScreenSharePickerView DataContext="{Binding ScreenSharePicker}"
                                           HorizontalAlignment="Center"
                                           VerticalAlignment="Center"/>
+        </Border>
+
+        <!-- Voice Video Grid Overlay (shown when user explicitly opens video grid while in voice) -->
+        <Border Grid.ColumnSpan="6"
+                Background="#E0000000"
+                IsVisible="{Binding IsVoiceVideoOverlayOpen}"
+                HorizontalAlignment="Stretch"
+                VerticalAlignment="Stretch"
+                PointerPressed="OnVoiceVideoOverlayBackgroundClick">
+            <Border Background="{StaticResource Content2Brush}"
+                    CornerRadius="12"
+                    Margin="40"
+                    HorizontalAlignment="Stretch"
+                    VerticalAlignment="Stretch"
+                    PointerPressed="OnVoiceVideoOverlayContentClick">
+                <Grid RowDefinitions="Auto,*">
+                    <!-- Header with channel name and close button -->
+                    <Border Grid.Row="0"
+                            Background="{StaticResource Content1Brush}"
+                            CornerRadius="12,12,0,0"
+                            Padding="16,12">
+                        <Grid ColumnDefinitions="*,Auto">
+                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                                <ui:SymbolIcon Symbol="Speaker2"
+                                           Foreground="{StaticResource SuccessBrush}"
+                                           FontSize="18"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding CurrentVoiceChannel.Name}"
+                                           Classes="heading-3"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                            <Button Grid.Column="1"
+                                    Classes="btn-icon"
+                                    Command="{Binding HideVoiceVideoOverlayCommand}"
+                                    ToolTip.Tip="Close (ESC)">
+                                <ui:SymbolIcon Symbol="Dismiss" Foreground="White" FontSize="14"/>
+                            </Button>
+                        </Grid>
+                    </Border>
+
+                    <!-- Video Grid Content -->
+                    <controls:VoiceChannelContentView Grid.Row="1"
+                                                      SelectedVoiceChannel="{Binding CurrentVoiceChannel}"
+                                                      ShowAudioDeviceWarning="{Binding ShowAudioDeviceWarning}"
+                                                      VoiceChannelContent="{Binding VoiceChannelContent}"
+                                                      OpenSettingsCommand="{Binding OpenSettingsCommand}"
+                                                      WatchScreenShareRequested="OnVoiceChannelWatchScreenShare"
+                                                      StopWatchingRequested="OnVoiceChannelStopWatching"
+                                                      FullscreenRequested="OnVoiceChannelFullscreen"
+                                                      VideoTileDoubleTapped="OnVoiceChannelVideoTileDoubleTapped"/>
+                </Grid>
+            </Border>
         </Border>
 
         <!-- Video Fullscreen Overlay -->

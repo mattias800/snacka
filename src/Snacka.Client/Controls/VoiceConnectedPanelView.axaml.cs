@@ -43,6 +43,15 @@ public partial class VoiceConnectedPanelView : UserControl
     public static readonly StyledProperty<ICommand?> LeaveVoiceChannelCommandProperty =
         AvaloniaProperty.Register<VoiceConnectedPanelView, ICommand?>(nameof(LeaveVoiceChannelCommand));
 
+    public static readonly StyledProperty<ICommand?> ShowVoiceVideoOverlayCommandProperty =
+        AvaloniaProperty.Register<VoiceConnectedPanelView, ICommand?>(nameof(ShowVoiceVideoOverlayCommand));
+
+    public static readonly StyledProperty<bool> IsVoiceInDifferentCommunityProperty =
+        AvaloniaProperty.Register<VoiceConnectedPanelView, bool>(nameof(IsVoiceInDifferentCommunity));
+
+    public static readonly StyledProperty<string?> VoiceCommunityNameProperty =
+        AvaloniaProperty.Register<VoiceConnectedPanelView, string?>(nameof(VoiceCommunityName));
+
     public VoiceConnectedPanelView()
     {
         InitializeComponent();
@@ -112,5 +121,23 @@ public partial class VoiceConnectedPanelView : UserControl
     {
         get => GetValue(LeaveVoiceChannelCommandProperty);
         set => SetValue(LeaveVoiceChannelCommandProperty, value);
+    }
+
+    public ICommand? ShowVoiceVideoOverlayCommand
+    {
+        get => GetValue(ShowVoiceVideoOverlayCommandProperty);
+        set => SetValue(ShowVoiceVideoOverlayCommandProperty, value);
+    }
+
+    public bool IsVoiceInDifferentCommunity
+    {
+        get => GetValue(IsVoiceInDifferentCommunityProperty);
+        set => SetValue(IsVoiceInDifferentCommunityProperty, value);
+    }
+
+    public string? VoiceCommunityName
+    {
+        get => GetValue(VoiceCommunityNameProperty);
+        set => SetValue(VoiceCommunityNameProperty, value);
     }
 }

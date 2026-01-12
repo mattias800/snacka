@@ -338,7 +338,8 @@
                             <ItemsControl ItemsSource="{Binding Participants}" Margin="28,0,0,4">
                                 <ItemsControl.ItemTemplate>
                                     <DataTemplate>
-                                        <Border Classes="voice-participant" Margin="4,2">
+                                        <Border Classes="voice-participant" Margin="4,2"
+                                                DoubleTapped="VoiceParticipant_DoubleTapped">
                                             <!-- Context menu for user volume (only for other users) -->
                                             <Border.ContextMenu>
                                                 <ContextMenu>

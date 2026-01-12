@@ -120,26 +120,12 @@ public class SfuConnectionManager : IAsyncDisposable
     }
 
     /// <summary>
-    /// Handles an SFU offer from the server. If no current channel, caches the offer.
+    /// Stores a pending SFU offer for later processing when the channel is joined.
     /// </summary>
-    public async Task HandleSfuOfferAsync(Guid channelId, Guid? currentChannelId, IAudioSource? audioSource)
+    public void StorePendingOffer(Guid channelId, string sdp)
     {
-        // If we don't have a current channel yet, cache the offer for later
-        if (currentChannelId == null)
-        {
-            Console.WriteLine($"SfuConnectionManager: Caching SFU offer for channel {channelId} (no current channel yet)");
-            _pendingSfuOffer = (channelId, ""); // Will be filled when received
-            return;
-        }
-
-        if (currentChannelId != channelId)
-        {
-            Console.WriteLine($"SfuConnectionManager: Ignoring SFU offer for channel {channelId} (current: {currentChannelId})");
-            return;
-        }
-
-        // This path shouldn't be hit - HandleSfuOfferFromSignalR handles the actual offer
-        await Task.CompletedTask;
+        Console.WriteLine($"SfuConnectionManager: Storing pending SFU offer for channel {channelId}");
+        _pendingSfuOffer = (channelId, sdp);
     }
 
     /// <summary>

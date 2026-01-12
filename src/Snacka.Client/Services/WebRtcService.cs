@@ -505,8 +505,8 @@ public class WebRtcService : IWebRtcService
         if (_currentChannelId == null)
         {
             Console.WriteLine($"WebRTC: Caching SFU offer for channel {channelId} (no current channel yet)");
-            // Store as pending - will be processed when JoinVoiceChannelAsync is called
-            // The manager stores pending offers internally
+            // Store the offer with SDP - will be processed when JoinVoiceChannelAsync is called
+            _sfuConnectionManager.StorePendingOffer(channelId, sdp);
             return;
         }
 

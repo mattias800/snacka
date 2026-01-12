@@ -73,6 +73,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isScreenSharePickerOpen;
     private ScreenSharePickerViewModel? _screenSharePicker;
 
+    // Voice video overlay state (for viewing video grid while navigating elsewhere)
+    private bool _isVoiceVideoOverlayOpen;
+
     // Video fullscreen state
     private bool _isVideoFullscreen;
     private VideoStreamViewModel? _fullscreenStream;
@@ -253,6 +256,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             // Close the DM view when selecting a text channel
             _dmContent?.Close();
+            // Clear voice channel viewing when selecting a text channel
+            SelectedVoiceChannelForViewing = null;
             SelectedChannel = channel;
         });
 
@@ -309,6 +314,20 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         ToggleDeafenCommand = ReactiveCommand.CreateFromTask(ToggleDeafenAsync);
         ToggleCameraCommand = ReactiveCommand.CreateFromTask(ToggleCameraAsync);
         ToggleScreenShareCommand = ReactiveCommand.CreateFromTask(ToggleScreenShareAsync);
+
+        // Voice video overlay commands (show/hide video grid while navigating)
+        ShowVoiceVideoOverlayCommand = ReactiveCommand.Create(() =>
+        {
+            if (CurrentVoiceChannel != null)
+            {
+                SelectedVoiceChannelForViewing = CurrentVoiceChannel;
+                IsVoiceVideoOverlayOpen = true;
+            }
+        });
+        HideVoiceVideoOverlayCommand = ReactiveCommand.Create(() =>
+        {
+            IsVoiceVideoOverlayOpen = false;
+        });
 
         // Admin voice commands
         ServerMuteUserCommand = ReactiveCommand.CreateFromTask<VoiceParticipantViewModel>(ServerMuteUserAsync);
@@ -1012,7 +1031,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public CommunityResponse? SelectedCommunity
     {
         get => _selectedCommunity;
-        set => this.RaiseAndSetIfChanged(ref _selectedCommunity, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _selectedCommunity, value);
+            this.RaisePropertyChanged(nameof(IsVoiceInDifferentCommunity));
+            this.RaisePropertyChanged(nameof(VoiceCommunityName));
+        }
     }
 
     public ChannelResponse? SelectedChannel
@@ -1642,10 +1666,26 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             this.RaiseAndSetIfChanged(ref _currentVoiceChannel, value);
             this.RaisePropertyChanged(nameof(IsInVoiceChannel));
             this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
+            this.RaisePropertyChanged(nameof(IsVoiceInDifferentCommunity));
+            this.RaisePropertyChanged(nameof(VoiceCommunityName));
         }
     }
 
     public bool IsInVoiceChannel => CurrentVoiceChannel is not null;
+
+    /// <summary>
+    /// Whether the user is in a voice channel in a different community than currently selected.
+    /// </summary>
+    public bool IsVoiceInDifferentCommunity =>
+        CurrentVoiceChannel != null &&
+        SelectedCommunity != null &&
+        CurrentVoiceChannel.CommunityId != SelectedCommunity.Id;
+
+    /// <summary>
+    /// The name of the community where the current voice channel is located.
+    /// </summary>
+    public string? VoiceCommunityName =>
+        Communities.FirstOrDefault(c => c.Id == CurrentVoiceChannel?.CommunityId)?.Name;
 
     /// <summary>
     /// Whether the user has not configured an audio input device.
@@ -1783,6 +1823,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         get => _screenSharePicker;
         set => this.RaiseAndSetIfChanged(ref _screenSharePicker, value);
+    }
+
+    /// <summary>
+    /// True when the voice video overlay is open (for viewing video grid while navigating text channels).
+    /// </summary>
+    public bool IsVoiceVideoOverlayOpen
+    {
+        get => _isVoiceVideoOverlayOpen;
+        set => this.RaiseAndSetIfChanged(ref _isVoiceVideoOverlayOpen, value);
     }
 
     public bool IsVideoFullscreen
@@ -2104,6 +2153,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ToggleCameraCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleScreenShareCommand { get; }
 
+    // Voice video overlay commands (for viewing video grid while navigating elsewhere)
+    public ReactiveCommand<Unit, Unit> ShowVoiceVideoOverlayCommand { get; }
+    public ReactiveCommand<Unit, Unit> HideVoiceVideoOverlayCommand { get; }
+
     // Admin voice commands
     public ReactiveCommand<VoiceParticipantViewModel, Unit> ServerMuteUserCommand { get; }
     public ReactiveCommand<VoiceParticipantViewModel, Unit> ServerDeafenUserCommand { get; }
@@ -2113,10 +2166,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     private void StartDMWithMember(CommunityMemberResponse member)
     {
-        // Clear voice channel viewing when opening DM
-        SelectedVoiceChannelForViewing = null;
-
-        // Delegate to DMContentViewModel
+        // Note: Voice state is now independent of DM navigation
+        // Voice video overlay can remain open while viewing DMs
         _dmContent?.OpenConversation(member.UserId, member.Username);
     }
 
@@ -2802,8 +2853,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 Console.WriteLine($"JoinVoiceChannelAsync: WARNING - VoiceChannelVM for {channel.Name} not found!");
             }
 
-            // Update VoiceChannelContent for video grid display
-            SelectedVoiceChannelForViewing = channel;
+            // Update VoiceChannelContent for video grid display (but don't auto-navigate to it)
+            // User can open the video overlay manually via ShowVoiceVideoOverlayCommand
             _voiceChannelContent?.SetParticipants(participants);
 
             // Start WebRTC connections to all existing participants
@@ -2855,7 +2906,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsCameraOn = false;
         IsScreenSharing = false;
 
-        // Clear voice channel content view
+        // Close voice video overlay and clear content view
+        IsVoiceVideoOverlayOpen = false;
         SelectedVoiceChannelForViewing = null;
         _voiceChannelContent?.SetParticipants(Enumerable.Empty<VoiceParticipantResponse>());
 

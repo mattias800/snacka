@@ -270,6 +270,7 @@ public partial class ChannelListView : UserControl
     public event EventHandler<ChannelResponse>? VoiceChannelClicked;
     public event EventHandler<ChannelResponse>? VoiceChannelViewRequested;
     public event EventHandler<(VoiceParticipantViewModel Participant, VoiceChannelViewModel TargetChannel)>? MoveUserRequested;
+    public event EventHandler<(VoiceParticipantViewModel Participant, ChannelResponse Channel)>? ParticipantDoubleClicked;
 
     // Voice channel click/drag state
     private ChannelResponse? _voiceClickChannel;
@@ -1006,5 +1007,20 @@ public partial class ChannelListView : UserControl
         }
 
         _moveUserParticipant = null;
+    }
+
+    // Handle double-click on a voice participant
+    private void VoiceParticipant_DoubleTapped(object? sender, TappedEventArgs e)
+    {
+        if (sender is Border border && border.DataContext is VoiceParticipantViewModel participant)
+        {
+            // Find the channel this participant is in
+            var voiceChannel = VoiceChannels?.FirstOrDefault(v => v.Id == participant.Participant.ChannelId);
+            if (voiceChannel != null)
+            {
+                ParticipantDoubleClicked?.Invoke(this, (participant, voiceChannel.Channel));
+                e.Handled = true;
+            }
+        }
     }
 }

@@ -1,3 +1,4 @@
+using System.Linq;
 using System.Reactive.Linq;
 using Avalonia;
 using Avalonia.Controls;
@@ -101,12 +102,20 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
     }
 
-    // Global key handler for ESC to exit fullscreen and Cmd+K / Ctrl+K for quick switcher
+    // Global key handler for ESC to exit fullscreen/overlay and Cmd+K / Ctrl+K for quick switcher
     private void OnGlobalKeyDown(object? sender, KeyEventArgs e)
     {
         if (e.Key == Key.Escape && ViewModel?.IsVideoFullscreen == true)
         {
             ViewModel.CloseFullscreen();
+            e.Handled = true;
+            return;
+        }
+
+        // ESC to close voice video overlay
+        if (e.Key == Key.Escape && ViewModel?.IsVoiceVideoOverlayOpen == true)
+        {
+            ViewModel.HideVoiceVideoOverlayCommand.Execute().Subscribe();
             e.Handled = true;
             return;
         }
@@ -227,7 +236,12 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     // Called when clicking a voice channel to join it
     private void OnVoiceChannelClicked(object? sender, Services.ChannelResponse channel)
     {
-        ViewModel?.JoinVoiceChannelCommand.Execute(channel).Subscribe();
+        if (ViewModel != null)
+        {
+            // Join the channel and show the voice UI
+            ViewModel.JoinVoiceChannelCommand.Execute(channel).Subscribe();
+            ViewModel.SelectedVoiceChannelForViewing = channel;
+        }
     }
 
     // Called when clicking a voice channel we're already in (just view it)
@@ -236,6 +250,36 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         if (ViewModel != null)
         {
             ViewModel.SelectedVoiceChannelForViewing = channel;
+        }
+    }
+
+    // Called when double-clicking a participant in the voice channel list
+    private async void OnParticipantDoubleClicked(object? sender, (ViewModels.VoiceParticipantViewModel Participant, Services.ChannelResponse Channel) args)
+    {
+        if (ViewModel == null) return;
+
+        var (participant, channel) = args;
+
+        // Join the channel if not already in it
+        if (ViewModel.CurrentVoiceChannel?.Id != channel.Id)
+        {
+            ViewModel.JoinVoiceChannelCommand.Execute(channel).Subscribe();
+        }
+
+        // Show the voice channel UI
+        ViewModel.SelectedVoiceChannelForViewing = channel;
+
+        // If the participant is screen sharing, auto-watch their stream
+        if (participant.IsScreenSharing && ViewModel.VoiceChannelContent != null)
+        {
+            // Find the screen share stream for this user
+            var screenShareStream = ViewModel.VoiceChannelContent.VideoStreams
+                .FirstOrDefault(s => s.UserId == participant.Participant.UserId && s.IsRemoteScreenShare);
+
+            if (screenShareStream != null)
+            {
+                await ViewModel.VoiceChannelContent.WatchScreenShareAsync(screenShareStream);
+            }
         }
     }
 
@@ -543,6 +587,18 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     private void OnCloseFullscreenClick(object? sender, RoutedEventArgs e)
     {
         ViewModel?.CloseFullscreen();
+    }
+
+    // Called when clicking outside the voice video overlay content (closes the overlay)
+    private void OnVoiceVideoOverlayBackgroundClick(object? sender, PointerPressedEventArgs e)
+    {
+        ViewModel?.HideVoiceVideoOverlayCommand.Execute().Subscribe();
+    }
+
+    // Called when clicking inside the voice video overlay content (prevents closing)
+    private void OnVoiceVideoOverlayContentClick(object? sender, PointerPressedEventArgs e)
+    {
+        e.Handled = true; // Prevent bubbling to background
     }
 
     // Legacy handler - Called when clicking the Watch button on a screen share (unused)
