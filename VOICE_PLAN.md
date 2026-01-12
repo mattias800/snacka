@@ -42,7 +42,7 @@ This document outlines planned improvements for voice channels in Snacka.
 #### 2.2 Noise Suppression
 - [ ] Built-in noise suppression toggle
 - [ ] Echo cancellation improvements
-- [ ] Automatic gain control
+- [x] Automatic gain control (AGC with 4x baseline boost, fast attack/slow release)
 
 ---
 
@@ -56,8 +56,8 @@ This document outlines planned improvements for voice channels in Snacka.
 - [x] Move users between channels (admin)
 
 #### 3.2 Audio Mixing
-- [x] Per-user volume control (0-200% via right-click context menu, persisted)
-- [ ] Separate volume for screen share audio
+- [x] Per-user volume control (0-300% via right-click context menu, persisted)
+- [x] Separate volume for screen share audio (fullscreen view has volume slider)
 - [ ] Ducking (lower other audio when someone speaks)
 
 #### 3.3 Recording
@@ -98,10 +98,10 @@ This document outlines planned improvements for voice channels in Snacka.
 - [x] Phase 3.1: Voice Channel Permissions (server mute/deafen, move users)
 
 ### In Progress
-- [ ] Phase 2.2: Noise Suppression (optional)
+- [ ] Phase 2.2: Noise Suppression (AGC done, noise suppression and echo cancellation pending)
 
 ### Not Started
 - [ ] Phase 3.1: Remaining permissions (channel-specific mute, priority speaker)
-- [ ] Phase 3.2: Remaining audio mixing (screen share volume, ducking)
+- [ ] Phase 3.2: Remaining audio mixing (ducking)
 - [ ] Phase 3.3: Recording
 - [ ] Phase 4: Nice to Have

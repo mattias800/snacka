@@ -97,8 +97,8 @@ SnackaCapture capture --window 12345 --width 1920 --height 1080 --fps 30 --audio
 **Integration Tasks**:
 - [x] Update WebRtcService to detect macOS 13+ and use SnackaCapture
 - [x] Parse audio packets from stderr
-- [ ] Encode and transmit screen share audio
-- [ ] Update ScreenCaptureService to use SnackaCapture for source listing
+- [x] Encode and transmit screen share audio (PT 112 for Opus screen audio)
+- [x] Update ScreenCaptureService to use SnackaCapture for source listing
 
 ---
 
@@ -306,7 +306,7 @@ Compare to current: ~150-200ms (not playable for fast games)
 ### High Priority (Current)
 1. ✅ macOS SnackaCapture with ScreenCaptureKit
 2. ✅ Integrate SnackaCapture with WebRtcService
-3. ⬜ Screen share audio transmission
+3. ✅ Screen share audio transmission (PT 112, separate Opus decoder in UserAudioMixer)
 
 ### Medium Priority
 4. ⬜ Windows SnackaCapture with WGC + WASAPI
@@ -357,10 +357,10 @@ src/
 ## Testing Checklist
 
 ### Phase 1: Native Capture
-- [ ] macOS: SnackaCapture captures display with audio
-- [ ] macOS: SnackaCapture captures specific app with its audio only
-- [ ] macOS: Audio transmitted alongside screen share video
-- [ ] macOS: Fallback to ffmpeg on macOS < 13
+- [x] macOS: SnackaCapture captures display with audio
+- [x] macOS: SnackaCapture captures specific app with its audio only
+- [x] macOS: Audio transmitted alongside screen share video
+- [x] macOS: Fallback to ffmpeg on macOS < 13
 - [ ] Windows: Capture with WASAPI audio
 - [ ] Linux: Capture with PipeWire audio
 

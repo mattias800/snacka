@@ -367,98 +367,98 @@ Add thread indicator when `ReplyCount > 0`:
 
 ## Implementation Checklist
 
-### Phase 1: Database Schema
+### Phase 1: Database Schema ✅
 
-- [ ] Add `ThreadParentMessageId` (nullable FK) to Message entity
-- [ ] Add `ReplyParentMessageId` (nullable FK) to Message entity
-- [ ] Add `ReplyCount` (int, default 0) to Message entity
-- [ ] Add `LastReplyAt` (DateTime?, nullable) to Message entity
-- [ ] Add `ThreadParentMessage` navigation property
-- [ ] Add `ReplyParentMessage` navigation property
-- [ ] Add `ThreadReplies` collection navigation property
-- [ ] Configure thread self-referential relationship (cascade delete)
-- [ ] Configure reply self-referential relationship (set null on delete)
-- [ ] Add index on `ThreadParentMessageId`
-- [ ] Add index on `ReplyParentMessageId`
-- [ ] Create EF Core migration
-- [ ] Apply migration
+- [x] Add `ThreadParentMessageId` (nullable FK) to Message entity
+- [x] Add `ReplyParentMessageId` (nullable FK) to Message entity
+- [x] Add `ReplyCount` (int, default 0) to Message entity
+- [x] Add `LastReplyAt` (DateTime?, nullable) to Message entity
+- [x] Add `ThreadParentMessage` navigation property
+- [x] Add `ReplyParentMessage` navigation property
+- [x] Add `ThreadReplies` collection navigation property
+- [x] Configure thread self-referential relationship (cascade delete)
+- [x] Configure reply self-referential relationship (set null on delete)
+- [x] Add index on `ThreadParentMessageId`
+- [x] Add index on `ReplyParentMessageId`
+- [x] Create EF Core migration
+- [x] Apply migration
 
-### Phase 2: Backend Service
+### Phase 2: Backend Service ✅
 
-- [ ] Add `ThreadParentMessageId`, `ReplyCount`, `LastReplyAt` to MessageDto
-- [ ] Add `ReplyParentMessageId`, `ReplyParentMessage` to MessageDto
-- [ ] Create `MessagePreviewDto` class (for reply previews)
-- [ ] Create `ThreadDto` class
-- [ ] Add `CreateThreadReplyAsync` method to IMessageService
-- [ ] Add `GetThreadAsync` method to IMessageService
-- [ ] Update `GetChannelMessagesAsync` to exclude thread messages (where ThreadParentMessageId == null)
-- [ ] Update delete logic to decrement parent's ReplyCount when thread message is deleted
-- [ ] Add validation: thread parent message must exist and be in same channel
-- [ ] Include reply preview data when fetching messages
+- [x] Add `ThreadParentMessageId`, `ReplyCount`, `LastReplyAt` to MessageDto
+- [x] Add `ReplyParentMessageId`, `ReplyParentMessage` to MessageDto
+- [x] Create `MessagePreviewDto` class (for reply previews)
+- [x] Create `ThreadDto` class
+- [x] Add `CreateThreadReplyAsync` method to IMessageService
+- [x] Add `GetThreadAsync` method to IMessageService
+- [x] Update `GetChannelMessagesAsync` to exclude thread messages (where ThreadParentMessageId == null)
+- [x] Update delete logic to decrement parent's ReplyCount when thread message is deleted
+- [x] Add validation: thread parent message must exist and be in same channel
+- [x] Include reply preview data when fetching messages
 
-### Phase 3: API Endpoints
+### Phase 3: API Endpoints ✅
 
-- [ ] Add `GET /api/messages/{parentMessageId}/thread` endpoint
-- [ ] Add `POST /api/messages/{parentMessageId}/replies` endpoint
-- [ ] Test that existing message endpoints work for thread replies
+- [x] Add `GET /api/messages/{parentMessageId}/thread` endpoint
+- [x] Add `POST /api/messages/{parentMessageId}/replies` endpoint
+- [x] Test that existing message endpoints work for thread replies
 
-### Phase 4: SignalR
+### Phase 4: SignalR ✅
 
-- [ ] Add method to join thread group when opening thread
-- [ ] Add method to leave thread group when closing thread
-- [ ] Add `ThreadMetadataUpdated` event for parent message updates
-- [ ] Broadcast new replies to thread group
-- [ ] Broadcast parent metadata updates to channel
+- [x] Add method to join thread group when opening thread
+- [x] Add method to leave thread group when closing thread
+- [x] Add `ThreadMetadataUpdated` event for parent message updates
+- [x] Broadcast new replies to thread group
+- [x] Broadcast parent metadata updates to channel
 
-### Phase 5: UI - ViewModels
+### Phase 5: UI - ViewModels ✅
 
-- [ ] Add `ThreadParentMessageId`, `ReplyCount`, `LastReplyAt`, `HasReplies`, `IsInThread` to MessageViewModel
-- [ ] Add `ReplyParentMessageId`, `ReplyParentMessage`, `HasReplyPreview` to MessageViewModel
-- [ ] Create `MessagePreviewViewModel` class
-- [ ] Add `OpenThreadCommand` to MessageViewModel
-- [ ] Add `ReplyToMessageCommand` to MessageViewModel
-- [ ] Create `ThreadViewModel` with Replies collection
-- [ ] Add `SendReplyCommand` to ThreadViewModel
-- [ ] Add `CloseCommand` to ThreadViewModel
-- [ ] Add `LoadAsync` method to ThreadViewModel
-- [ ] Add `CurrentThread` property to MainViewModel
-- [ ] Add `IsThreadOpen` computed property to MainViewModel
-- [ ] Add `OpenThread` method to MainViewModel
-- [ ] Add `CloseThread` method to MainViewModel
-- [ ] Add `ReplyingToMessage` property for tracking reply-in-progress
+- [x] Add `ThreadParentMessageId`, `ReplyCount`, `LastReplyAt`, `HasReplies`, `IsInThread` to MessageViewModel
+- [x] Add `ReplyParentMessageId`, `ReplyParentMessage`, `HasReplyPreview` to MessageViewModel
+- [x] Create `MessagePreviewViewModel` class
+- [x] Add `OpenThreadCommand` to MessageViewModel
+- [x] Add `ReplyToMessageCommand` to MessageViewModel
+- [x] Create `ThreadViewModel` with Replies collection
+- [x] Add `SendReplyCommand` to ThreadViewModel
+- [x] Add `CloseCommand` to ThreadViewModel
+- [x] Add `LoadAsync` method to ThreadViewModel
+- [x] Add `CurrentThread` property to MainViewModel
+- [x] Add `IsThreadOpen` computed property to MainViewModel
+- [x] Add `OpenThread` method to MainViewModel
+- [x] Add `CloseThread` method to MainViewModel
+- [x] Add `ReplyingToMessage` property for tracking reply-in-progress
 
-### Phase 6: UI - Components
+### Phase 6: UI - Components ✅
 
-- [ ] Create `ThreadPanel.axaml` layout
-- [ ] Add parent message preview section to ThreadPanel
-- [ ] Add replies list (reuse MessageItem or create ThreadReplyItem)
-- [ ] Add reply input field and send button
-- [ ] Add close button to ThreadPanel header
-- [ ] Add thread indicator to MessageItem (reply count badge)
-- [ ] Make thread indicator clickable
-- [ ] Style "N replies · Last reply Xm ago" text
-- [ ] Add reply preview component above MessageItem (when replying to a message)
-- [ ] Add "Reply to" button/context menu on messages
-- [ ] Add cancel reply button in input area
-- [ ] Integrate ThreadPanel into MainWindow right sidebar
-- [ ] Add visibility toggle between ThreadPanel and UserListPanel
+- [x] Create `ThreadPanel.axaml` layout
+- [x] Add parent message preview section to ThreadPanel
+- [x] Add replies list (reuse MessageItem or create ThreadReplyItem)
+- [x] Add reply input field and send button
+- [x] Add close button to ThreadPanel header
+- [x] Add thread indicator to MessageItem (reply count badge)
+- [x] Make thread indicator clickable
+- [x] Style "N replies · Last reply Xm ago" text
+- [x] Add reply preview component above MessageItem (when replying to a message)
+- [x] Add "Reply to" button/context menu on messages
+- [x] Add cancel reply button in input area
+- [x] Integrate ThreadPanel into MainWindow right sidebar
+- [x] Add visibility toggle between ThreadPanel and UserListPanel
 
-### Phase 7: Real-time Updates
+### Phase 7: Real-time Updates ✅
 
-- [ ] Subscribe to SignalR events in ThreadViewModel
-- [ ] Handle new reply received (add to Replies collection)
-- [ ] Handle reply edited (update in Replies collection)
-- [ ] Handle reply deleted (remove from Replies collection)
-- [ ] Handle `ThreadMetadataUpdated` in channel view (update parent message badge)
-- [ ] Add loading state while fetching thread
+- [x] Subscribe to SignalR events in ThreadViewModel
+- [x] Handle new reply received (add to Replies collection)
+- [x] Handle reply edited (update in Replies collection)
+- [x] Handle reply deleted (remove from Replies collection)
+- [x] Handle `ThreadMetadataUpdated` in channel view (update parent message badge)
+- [x] Add loading state while fetching thread
 
-### Phase 8: Polish
+### Phase 8: Polish (Partial)
 
-- [ ] Add scroll to bottom when thread opens
-- [ ] Add scroll to bottom when new reply received
+- [x] Add scroll to bottom when thread opens
+- [x] Add scroll to bottom when new reply received
 - [ ] Add "Load more" for pagination
-- [ ] Handle edge case: parent message deleted while thread is open
-- [ ] Add empty state when thread has no replies yet
+- [x] Handle edge case: parent message deleted while thread is open
+- [x] Add empty state when thread has no replies yet
 
 ### Phase 9: Testing
 
@@ -515,5 +515,5 @@ dotnet ef database update --project src/Snacka.Server
 
 ---
 
-**Last Updated:** 2025-01-09
-**Status:** Plan Revised - Ready for Implementation
+**Last Updated:** 2026-01-12
+**Status:** ✅ IMPLEMENTED - Phases 1-7 complete, Phase 8 partial (load more pending), Phase 9 (tests) pending
