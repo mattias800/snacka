@@ -1888,10 +1888,18 @@ public class WebRtcService : IWebRtcService
                     nativeCaptureArgs = GetSnackaCaptureWindowsArgs(source, screenWidth, screenHeight, screenFps, captureAudio);
                 }
             }
+            else if (ShouldUseSnackaCaptureLinux())
+            {
+                nativeCapturePath = GetSnackaCaptureLinuxPath();
+                if (nativeCapturePath != null)
+                {
+                    nativeCaptureArgs = GetSnackaCaptureLinuxArgs(source, screenWidth, screenHeight, screenFps);
+                }
+            }
 
             _isUsingNativeCapture = nativeCapturePath != null;
-            // Both SnackaCaptureVideoToolbox (macOS) and SnackaCaptureWindows (Windows) with --encode output H.264 directly
-            _isUsingDirectH264 = (ShouldUseSnackaCaptureVideoToolbox() || ShouldUseSnackaCaptureWindows()) && nativeCapturePath != null;
+            // All native capture tools (macOS VideoToolbox, Windows MF, Linux VAAPI) with --encode output H.264 directly
+            _isUsingDirectH264 = (ShouldUseSnackaCaptureVideoToolbox() || ShouldUseSnackaCaptureWindows() || ShouldUseSnackaCaptureLinux()) && nativeCapturePath != null;
 
             // Only create ffmpeg encoder if we're not getting direct H.264
             if (!_isUsingDirectH264)
@@ -1906,7 +1914,9 @@ public class WebRtcService : IWebRtcService
             }
             else
             {
-                var encoderName = OperatingSystem.IsMacOS() ? "VideoToolbox" : "Media Foundation (NVENC/AMF/QSV)";
+                var encoderName = OperatingSystem.IsMacOS() ? "VideoToolbox" :
+                                  OperatingSystem.IsWindows() ? "Media Foundation (NVENC/AMF/QSV)" :
+                                  "VAAPI";
                 Console.WriteLine($"WebRTC: Using direct H.264 encoding from {encoderName} (bypassing ffmpeg)");
             }
 
@@ -2149,6 +2159,25 @@ public class WebRtcService : IWebRtcService
     }
 
     /// <summary>
+    /// Checks if SnackaCaptureLinux (native X11 + VAAPI) should be used.
+    /// Returns true on Linux where we have the native capture tool with VAAPI support.
+    /// </summary>
+    private bool ShouldUseSnackaCaptureLinux()
+    {
+        if (!OperatingSystem.IsLinux()) return false;
+
+        // Check if the binary exists
+        var capturePath = GetSnackaCaptureLinuxPath();
+        if (capturePath != null && File.Exists(capturePath))
+        {
+            Console.WriteLine($"WebRTC: SnackaCaptureLinux available at {capturePath}");
+            return true;
+        }
+
+        return false;
+    }
+
+    /// <summary>
     /// Gets the path to the SnackaCaptureVideoToolbox binary.
     /// </summary>
     private string? GetSnackaCaptureVideoToolboxPath()
@@ -2260,6 +2289,71 @@ public class WebRtcService : IWebRtcService
         }
 
         // Use direct H.264 encoding via Media Foundation (NVENC/AMF/QuickSync)
+        args.Add("--encode");
+        args.Add("--bitrate 6");  // 6 Mbps for screen share
+
+        return string.Join(" ", args);
+    }
+
+    /// <summary>
+    /// Gets the path to the SnackaCaptureLinux binary.
+    /// </summary>
+    private string? GetSnackaCaptureLinuxPath()
+    {
+        // Look for SnackaCaptureLinux in several locations:
+        // 1. Same directory as the app (bundled)
+        // 2. CMake build paths
+        // 3. Standard installation paths
+
+        var appDir = AppContext.BaseDirectory;
+
+        var candidates = new[]
+        {
+            // Bundled with app
+            Path.Combine(appDir, "SnackaCaptureLinux"),
+            // CMake build paths
+            Path.Combine(appDir, "..", "SnackaCaptureLinux", "build", "bin", "SnackaCaptureLinux"),
+            Path.Combine(appDir, "..", "..", "..", "..", "SnackaCaptureLinux", "build", "bin", "SnackaCaptureLinux"),
+            // Standard installation paths
+            "/usr/local/bin/SnackaCaptureLinux",
+            "/usr/bin/SnackaCaptureLinux",
+        };
+
+        foreach (var candidate in candidates)
+        {
+            var fullPath = Path.GetFullPath(candidate);
+            if (File.Exists(fullPath))
+            {
+                Console.WriteLine($"WebRTC: Found SnackaCaptureLinux at {fullPath}");
+                return fullPath;
+            }
+        }
+
+        Console.WriteLine("WebRTC: SnackaCaptureLinux not found, will use ffmpeg");
+        return null;
+    }
+
+    /// <summary>
+    /// Builds SnackaCaptureLinux command arguments based on source and settings.
+    /// </summary>
+    private string GetSnackaCaptureLinuxArgs(ScreenCaptureSource? source, int width, int height, int fps)
+    {
+        var args = new List<string>();
+
+        // Source type - Linux version uses display index
+        if (source == null || source.Type == ScreenCaptureSourceType.Display)
+        {
+            var displayIndex = source?.Id ?? "0";
+            args.Add($"--display {displayIndex}");
+        }
+        // Note: Window capture not yet supported in SnackaCaptureLinux
+
+        // Resolution and framerate
+        args.Add($"--width {width}");
+        args.Add($"--height {height}");
+        args.Add($"--fps {fps}");
+
+        // Use direct H.264 encoding via VAAPI
         args.Add("--encode");
         args.Add("--bitrate 6");  // 6 Mbps for screen share
 
