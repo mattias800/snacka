@@ -317,46 +317,49 @@ public class ScreenAnnotationWindow : Window
 
 ## Implementation Phases
 
-### Phase 1: Data Models & SignalR (Foundation)
+### Phase 1: Data Models & SignalR (Foundation) ✅ COMPLETE
 
-**Files to create/modify:**
-- `src/Snacka.Shared/Models/DrawingStroke.cs` (new)
-- `src/Snacka.Shared/Models/AnnotationMessage.cs` (new)
-- `src/Snacka.Server/Hubs/CommunityHub.cs` (add methods)
-- `src/Snacka.Client/Services/ISignalRService.cs` (add interface)
-- `src/Snacka.Client/Services/SignalRService.cs` (add implementation)
+**Files created/modified:**
+- `src/Snacka.Shared/Models/DrawingAnnotation.cs` ✅ (DrawingStroke, PointF, AnnotationMessage)
+- `src/Snacka.Server/Hubs/SnackaHub.cs` ✅ (SendAnnotation, ClearAnnotations methods)
+- `src/Snacka.Client/Services/ISignalRService.cs` ✅ (interface)
+- `src/Snacka.Client/Services/SignalRService.cs` ✅ (implementation + ReceiveAnnotation handler)
 
-**Outcome:** SignalR can send/receive annotation messages
+**Outcome:** SignalR can send/receive annotation messages ✅
 
-### Phase 2: Viewer Drawing Experience
+### Phase 2: Viewer Drawing Experience ✅ COMPLETE
 
-**Files to create/modify:**
-- `src/Snacka.Client/Services/AnnotationService.cs` (new)
-- `src/Snacka.Client/ViewModels/MainAppViewModel.cs` (add annotation state)
-- `src/Snacka.Client/Views/MainAppView.axaml` (add canvas + toolbar)
-- `src/Snacka.Client/Views/MainAppView.axaml.cs` (add pointer handlers)
+**Files created/modified:**
+- `src/Snacka.Client/Services/AnnotationService.cs` ✅
+- `src/Snacka.Client/ViewModels/MainAppViewModel.cs` ✅ (annotation state, IsAnnotationEnabled)
+- `src/Snacka.Client/Views/MainAppView.axaml` ✅ (AnnotationCanvas + toolbar)
+- `src/Snacka.Client/Views/MainAppView.axaml.cs` ✅ (pointer handlers)
 
-**Outcome:** Viewers can draw on fullscreen video, strokes sync to all viewers
+**Outcome:** Viewers can draw on fullscreen video, strokes sync to all viewers ✅
 
-### Phase 3: Sharer Drawing Experience
+### Phase 3: Sharer Drawing Experience ✅ COMPLETE
 
-**Files to create/modify:**
-- `src/Snacka.Client/Views/ScreenAnnotationWindow.axaml` (new)
-- `src/Snacka.Client/Views/ScreenAnnotationWindow.axaml.cs` (new)
-- `src/Snacka.Client/Views/AnnotationToolbarWindow.axaml` (new - floating toolbar)
-- `src/Snacka.Client/ViewModels/ScreenAnnotationViewModel.cs` (new)
-- `src/Snacka.Client/Services/WebRtcService.cs` (launch overlay when sharing)
+**Files created/modified:**
+- `src/Snacka.Client/Views/ScreenAnnotationWindow.axaml` ✅ (transparent overlay)
+- `src/Snacka.Client/Views/ScreenAnnotationWindow.axaml.cs` ✅
+- `src/Snacka.Client/Views/AnnotationToolbarWindow.axaml` ✅ (floating toolbar)
+- `src/Snacka.Client/ViewModels/ScreenAnnotationViewModel.cs` ✅
+- `src/Snacka.Client/Services/WebRtcService.cs` ✅ (overlay integration)
 
-**Outcome:** Sharer sees floating toolbar, can toggle draw mode, drawings appear on their screen
+**Outcome:** Sharer sees floating toolbar, can toggle draw mode, drawings appear on their screen ✅
 
-### Phase 4: Polish & UX
+### Phase 4: Polish & UX ✅ MOSTLY COMPLETE
 
-- Smooth line rendering (Catmull-Rom splines or similar)
-- Stroke thickness options
-- Eraser tool (click on stroke to remove)
-- Per-user colors with username tooltips
-- Fade out old strokes after N seconds (optional)
-- Keyboard shortcut to toggle draw mode (e.g., Ctrl+D)
+- [x] Smooth line rendering (polylines)
+- [x] Multiple color options (red, green, blue, yellow, white)
+- [x] Clear all button
+- [x] Allow/disallow drawing permission (host can enable/disable)
+- [x] Live stroke updates during drawing (stroke_update action)
+- [ ] Stroke thickness options (fixed at 3.0)
+- [ ] Eraser tool (click on stroke to remove)
+- [ ] Per-user colors with username tooltips
+- [ ] Fade out old strokes after N seconds (optional)
+- [ ] Keyboard shortcut to toggle draw mode
 
 ---
 
@@ -451,9 +454,14 @@ When draw mode is ON, the overlay captures all input.
 
 ## Success Criteria
 
-1. Viewers can draw on fullscreen screen share video
-2. Sharer can draw on their actual monitor (with overlay)
-3. All drawings sync in real-time to all participants
-4. Sharer can toggle between draw mode and normal desktop interaction
-5. Drawings are correctly scaled across different screen sizes
-6. Performance remains smooth (no frame drops during drawing)
+1. ✅ Viewers can draw on fullscreen screen share video
+2. ✅ Sharer can draw on their actual monitor (with overlay)
+3. ✅ All drawings sync in real-time to all participants
+4. ✅ Sharer can toggle between draw mode and normal desktop interaction
+5. ✅ Drawings are correctly scaled across different screen sizes (normalized 0.0-1.0 coords)
+6. ✅ Performance remains smooth (no frame drops during drawing)
+
+---
+
+**Last Updated:** 2026-01-12
+**Status:** ✅ IMPLEMENTED - Phases 1-3 complete, Phase 4 mostly complete (minor polish items remaining)
