@@ -31,6 +31,7 @@ public class VoiceParticipantViewModel : ReactiveObject
     public bool IsServerMuted => Participant.IsServerMuted;
     public bool IsServerDeafened => Participant.IsServerDeafened;
     public bool IsCameraOn => Participant.IsCameraOn;
+    public bool IsScreenSharing => Participant.IsScreenSharing;
 
     /// <summary>
     /// Whether the user is effectively muted (self-muted OR server-muted).
@@ -92,6 +93,7 @@ public class VoiceParticipantViewModel : ReactiveObject
         this.RaisePropertyChanged(nameof(IsMuted));
         this.RaisePropertyChanged(nameof(IsDeafened));
         this.RaisePropertyChanged(nameof(IsCameraOn));
+        this.RaisePropertyChanged(nameof(IsScreenSharing));
         this.RaisePropertyChanged(nameof(IsEffectivelyMuted));
         this.RaisePropertyChanged(nameof(IsEffectivelyDeafened));
     }
