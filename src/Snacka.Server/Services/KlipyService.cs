@@ -152,7 +152,7 @@ public class KlipyService : IGifService
             var fullUrl = r.Files?.Original?.Url ?? previewUrl;
 
             return new GifResult(
-                Id: r.Slug ?? r.Id?.ToString() ?? "",
+                Id: r.Slug ?? r.Id ?? "",
                 Title: r.Title ?? "",
                 PreviewUrl: previewUrl,
                 Url: fullUrl,
@@ -199,7 +199,7 @@ public class KlipyService : IGifService
     );
 
     private record KlipyGif(
-        int? Id,
+        string? Id,
         string? Slug,
         string? Title,
         KlipyFiles? Files
