@@ -456,15 +456,24 @@ public partial class ChatAreaView : UserControl
         if (scrollViewer == null) return;
 
         var distanceFromBottom = scrollViewer.Extent.Height - scrollViewer.Offset.Y - scrollViewer.Viewport.Height;
+        var wasAtBottom = _isMessagesAtBottom;
+        var isNowAtBottom = distanceFromBottom <= ScrollBottomThreshold;
+        var contentGrew = scrollViewer.Extent.Height > _lastMessagesExtentHeight && _lastMessagesExtentHeight > 0;
 
-        if (_isMessagesAtBottom && scrollViewer.Extent.Height > _lastMessagesExtentHeight && _lastMessagesExtentHeight > 0)
+        // Update state FIRST before deciding to auto-scroll
+        _isMessagesAtBottom = isNowAtBottom;
+        _lastMessagesExtentHeight = scrollViewer.Extent.Height;
+
+        // Only auto-scroll if:
+        // 1. We were at the bottom before this scroll event
+        // 2. We're still at the bottom now (user didn't scroll up)
+        // 3. Content grew (new messages added)
+        if (wasAtBottom && isNowAtBottom && contentGrew)
         {
             Dispatcher.UIThread.Post(() => scrollViewer.ScrollToEnd(), DispatcherPriority.Background);
         }
 
-        _lastMessagesExtentHeight = scrollViewer.Extent.Height;
-        _isMessagesAtBottom = distanceFromBottom <= ScrollBottomThreshold;
-        scrollViewer.VerticalScrollBarVisibility = _isMessagesAtBottom
+        scrollViewer.VerticalScrollBarVisibility = isNowAtBottom
             ? Avalonia.Controls.Primitives.ScrollBarVisibility.Hidden
             : Avalonia.Controls.Primitives.ScrollBarVisibility.Auto;
     }
