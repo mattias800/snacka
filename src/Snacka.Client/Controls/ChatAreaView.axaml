@@ -171,66 +171,6 @@
                         </DockPanel>
                     </Border>
 
-                    <!-- Autocomplete Popup (Mentions and Slash Commands) -->
-                    <Border Background="{StaticResource GlassBrush}"
-                            CornerRadius="16"
-                            Padding="8"
-                            Margin="0,0,0,8"
-                            BoxShadow="{StaticResource ShadowLg}"
-                            IsVisible="{Binding IsAutocompletePopupOpen, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
-                        <ItemsControl x:Name="AutocompleteSuggestionsList"
-                                      ItemsSource="{Binding AutocompleteSuggestions, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
-                            <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="autocomplete:IAutocompleteSuggestion">
-                                    <Border x:Name="AutocompleteItemBorder"
-                                            Classes="member-item"
-                                            Padding="10,8"
-                                            CornerRadius="6"
-                                            Cursor="Hand"
-                                            PointerPressed="AutocompleteSuggestion_PointerPressed">
-                                        <Border.Background>
-                                            <MultiBinding Converter="{x:Static conv:AutocompleteSelectedBackgroundConverter.Instance}">
-                                                <Binding />
-                                                <Binding Path="AutocompleteSuggestions" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
-                                                <Binding Path="SelectedAutocompleteIndex" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
-                                            </MultiBinding>
-                                        </Border.Background>
-                                        <Grid>
-                                            <Grid.ColumnDefinitions>
-                                                <ColumnDefinition Width="Auto"/>
-                                                <ColumnDefinition Width="*"/>
-                                            </Grid.ColumnDefinitions>
-
-                                            <!-- Icon -->
-                                            <Border Grid.Column="0"
-                                                    Width="32" Height="32"
-                                                    CornerRadius="16"
-                                                    Background="{StaticResource PrimaryGradient}"
-                                                    Margin="0,0,10,0">
-                                                <TextBlock Text="{Binding IconText}"
-                                                           Foreground="White"
-                                                           FontSize="13"
-                                                           FontWeight="Bold"
-                                                           HorizontalAlignment="Center"
-                                                           VerticalAlignment="Center"/>
-                                            </Border>
-
-                                            <!-- Text (Display + Secondary) -->
-                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
-                                                <TextBlock Text="{Binding DisplayText}"
-                                                           Classes="text-body"/>
-                                                <TextBlock Text="{Binding SecondaryText}"
-                                                           Classes="text-muted"
-                                                           FontSize="12"
-                                                           IsVisible="{Binding SecondaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
-                                            </StackPanel>
-                                        </Grid>
-                                    </Border>
-                                </DataTemplate>
-                            </ItemsControl.ItemTemplate>
-                        </ItemsControl>
-                    </Border>
-
                     <Grid>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto"/>
@@ -270,6 +210,71 @@
                                  TextWrapping="Wrap"
                                  MaxHeight="200"
                                  DragDrop.AllowDrop="True"/>
+
+                        <!-- Autocomplete Popup (floating above input) -->
+                        <Popup x:Name="AutocompletePopup"
+                               PlacementTarget="{Binding #MessageInputBox}"
+                               Placement="Top"
+                               IsOpen="{Binding IsAutocompletePopupOpen, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                               IsLightDismissEnabled="False"
+                               HorizontalOffset="0"
+                               VerticalOffset="-4">
+                            <Border Background="{StaticResource GlassBrush}"
+                                    CornerRadius="16"
+                                    Padding="8"
+                                    MinWidth="300"
+                                    BoxShadow="{StaticResource ShadowLg}">
+                                <ItemsControl ItemsSource="{Binding AutocompleteSuggestions, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                                    <ItemsControl.ItemTemplate>
+                                        <DataTemplate x:DataType="autocomplete:IAutocompleteSuggestion">
+                                            <Border Classes="member-item"
+                                                    Padding="10,8"
+                                                    CornerRadius="6"
+                                                    Cursor="Hand"
+                                                    PointerPressed="AutocompleteSuggestion_PointerPressed">
+                                                <Border.Background>
+                                                    <MultiBinding Converter="{x:Static conv:AutocompleteSelectedBackgroundConverter.Instance}">
+                                                        <Binding />
+                                                        <Binding Path="AutocompleteSuggestions" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
+                                                        <Binding Path="SelectedAutocompleteIndex" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
+                                                    </MultiBinding>
+                                                </Border.Background>
+                                                <Grid>
+                                                    <Grid.ColumnDefinitions>
+                                                        <ColumnDefinition Width="Auto"/>
+                                                        <ColumnDefinition Width="*"/>
+                                                    </Grid.ColumnDefinitions>
+
+                                                    <!-- Icon -->
+                                                    <Border Grid.Column="0"
+                                                            Width="32" Height="32"
+                                                            CornerRadius="16"
+                                                            Background="{StaticResource PrimaryGradient}"
+                                                            Margin="0,0,10,0">
+                                                        <TextBlock Text="{Binding IconText}"
+                                                                   Foreground="White"
+                                                                   FontSize="13"
+                                                                   FontWeight="Bold"
+                                                                   HorizontalAlignment="Center"
+                                                                   VerticalAlignment="Center"/>
+                                                    </Border>
+
+                                                    <!-- Text (Display + Secondary) -->
+                                                    <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                        <TextBlock Text="{Binding DisplayText}"
+                                                                   Classes="text-body"/>
+                                                        <TextBlock Text="{Binding SecondaryText}"
+                                                                   Classes="text-muted"
+                                                                   FontSize="12"
+                                                                   IsVisible="{Binding SecondaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                                    </StackPanel>
+                                                </Grid>
+                                            </Border>
+                                        </DataTemplate>
+                                    </ItemsControl.ItemTemplate>
+                                </ItemsControl>
+                            </Border>
+                        </Popup>
 
                         <Button Grid.Column="3"
                                 Classes="btn-primary"
