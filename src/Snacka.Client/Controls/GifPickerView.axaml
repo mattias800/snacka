@@ -7,7 +7,7 @@
              mc:Ignorable="d"
              x:Class="Snacka.Client.Controls.GifPickerView"
              x:DataType="controls:GifPickerViewModel"
-             IsVisible="{Binding IsVisible}">
+             IsVisible="{Binding IsVisible, FallbackValue=False}">
 
     <Border Background="{StaticResource Content1Brush}"
             CornerRadius="12"
