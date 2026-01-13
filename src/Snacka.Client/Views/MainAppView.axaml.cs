@@ -41,11 +41,7 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         // Subscribe to ViewModel changes for annotation redraw
         this.DataContextChanged += OnDataContextChanged;
 
-        // Wire up ChatAreaView events for autocomplete navigation
-        ChatArea.NavigateAutocompleteUp += OnChatAreaNavigateAutocompleteUp;
-        ChatArea.NavigateAutocompleteDown += OnChatAreaNavigateAutocompleteDown;
-        ChatArea.SelectCurrentAutocompleteSuggestion += OnChatAreaSelectCurrentAutocompleteSuggestion;
-        ChatArea.CloseAutocompletePopup += OnChatAreaCloseAutocompletePopup;
+        // Note: Autocomplete events are wired in XAML, not here
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)

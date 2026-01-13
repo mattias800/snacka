@@ -3,6 +3,7 @@ using System.Reactive;
 using System.Reactive.Linq;
 using Avalonia.Threading;
 using Snacka.Client.Services;
+using Snacka.Client.Services.Autocomplete;
 using Snacka.Client.Services.HardwareVideo;
 using Snacka.Shared.Models;
 using ReactiveUI;
@@ -108,16 +109,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private System.Timers.Timer? _typingCleanupTimer;
     private ScreenAnnotationViewModel? _screenAnnotationViewModel;
 
-    // Mention autocomplete state
-    private bool _isMentionPopupOpen;
+    // Unified autocomplete for @ mentions and / commands
+    private readonly AutocompleteManager _autocomplete = new();
+    private bool _isSelectingAutocomplete;
 
     // File attachment state
     private ObservableCollection<PendingAttachment> _pendingAttachments = new();
     private AttachmentResponse? _lightboxImage;
-    private string _mentionFilterText = string.Empty;
-    private int _mentionStartIndex = -1;
-    private int _selectedMentionIndex;
-    private ObservableCollection<CommunityMemberResponse> _mentionSuggestions = new();
 
     // Pinned messages state
     private bool _isPinnedPopupOpen;
@@ -213,6 +211,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         Messages = new ObservableCollection<MessageResponse>();
         Members = new ObservableCollection<CommunityMemberResponse>();
 
+        // Initialize unified autocomplete with @ mentions and / commands
+        _autocomplete.RegisterSource(new MentionAutocompleteSource(() => Members, auth.UserId));
+        _autocomplete.RegisterSource(new SlashCommandAutocompleteSource());
+        _autocomplete.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName == nameof(AutocompleteManager.IsPopupOpen))
+                this.RaisePropertyChanged(nameof(IsAutocompletePopupOpen));
+            else if (e.PropertyName == nameof(AutocompleteManager.SelectedIndex))
+                this.RaisePropertyChanged(nameof(SelectedAutocompleteIndex));
+        };
+
         // Create the inline DM ViewModel
         _dmContent = new DMContentViewModel(
             apiClient,
@@ -290,6 +299,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         TogglePinCommand = ReactiveCommand.CreateFromTask<MessageResponse>(TogglePinAsync);
         ShowPinnedMessagesCommand = ReactiveCommand.CreateFromTask(ShowPinnedMessagesAsync);
         ClosePinnedPopupCommand = ReactiveCommand.Create(() => { IsPinnedPopupOpen = false; });
+
+        // GIF preview commands
+        SendGifPreviewCommand = ReactiveCommand.CreateFromTask(SendGifPreviewAsync);
+        ShuffleGifPreviewCommand = ReactiveCommand.Create(ShuffleGifPreview);
+        CancelGifPreviewCommand = ReactiveCommand.Create(CancelGifPreview);
 
         // Invite user commands
         OpenInviteUserPopupCommand = ReactiveCommand.Create(OpenInviteUserPopup);
@@ -1050,11 +1064,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         get => _messageInput;
         set
         {
-            var oldValue = _messageInput;
             this.RaiseAndSetIfChanged(ref _messageInput, value);
 
-            // Handle mention autocomplete
-            HandleMentionAutocomplete(oldValue, value);
+            // Handle unified autocomplete (@ mentions and / commands)
+            // Skip during autocomplete selection to avoid interfering with caret positioning
+            if (!_isSelectingAutocomplete)
+            {
+                _autocomplete.HandleTextChange(value);
+            }
 
             // Send typing indicator (throttled)
             if (!string.IsNullOrEmpty(value) && SelectedChannel is not null)
@@ -1083,23 +1100,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Mention autocomplete properties
-    public bool IsMentionPopupOpen
-    {
-        get => _isMentionPopupOpen;
-        set => this.RaiseAndSetIfChanged(ref _isMentionPopupOpen, value);
-    }
+    // Unified autocomplete properties (for @ mentions and / commands)
+    public bool IsAutocompletePopupOpen => _autocomplete.IsPopupOpen;
 
-    public ObservableCollection<CommunityMemberResponse> MentionSuggestions
-    {
-        get => _mentionSuggestions;
-        set => this.RaiseAndSetIfChanged(ref _mentionSuggestions, value);
-    }
+    public ObservableCollection<IAutocompleteSuggestion> AutocompleteSuggestions => _autocomplete.Suggestions;
 
-    public int SelectedMentionIndex
+    public int SelectedAutocompleteIndex
     {
-        get => _selectedMentionIndex;
-        set => this.RaiseAndSetIfChanged(ref _selectedMentionIndex, value);
+        get => _autocomplete.SelectedIndex;
+        set => _autocomplete.SelectedIndex = value;
     }
 
     public bool IsPinnedPopupOpen
@@ -1361,6 +1370,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isLoadingGifs;
     private string? _gifNextPos;
 
+    // GIF preview state (for /gif command inline preview)
+    private bool _isGifPreviewVisible;
+    private GifResult? _gifPreviewResult;
+    private string _gifPreviewQuery = string.Empty;
+    private List<GifResult> _gifPreviewResults = new();
+    private int _gifPreviewIndex;
+
     public bool IsGifsEnabled => _isGifsEnabled;
 
     public ObservableCollection<GifResult> GifResults => _gifResults;
@@ -1375,6 +1391,25 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         get => _isLoadingGifs;
         set => this.RaiseAndSetIfChanged(ref _isLoadingGifs, value);
+    }
+
+    // GIF preview properties (for /gif command)
+    public bool IsGifPreviewVisible
+    {
+        get => _isGifPreviewVisible;
+        set => this.RaiseAndSetIfChanged(ref _isGifPreviewVisible, value);
+    }
+
+    public GifResult? GifPreviewResult
+    {
+        get => _gifPreviewResult;
+        set => this.RaiseAndSetIfChanged(ref _gifPreviewResult, value);
+    }
+
+    public string GifPreviewQuery
+    {
+        get => _gifPreviewQuery;
+        set => this.RaiseAndSetIfChanged(ref _gifPreviewQuery, value);
     }
 
     public async Task LoadTrendingGifsAsync()
@@ -1461,6 +1496,85 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _gifResults.Clear();
         GifSearchQuery = string.Empty;
         _gifNextPos = null;
+    }
+
+    /// <summary>
+    /// Initiates a GIF preview search for the /gif command.
+    /// Shows the first result as a preview that can be sent or shuffled.
+    /// </summary>
+    private async Task ShowGifPreviewAsync(string query)
+    {
+        if (string.IsNullOrWhiteSpace(query))
+        {
+            CancelGifPreview();
+            return;
+        }
+
+        IsLoadingGifs = true;
+        GifPreviewQuery = query;
+        _gifPreviewResults.Clear();
+        _gifPreviewIndex = 0;
+
+        try
+        {
+            var result = await _apiClient.SearchGifsAsync(query.Trim(), 10);
+            if (result.Success && result.Data != null && result.Data.Results.Count > 0)
+            {
+                _gifPreviewResults = result.Data.Results.ToList();
+                GifPreviewResult = _gifPreviewResults[0];
+                IsGifPreviewVisible = true;
+            }
+            else
+            {
+                // No results - show error or just cancel
+                CancelGifPreview();
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to search GIFs for preview: {ex.Message}");
+            CancelGifPreview();
+        }
+        finally
+        {
+            IsLoadingGifs = false;
+        }
+    }
+
+    /// <summary>
+    /// Sends the currently previewed GIF as a message.
+    /// </summary>
+    public async Task SendGifPreviewAsync()
+    {
+        if (GifPreviewResult == null || SelectedChannel == null) return;
+
+        var gif = GifPreviewResult;
+        CancelGifPreview();
+
+        await SendGifMessageAsync(gif);
+    }
+
+    /// <summary>
+    /// Shows the next GIF result in the preview.
+    /// </summary>
+    public void ShuffleGifPreview()
+    {
+        if (_gifPreviewResults.Count == 0) return;
+
+        _gifPreviewIndex = (_gifPreviewIndex + 1) % _gifPreviewResults.Count;
+        GifPreviewResult = _gifPreviewResults[_gifPreviewIndex];
+    }
+
+    /// <summary>
+    /// Cancels the GIF preview and clears state.
+    /// </summary>
+    public void CancelGifPreview()
+    {
+        IsGifPreviewVisible = false;
+        GifPreviewResult = null;
+        GifPreviewQuery = string.Empty;
+        _gifPreviewResults.Clear();
+        _gifPreviewIndex = 0;
     }
 
     // Quick audio device switcher
@@ -2129,6 +2243,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowPinnedMessagesCommand { get; }
     public ReactiveCommand<Unit, Unit> ClosePinnedPopupCommand { get; }
 
+    // GIF preview commands (for /gif inline preview)
+    public ReactiveCommand<Unit, Unit> SendGifPreviewCommand { get; }
+    public ReactiveCommand<Unit, Unit> ShuffleGifPreviewCommand { get; }
+    public ReactiveCommand<Unit, Unit> CancelGifPreviewCommand { get; }
+
     // Invite user commands
     public ReactiveCommand<Unit, Unit> OpenInviteUserPopupCommand { get; }
     public ReactiveCommand<Unit, Unit> CloseInviteUserPopupCommand { get; }
@@ -2293,7 +2412,24 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Allow empty content if there are attachments
         if (string.IsNullOrWhiteSpace(MessageInput) && !HasPendingAttachments) return;
 
-        var content = MessageInput;
+        var content = MessageInput.Trim();
+
+        // Check for /gif or /giphy command
+        if (content.StartsWith("/gif ", StringComparison.OrdinalIgnoreCase) ||
+            content.StartsWith("/giphy ", StringComparison.OrdinalIgnoreCase))
+        {
+            // Extract search query (everything after the command)
+            var spaceIndex = content.IndexOf(' ');
+            var query = content.Substring(spaceIndex + 1).Trim();
+
+            if (!string.IsNullOrWhiteSpace(query))
+            {
+                MessageInput = string.Empty;
+                await ShowGifPreviewAsync(query);
+                return;
+            }
+        }
+
         var replyToId = ReplyingToMessage?.Id;
         MessageInput = string.Empty;
         ReplyingToMessage = null;
@@ -3309,135 +3445,95 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _ = StopScreenShareAsync();
     }
 
-    // Mention autocomplete methods
-    private void HandleMentionAutocomplete(string oldValue, string newValue)
+    // Unified autocomplete methods (for @ mentions and / commands)
+
+    /// <summary>
+    /// Closes the autocomplete popup.
+    /// </summary>
+    public void CloseAutocompletePopup()
     {
-        if (string.IsNullOrEmpty(newValue))
-        {
-            CloseMentionPopup();
-            return;
-        }
-
-        // Find the last @ symbol that's either at start or preceded by whitespace
-        var lastAtIndex = -1;
-        for (int i = newValue.Length - 1; i >= 0; i--)
-        {
-            if (newValue[i] == '@')
-            {
-                // Check if @ is at start or preceded by whitespace
-                if (i == 0 || char.IsWhiteSpace(newValue[i - 1]))
-                {
-                    lastAtIndex = i;
-                    break;
-                }
-            }
-            // Stop searching if we hit whitespace without finding @
-            else if (char.IsWhiteSpace(newValue[i]))
-            {
-                break;
-            }
-        }
-
-        if (lastAtIndex >= 0)
-        {
-            // Extract the filter text after @
-            var filterText = newValue.Substring(lastAtIndex + 1);
-
-            // Check if there's a space in the filter (means mention is complete)
-            if (filterText.Contains(' '))
-            {
-                CloseMentionPopup();
-                return;
-            }
-
-            _mentionStartIndex = lastAtIndex;
-            _mentionFilterText = filterText.ToLowerInvariant();
-
-            // Filter members based on the filter text
-            UpdateMentionSuggestions();
-        }
-        else
-        {
-            CloseMentionPopup();
-        }
-    }
-
-    private void UpdateMentionSuggestions()
-    {
-        var filtered = Members
-            .Where(m => m.UserId != _auth.UserId) // Exclude self
-            .Where(m => string.IsNullOrEmpty(_mentionFilterText) ||
-                        m.Username.ToLowerInvariant().Contains(_mentionFilterText))
-            .Take(5) // Limit to 5 suggestions
-            .ToList();
-
-        MentionSuggestions.Clear();
-        foreach (var member in filtered)
-        {
-            MentionSuggestions.Add(member);
-        }
-
-        IsMentionPopupOpen = MentionSuggestions.Count > 0;
-        SelectedMentionIndex = 0;
-    }
-
-    public void CloseMentionPopup()
-    {
-        IsMentionPopupOpen = false;
-        _mentionStartIndex = -1;
-        _mentionFilterText = string.Empty;
-        MentionSuggestions.Clear();
-        SelectedMentionIndex = 0;
+        _autocomplete.Close();
     }
 
     /// <summary>
-    /// Selects a mention and returns the cursor position where the caret should be placed.
-    /// Returns -1 if no mention was inserted.
+    /// Selects a suggestion and returns the cursor position where the caret should be placed.
+    /// Returns -1 if no suggestion was inserted (e.g., command was executed).
     /// </summary>
-    public int SelectMention(CommunityMemberResponse member)
+    public int SelectAutocompleteSuggestion(IAutocompleteSuggestion suggestion)
     {
-        if (_mentionStartIndex < 0 || string.IsNullOrEmpty(MessageInput))
+        var result = _autocomplete.Select(suggestion, MessageInput);
+        if (result.HasValue)
         {
-            CloseMentionPopup();
-            return -1;
-        }
-
-        // Replace @filterText with @username
-        var beforeMention = MessageInput.Substring(0, _mentionStartIndex);
-        var afterMention = MessageInput.Substring(_mentionStartIndex + 1 + _mentionFilterText.Length);
-
-        MessageInput = $"{beforeMention}@{member.Username} {afterMention}";
-
-        // Calculate cursor position: before + @ + username + space
-        var cursorPosition = beforeMention.Length + 1 + member.Username.Length + 1;
-
-        CloseMentionPopup();
-        return cursorPosition;
-    }
-
-    /// <summary>
-    /// Selects the currently highlighted mention and returns the cursor position.
-    /// Returns -1 if no mention was selected.
-    /// </summary>
-    public int SelectCurrentMention()
-    {
-        if (MentionSuggestions.Count > 0 && SelectedMentionIndex >= 0 && SelectedMentionIndex < MentionSuggestions.Count)
-        {
-            return SelectMention(MentionSuggestions[SelectedMentionIndex]);
+            _isSelectingAutocomplete = true;
+            try
+            {
+                MessageInput = result.Value.newText;
+                return result.Value.cursorPosition;
+            }
+            finally
+            {
+                _isSelectingAutocomplete = false;
+            }
         }
         return -1;
     }
 
-    public void NavigateMentionUp()
+    /// <summary>
+    /// Selects a suggestion and returns both the new text and cursor position.
+    /// The caller is responsible for updating the UI directly.
+    /// </summary>
+    public (string newText, int cursorPosition)? SelectAutocompleteSuggestionWithText(IAutocompleteSuggestion suggestion)
     {
-        if (MentionSuggestions.Count == 0) return;
-        SelectedMentionIndex = (SelectedMentionIndex - 1 + MentionSuggestions.Count) % MentionSuggestions.Count;
+        return _autocomplete.Select(suggestion, MessageInput);
     }
 
-    public void NavigateMentionDown()
+    /// <summary>
+    /// Selects the currently highlighted suggestion and returns the cursor position.
+    /// Returns -1 if no suggestion was selected.
+    /// </summary>
+    public int SelectCurrentAutocompleteSuggestion()
     {
-        if (MentionSuggestions.Count == 0) return;
-        SelectedMentionIndex = (SelectedMentionIndex + 1) % MentionSuggestions.Count;
+        var result = _autocomplete.SelectCurrent(MessageInput);
+        if (result.HasValue)
+        {
+            _isSelectingAutocomplete = true;
+            try
+            {
+                MessageInput = result.Value.newText;
+                return result.Value.cursorPosition;
+            }
+            finally
+            {
+                _isSelectingAutocomplete = false;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Selects the currently highlighted suggestion and returns both the new text and cursor position.
+    /// The caller is responsible for updating the UI directly (setting TextBox.Text).
+    /// The TwoWay binding will push the value back to MessageInput.
+    /// </summary>
+    public (string newText, int cursorPosition)? SelectCurrentAutocompleteSuggestionWithText()
+    {
+        return _autocomplete.SelectCurrent(MessageInput);
+    }
+
+    /// <summary>
+    /// Navigates to the previous autocomplete suggestion.
+    /// </summary>
+    public void NavigateAutocompleteUp()
+    {
+        _autocomplete.NavigateUp();
+    }
+
+    /// <summary>
+    /// Navigates to the next autocomplete suggestion.
+    /// </summary>
+    public void NavigateAutocompleteDown()
+    {
+        _autocomplete.NavigateDown();
     }
 
     // Reaction methods

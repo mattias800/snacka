@@ -13,6 +13,7 @@ using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
 using Snacka.Client.Services;
+using Snacka.Client.Services.Autocomplete;
 using Snacka.Client.ViewModels;
 using ReactiveUI;
 
@@ -59,17 +60,26 @@ public partial class ChatAreaView : UserControl
     public static readonly StyledProperty<IEnumerable<PendingAttachment>?> PendingAttachmentsProperty =
         AvaloniaProperty.Register<ChatAreaView, IEnumerable<PendingAttachment>?>(nameof(PendingAttachments));
 
-    public static readonly StyledProperty<bool> IsMentionPopupOpenProperty =
-        AvaloniaProperty.Register<ChatAreaView, bool>(nameof(IsMentionPopupOpen));
+    public static readonly StyledProperty<bool> IsAutocompletePopupOpenProperty =
+        AvaloniaProperty.Register<ChatAreaView, bool>(nameof(IsAutocompletePopupOpen));
 
-    public static readonly StyledProperty<IEnumerable<CommunityMemberResponse>?> MentionSuggestionsProperty =
-        AvaloniaProperty.Register<ChatAreaView, IEnumerable<CommunityMemberResponse>?>(nameof(MentionSuggestions));
+    public static readonly StyledProperty<IEnumerable<IAutocompleteSuggestion>?> AutocompleteSuggestionsProperty =
+        AvaloniaProperty.Register<ChatAreaView, IEnumerable<IAutocompleteSuggestion>?>(nameof(AutocompleteSuggestions));
 
-    public static readonly StyledProperty<int> SelectedMentionIndexProperty =
-        AvaloniaProperty.Register<ChatAreaView, int>(nameof(SelectedMentionIndex));
+    public static readonly StyledProperty<int> SelectedAutocompleteIndexProperty =
+        AvaloniaProperty.Register<ChatAreaView, int>(nameof(SelectedAutocompleteIndex));
 
     public static readonly StyledProperty<bool> IsGifsEnabledProperty =
         AvaloniaProperty.Register<ChatAreaView, bool>(nameof(IsGifsEnabled));
+
+    public static readonly StyledProperty<bool> IsGifPreviewVisibleProperty =
+        AvaloniaProperty.Register<ChatAreaView, bool>(nameof(IsGifPreviewVisible));
+
+    public static readonly StyledProperty<GifResult?> GifPreviewResultProperty =
+        AvaloniaProperty.Register<ChatAreaView, GifResult?>(nameof(GifPreviewResult));
+
+    public static readonly StyledProperty<string?> GifPreviewQueryProperty =
+        AvaloniaProperty.Register<ChatAreaView, string?>(nameof(GifPreviewQuery));
 
     public static readonly StyledProperty<string?> MessageInputProperty =
         AvaloniaProperty.Register<ChatAreaView, string?>(nameof(MessageInput));
@@ -122,6 +132,15 @@ public partial class ChatAreaView : UserControl
 
     public static readonly StyledProperty<ICommand?> SaveMessageEditCommandProperty =
         AvaloniaProperty.Register<ChatAreaView, ICommand?>(nameof(SaveMessageEditCommand));
+
+    public static readonly StyledProperty<ICommand?> SendGifPreviewCommandProperty =
+        AvaloniaProperty.Register<ChatAreaView, ICommand?>(nameof(SendGifPreviewCommand));
+
+    public static readonly StyledProperty<ICommand?> ShuffleGifPreviewCommandProperty =
+        AvaloniaProperty.Register<ChatAreaView, ICommand?>(nameof(ShuffleGifPreviewCommand));
+
+    public static readonly StyledProperty<ICommand?> CancelGifPreviewCommandProperty =
+        AvaloniaProperty.Register<ChatAreaView, ICommand?>(nameof(CancelGifPreviewCommand));
 
     #endregion
 
@@ -206,28 +225,46 @@ public partial class ChatAreaView : UserControl
         set => SetValue(PendingAttachmentsProperty, value);
     }
 
-    public bool IsMentionPopupOpen
+    public bool IsAutocompletePopupOpen
     {
-        get => GetValue(IsMentionPopupOpenProperty);
-        set => SetValue(IsMentionPopupOpenProperty, value);
+        get => GetValue(IsAutocompletePopupOpenProperty);
+        set => SetValue(IsAutocompletePopupOpenProperty, value);
     }
 
-    public IEnumerable<CommunityMemberResponse>? MentionSuggestions
+    public IEnumerable<IAutocompleteSuggestion>? AutocompleteSuggestions
     {
-        get => GetValue(MentionSuggestionsProperty);
-        set => SetValue(MentionSuggestionsProperty, value);
+        get => GetValue(AutocompleteSuggestionsProperty);
+        set => SetValue(AutocompleteSuggestionsProperty, value);
     }
 
-    public int SelectedMentionIndex
+    public int SelectedAutocompleteIndex
     {
-        get => GetValue(SelectedMentionIndexProperty);
-        set => SetValue(SelectedMentionIndexProperty, value);
+        get => GetValue(SelectedAutocompleteIndexProperty);
+        set => SetValue(SelectedAutocompleteIndexProperty, value);
     }
 
     public bool IsGifsEnabled
     {
         get => GetValue(IsGifsEnabledProperty);
         set => SetValue(IsGifsEnabledProperty, value);
+    }
+
+    public bool IsGifPreviewVisible
+    {
+        get => GetValue(IsGifPreviewVisibleProperty);
+        set => SetValue(IsGifPreviewVisibleProperty, value);
+    }
+
+    public GifResult? GifPreviewResult
+    {
+        get => GetValue(GifPreviewResultProperty);
+        set => SetValue(GifPreviewResultProperty, value);
+    }
+
+    public string? GifPreviewQuery
+    {
+        get => GetValue(GifPreviewQueryProperty);
+        set => SetValue(GifPreviewQueryProperty, value);
     }
 
     public string? MessageInput
@@ -330,6 +367,24 @@ public partial class ChatAreaView : UserControl
         set => SetValue(SaveMessageEditCommandProperty, value);
     }
 
+    public ICommand? SendGifPreviewCommand
+    {
+        get => GetValue(SendGifPreviewCommandProperty);
+        set => SetValue(SendGifPreviewCommandProperty, value);
+    }
+
+    public ICommand? ShuffleGifPreviewCommand
+    {
+        get => GetValue(ShuffleGifPreviewCommandProperty);
+        set => SetValue(ShuffleGifPreviewCommandProperty, value);
+    }
+
+    public ICommand? CancelGifPreviewCommand
+    {
+        get => GetValue(CancelGifPreviewCommandProperty);
+        set => SetValue(CancelGifPreviewCommandProperty, value);
+    }
+
     #endregion
 
     #region Events
@@ -339,15 +394,15 @@ public partial class ChatAreaView : UserControl
     public event EventHandler<object>? ViewThreadRequested;
     public event EventHandler<ReactionSummary>? ReactionToggleRequested;
     public event EventHandler<AttachmentResponse>? ImageClicked;
-    public event EventHandler<CommunityMemberResponse>? MentionSelected;
+    public event EventHandler<IAutocompleteSuggestion>? AutocompleteSuggestionSelected;
     public event EventHandler? GifButtonClicked;
     public event EventHandler? AttachButtonClicked;
     public event EventHandler<PendingAttachment>? RemovePendingAttachmentRequested;
     public event EventHandler<IStorageFile>? FileDropped;
-    public event Func<int>? NavigateMentionUp;
-    public event Func<int>? NavigateMentionDown;
-    public event Func<int>? SelectCurrentMention;
-    public event Action? CloseMentionPopup;
+    public event Func<int>? NavigateAutocompleteUp;
+    public event Func<int>? NavigateAutocompleteDown;
+    public event Func<(string newText, int cursorPosition)?>? SelectCurrentAutocompleteSuggestion;
+    public event Action? CloseAutocompletePopup;
 
     #endregion
 
@@ -426,31 +481,42 @@ public partial class ChatAreaView : UserControl
 
     private void OnMessageKeyDown(object? sender, KeyEventArgs e)
     {
-        // Handle mention popup navigation
-        if (IsMentionPopupOpen)
+        // Handle autocomplete popup navigation (@ mentions and / commands)
+        if (IsAutocompletePopupOpen)
         {
             switch (e.Key)
             {
                 case Key.Up:
-                    NavigateMentionUp?.Invoke();
+                    NavigateAutocompleteUp?.Invoke();
                     e.Handled = true;
                     return;
                 case Key.Down:
-                    NavigateMentionDown?.Invoke();
+                    NavigateAutocompleteDown?.Invoke();
                     e.Handled = true;
                     return;
                 case Key.Enter:
                 case Key.Tab:
-                    var cursorPos = SelectCurrentMention?.Invoke() ?? -1;
-                    if (cursorPos >= 0 && MessageInputBox != null)
+                    var result = SelectCurrentAutocompleteSuggestion?.Invoke();
+                    if (result.HasValue && MessageInputBox != null)
                     {
-                        MessageInputBox.SelectionStart = cursorPos;
-                        MessageInputBox.SelectionEnd = cursorPos;
+                        var textBox = MessageInputBox;
+                        var newText = result.Value.newText;
+                        var cursorPos = result.Value.cursorPosition;
+
+                        // Set TextBox.Text directly to bypass binding timing issues
+                        textBox.Text = newText;
+
+                        // Post caret update to run after TextBox finishes processing
+                        Dispatcher.UIThread.Post(() =>
+                        {
+                            textBox.SelectionStart = cursorPos;
+                            textBox.SelectionEnd = cursorPos;
+                        }, DispatcherPriority.Render);
                     }
                     e.Handled = true;
                     return;
                 case Key.Escape:
-                    CloseMentionPopup?.Invoke();
+                    CloseAutocompletePopup?.Invoke();
                     e.Handled = true;
                     return;
             }
@@ -575,11 +641,11 @@ public partial class ChatAreaView : UserControl
         ImageClicked?.Invoke(sender, attachment);
     }
 
-    private void MentionSuggestion_PointerPressed(object? sender, PointerPressedEventArgs e)
+    private void AutocompleteSuggestion_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is Border border && border.DataContext is CommunityMemberResponse member)
+        if (sender is Border border && border.DataContext is IAutocompleteSuggestion suggestion)
         {
-            MentionSelected?.Invoke(this, member);
+            AutocompleteSuggestionSelected?.Invoke(this, suggestion);
             MessageInputBox?.Focus();
         }
     }
@@ -654,6 +720,26 @@ public partial class ChatAreaView : UserControl
     /// Gets the GIF button control for positioning the GIF picker popup.
     /// </summary>
     public Button? GetGifButton() => GifButton;
+
+    /// <summary>
+    /// Sets both the text and cursor position in the message input box.
+    /// This sets the TextBox.Text directly to ensure correct caret positioning.
+    /// </summary>
+    public void SetMessageInputTextAndCursor(string text, int cursorPosition)
+    {
+        if (MessageInputBox != null)
+        {
+            var textBox = MessageInputBox;
+            textBox.Text = text;
+
+            // Post caret update to run after TextBox finishes processing
+            Dispatcher.UIThread.Post(() =>
+            {
+                textBox.SelectionStart = cursorPosition;
+                textBox.SelectionEnd = cursorPosition;
+            }, DispatcherPriority.Render);
+        }
+    }
 
     /// <summary>
     /// Sets the cursor position in the message input box.

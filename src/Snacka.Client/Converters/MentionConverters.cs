@@ -5,14 +5,14 @@ using Avalonia.Media;
 namespace Snacka.Client.Converters;
 
 /// <summary>
-/// Converts member index and selected index to a background brush for highlighting.
-/// Values[0] = member (the item)
-/// Values[1] = MentionSuggestions collection
-/// Values[2] = SelectedMentionIndex
+/// Converts item index and selected index to a background brush for highlighting.
+/// Values[0] = item (the suggestion)
+/// Values[1] = AutocompleteSuggestions collection
+/// Values[2] = SelectedAutocompleteIndex
 /// </summary>
-public class MentionSelectedBackgroundConverter : IMultiValueConverter
+public class AutocompleteSelectedBackgroundConverter : IMultiValueConverter
 {
-    public static readonly MentionSelectedBackgroundConverter Instance = new();
+    public static readonly AutocompleteSelectedBackgroundConverter Instance = new();
 
     private static readonly IBrush SelectedBrush = new SolidColorBrush(Color.Parse("#40444b"));
     private static readonly IBrush NormalBrush = Brushes.Transparent;

@@ -5,6 +5,7 @@
              xmlns:controls="using:Snacka.Client.Controls"
              xmlns:conv="using:Snacka.Client.Converters"
              xmlns:services="using:Snacka.Client.Services"
+             xmlns:autocomplete="using:Snacka.Client.Services.Autocomplete"
              xmlns:ui="using:FluentAvalonia.UI.Controls"
              mc:Ignorable="d"
              x:Class="Snacka.Client.Controls.ChatAreaView"
@@ -170,28 +171,74 @@
                         </DockPanel>
                     </Border>
 
-                    <!-- Mention Autocomplete Popup -->
+                    <!-- GIF Preview (shown when /gif command is used) -->
+                    <Border Background="{StaticResource Content1Brush}"
+                            CornerRadius="12"
+                            Padding="16"
+                            Margin="0,0,0,8"
+                            IsVisible="{Binding IsGifPreviewVisible, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                        <StackPanel Spacing="12">
+                            <!-- Header with search query -->
+                            <DockPanel>
+                                <TextBlock DockPanel.Dock="Left"
+                                           Classes="text-caption">
+                                    <Run Text="GIF: "/>
+                                    <Run Text="{Binding GifPreviewQuery, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}" FontWeight="SemiBold"/>
+                                </TextBlock>
+                                <Button DockPanel.Dock="Right"
+                                        Classes="btn-icon"
+                                        Command="{Binding CancelGifPreviewCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                        ToolTip.Tip="Cancel"
+                                        HorizontalAlignment="Right">
+                                    <ui:SymbolIcon Symbol="Dismiss" Foreground="#80848e" FontSize="14"/>
+                                </Button>
+                            </DockPanel>
+
+                            <!-- GIF Image Preview -->
+                            <Border Background="{StaticResource Content3Brush}"
+                                    CornerRadius="8"
+                                    ClipToBounds="True"
+                                    HorizontalAlignment="Left"
+                                    MaxWidth="300"
+                                    MaxHeight="200">
+                                <Image Source="{Binding GifPreviewResult.PreviewUrl, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                       Stretch="Uniform"/>
+                            </Border>
+
+                            <!-- Action Buttons -->
+                            <StackPanel Orientation="Horizontal" Spacing="8">
+                                <Button Classes="btn-primary"
+                                        Command="{Binding SendGifPreviewCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                        Content="Send"/>
+                                <Button Classes="btn-secondary"
+                                        Command="{Binding ShuffleGifPreviewCommand, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}"
+                                        Content="Shuffle"/>
+                            </StackPanel>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Autocomplete Popup (Mentions and Slash Commands) -->
                     <Border Background="{StaticResource GlassBrush}"
                             CornerRadius="16"
                             Padding="8"
                             Margin="0,0,0,8"
                             BoxShadow="{StaticResource ShadowLg}"
-                            IsVisible="{Binding IsMentionPopupOpen, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
-                        <ItemsControl x:Name="MentionSuggestionsList"
-                                      ItemsSource="{Binding MentionSuggestions, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                            IsVisible="{Binding IsAutocompletePopupOpen, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
+                        <ItemsControl x:Name="AutocompleteSuggestionsList"
+                                      ItemsSource="{Binding AutocompleteSuggestions, RelativeSource={RelativeSource AncestorType=controls:ChatAreaView}}">
                             <ItemsControl.ItemTemplate>
-                                <DataTemplate x:DataType="services:CommunityMemberResponse">
-                                    <Border x:Name="MentionItemBorder"
+                                <DataTemplate x:DataType="autocomplete:IAutocompleteSuggestion">
+                                    <Border x:Name="AutocompleteItemBorder"
                                             Classes="member-item"
                                             Padding="10,8"
                                             CornerRadius="6"
                                             Cursor="Hand"
-                                            PointerPressed="MentionSuggestion_PointerPressed">
+                                            PointerPressed="AutocompleteSuggestion_PointerPressed">
                                         <Border.Background>
-                                            <MultiBinding Converter="{x:Static conv:MentionSelectedBackgroundConverter.Instance}">
+                                            <MultiBinding Converter="{x:Static conv:AutocompleteSelectedBackgroundConverter.Instance}">
                                                 <Binding />
-                                                <Binding Path="MentionSuggestions" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
-                                                <Binding Path="SelectedMentionIndex" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
+                                                <Binding Path="AutocompleteSuggestions" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
+                                                <Binding Path="SelectedAutocompleteIndex" RelativeSource="{RelativeSource AncestorType=controls:ChatAreaView}" />
                                             </MultiBinding>
                                         </Border.Background>
                                         <Grid>
@@ -200,13 +247,13 @@
                                                 <ColumnDefinition Width="*"/>
                                             </Grid.ColumnDefinitions>
 
-                                            <!-- Avatar -->
+                                            <!-- Icon -->
                                             <Border Grid.Column="0"
                                                     Width="32" Height="32"
                                                     CornerRadius="16"
                                                     Background="{StaticResource PrimaryGradient}"
                                                     Margin="0,0,10,0">
-                                                <TextBlock Text="{Binding Username, Converter={x:Static conv:FirstCharConverter.Instance}}"
+                                                <TextBlock Text="{Binding IconText}"
                                                            Foreground="White"
                                                            FontSize="13"
                                                            FontWeight="Bold"
@@ -214,11 +261,15 @@
                                                            VerticalAlignment="Center"/>
                                             </Border>
 
-                                            <!-- Username -->
-                                            <TextBlock Grid.Column="1"
-                                                       Text="{Binding Username}"
-                                                       Classes="text-body"
-                                                       VerticalAlignment="Center"/>
+                                            <!-- Text (Display + Secondary) -->
+                                            <StackPanel Grid.Column="1" VerticalAlignment="Center">
+                                                <TextBlock Text="{Binding DisplayText}"
+                                                           Classes="text-body"/>
+                                                <TextBlock Text="{Binding SecondaryText}"
+                                                           Classes="text-muted"
+                                                           FontSize="12"
+                                                           IsVisible="{Binding SecondaryText, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                            </StackPanel>
                                         </Grid>
                                     </Border>
                                 </DataTemplate>
