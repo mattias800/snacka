@@ -427,6 +427,19 @@
         <Setter Property="Background" Value="#222228"/>
     </Style>
 
+    <!-- Thread Indicator - Clickable button to view thread -->
+    <Style Selector="Border.thread-indicator">
+        <Setter Property="Background" Value="#1e1e24"/>
+        <Setter Property="Transitions">
+            <Transitions>
+                <BrushTransition Property="Background" Duration="0:0:0.1"/>
+            </Transitions>
+        </Setter>
+    </Style>
+    <Style Selector="Border.thread-indicator:pointerover">
+        <Setter Property="Background" Value="#2a2a32"/>
+    </Style>
+
     <!-- =====================================================
          PANEL STYLES
          Glass effect backgrounds
