@@ -35,6 +35,11 @@ on:
 env:
   DOTNET_VERSION: '9.0.x'
 
+# Cancel in-progress builds when new commits are pushed
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   # Determine version from tag or generate dev version
   version:

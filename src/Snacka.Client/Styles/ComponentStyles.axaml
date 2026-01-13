@@ -417,11 +417,6 @@
     <Style Selector="Border.message-row">
         <Setter Property="Background" Value="Transparent"/>
         <Setter Property="CornerRadius" Value="0"/>
-        <Setter Property="Transitions">
-            <Transitions>
-                <BrushTransition Property="Background" Duration="0:0:0.1"/>
-            </Transitions>
-        </Setter>
     </Style>
     <Style Selector="Border.message-row:pointerover">
         <Setter Property="Background" Value="#222228"/>

@@ -195,7 +195,8 @@
                         Padding="4"
                         HorizontalAlignment="Right"
                         VerticalAlignment="Top"
-                        IsVisible="False">
+                        Opacity="0"
+                        IsHitTestVisible="False">
                     <StackPanel Orientation="Horizontal" Spacing="2">
                         <!-- Add Reaction button -->
                         <Button Classes="btn-message-action"

@@ -110,7 +110,8 @@ public partial class MessageItemView : UserControl
 
     private void OnMessagePointerEntered(object? sender, PointerEventArgs e)
     {
-        ActionButtonsContainer.IsVisible = true;
+        ActionButtonsContainer.Opacity = 1;
+        ActionButtonsContainer.IsHitTestVisible = true;
     }
 
     private void OnMessagePointerExited(object? sender, PointerEventArgs e)
@@ -118,7 +119,8 @@ public partial class MessageItemView : UserControl
         // Don't hide if flyout or reaction picker is open
         if (!_isFlyoutOpen && !_isReactionPickerOpen)
         {
-            ActionButtonsContainer.IsVisible = false;
+            ActionButtonsContainer.Opacity = 0;
+            ActionButtonsContainer.IsHitTestVisible = false;
         }
     }
 
@@ -128,7 +130,8 @@ public partial class MessageItemView : UserControl
     public void NotifyReactionPickerClosed()
     {
         _isReactionPickerOpen = false;
-        ActionButtonsContainer.IsVisible = false;
+        ActionButtonsContainer.Opacity = 0;
+        ActionButtonsContainer.IsHitTestVisible = false;
     }
 
     /// <summary>
@@ -145,7 +148,8 @@ public partial class MessageItemView : UserControl
     {
         _isFlyoutOpen = false;
         // Hide buttons after flyout closes if pointer is not over the message
-        ActionButtonsContainer.IsVisible = false;
+        ActionButtonsContainer.Opacity = 0;
+        ActionButtonsContainer.IsHitTestVisible = false;
     }
 
     // Source message (any type)
