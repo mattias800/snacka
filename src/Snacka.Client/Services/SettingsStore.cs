@@ -36,6 +36,10 @@ public class UserSettings
 
     // Quick Switcher recent items
     public List<RecentQuickSwitcherItem> RecentQuickSwitcherItems { get; set; } = new();
+
+    // Panel widths (for sidebar resizing)
+    public double ChannelListWidth { get; set; } = 260;
+    public double MembersListWidth { get; set; } = 260;
 }
 
 public class SettingsStore : ISettingsStore

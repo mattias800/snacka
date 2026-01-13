@@ -41,11 +41,11 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         // Subscribe to ViewModel changes for annotation redraw
         this.DataContextChanged += OnDataContextChanged;
 
-        // Wire up ChatAreaView events for mention navigation
-        ChatArea.NavigateMentionUp += OnChatAreaNavigateMentionUp;
-        ChatArea.NavigateMentionDown += OnChatAreaNavigateMentionDown;
-        ChatArea.SelectCurrentMention += OnChatAreaSelectCurrentMention;
-        ChatArea.CloseMentionPopup += OnChatAreaCloseMentionPopup;
+        // Wire up ChatAreaView events for autocomplete navigation
+        ChatArea.NavigateAutocompleteUp += OnChatAreaNavigateAutocompleteUp;
+        ChatArea.NavigateAutocompleteDown += OnChatAreaNavigateAutocompleteDown;
+        ChatArea.SelectCurrentAutocompleteSuggestion += OnChatAreaSelectCurrentAutocompleteSuggestion;
+        ChatArea.CloseAutocompletePopup += OnChatAreaCloseAutocompletePopup;
     }
 
     private void OnDataContextChanged(object? sender, EventArgs e)
@@ -54,7 +54,48 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         {
             ViewModel.PropertyChanged += OnViewModelPropertyChanged;
             ViewModel.GpuFullscreenFrameReceived += OnGpuFullscreenFrameReceived;
+
+            // Load saved panel widths
+            LoadPanelWidths();
         }
+    }
+
+    private Grid? _mainContentGrid;
+
+    private void LoadPanelWidths()
+    {
+        if (ViewModel?.SettingsStore == null) return;
+
+        // Find the main content grid
+        _mainContentGrid = this.FindControl<Grid>("MainContentGrid");
+        if (_mainContentGrid == null)
+        {
+            Console.WriteLine("MainAppView: Could not find MainContentGrid");
+            return;
+        }
+
+        var settings = ViewModel.SettingsStore.Settings;
+        // Column 1 is the channel list, Column 5 is the members list
+        _mainContentGrid.ColumnDefinitions[1].Width = new GridLength(settings.ChannelListWidth);
+        _mainContentGrid.ColumnDefinitions[5].Width = new GridLength(settings.MembersListWidth);
+    }
+
+    private void OnLeftSplitterDragCompleted(object? sender, VectorEventArgs e)
+    {
+        if (ViewModel?.SettingsStore == null || _mainContentGrid == null) return;
+
+        var width = _mainContentGrid.ColumnDefinitions[1].Width.Value;
+        ViewModel.SettingsStore.Settings.ChannelListWidth = width;
+        ViewModel.SettingsStore.Save();
+    }
+
+    private void OnRightSplitterDragCompleted(object? sender, VectorEventArgs e)
+    {
+        if (ViewModel?.SettingsStore == null || _mainContentGrid == null) return;
+
+        var width = _mainContentGrid.ColumnDefinitions[5].Width.Value;
+        ViewModel.SettingsStore.Settings.MembersListWidth = width;
+        ViewModel.SettingsStore.Save();
     }
 
     private bool _gpuVideoInitialized;
@@ -380,11 +421,14 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         ViewModel?.OpenLightbox(attachment);
     }
 
-    private void OnChatAreaMentionSelected(object? sender, CommunityMemberResponse member)
+    private void OnChatAreaAutocompleteSuggestionSelected(object? sender, Services.Autocomplete.IAutocompleteSuggestion suggestion)
     {
         if (ViewModel == null) return;
-        var cursorPos = ViewModel.SelectMention(member);
-        ChatArea?.SetMessageInputCursorPosition(cursorPos);
+        var result = ViewModel.SelectAutocompleteSuggestionWithText(suggestion);
+        if (result.HasValue)
+        {
+            ChatArea?.SetMessageInputTextAndCursor(result.Value.newText, result.Value.cursorPosition);
+        }
         ChatArea?.FocusMessageInput();
     }
 
@@ -454,26 +498,26 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         await AddFileAsAttachmentAsync(file);
     }
 
-    private int OnChatAreaNavigateMentionUp()
+    private int OnChatAreaNavigateAutocompleteUp()
     {
-        ViewModel?.NavigateMentionUp();
+        ViewModel?.NavigateAutocompleteUp();
         return -1;
     }
 
-    private int OnChatAreaNavigateMentionDown()
+    private int OnChatAreaNavigateAutocompleteDown()
     {
-        ViewModel?.NavigateMentionDown();
+        ViewModel?.NavigateAutocompleteDown();
         return -1;
     }
 
-    private int OnChatAreaSelectCurrentMention()
+    private (string newText, int cursorPosition)? OnChatAreaSelectCurrentAutocompleteSuggestion()
     {
-        return ViewModel?.SelectCurrentMention() ?? -1;
+        return ViewModel?.SelectCurrentAutocompleteSuggestionWithText();
     }
 
-    private void OnChatAreaCloseMentionPopup()
+    private void OnChatAreaCloseAutocompletePopup()
     {
-        ViewModel?.CloseMentionPopup();
+        ViewModel?.CloseAutocompletePopup();
     }
 
     // Thread message event handlers

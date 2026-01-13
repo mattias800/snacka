@@ -48,14 +48,14 @@
         </Border>
 
         <!-- Main Content Grid (Row 1) -->
-        <Grid Grid.Row="1" Grid.ColumnSpan="6">
+        <Grid x:Name="MainContentGrid" Grid.Row="1" Grid.ColumnSpan="6">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="72"/>
-                <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>
+                <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>  <!-- Index 1: ChannelListColumn -->
                 <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>
+                <ColumnDefinition Width="260" MinWidth="180" MaxWidth="400"/>  <!-- Index 5: MembersListColumn -->
             </Grid.ColumnDefinitions>
 
         <!-- Community List (Left Sidebar) -->
@@ -164,10 +164,11 @@
         <!-- Left Sidebar Splitter -->
         <GridSplitter Grid.Column="2"
                       Width="4"
-                      Background="Transparent"
+                      Background="{StaticResource Content1Brush}"
                       ResizeDirection="Columns"
                       ResizeBehavior="PreviousAndNext"
-                      Cursor="SizeWestEast"/>
+                      Cursor="SizeWestEast"
+                      DragCompleted="OnLeftSplitterDragCompleted"/>
 
         <!-- Main Content Area (Chat, DM, or Voice Channel) -->
         <Grid Grid.Column="3">
@@ -198,10 +199,13 @@
                                    TypingIndicatorText="{Binding TypingIndicatorText}"
                                    HasPendingAttachments="{Binding HasPendingAttachments}"
                                    PendingAttachments="{Binding PendingAttachments}"
-                                   IsMentionPopupOpen="{Binding IsMentionPopupOpen}"
-                                   MentionSuggestions="{Binding MentionSuggestions}"
-                                   SelectedMentionIndex="{Binding SelectedMentionIndex}"
+                                   IsAutocompletePopupOpen="{Binding IsAutocompletePopupOpen}"
+                                   AutocompleteSuggestions="{Binding AutocompleteSuggestions}"
+                                   SelectedAutocompleteIndex="{Binding SelectedAutocompleteIndex}"
                                    IsGifsEnabled="{Binding IsGifsEnabled}"
+                                   IsGifPreviewVisible="{Binding IsGifPreviewVisible}"
+                                   GifPreviewResult="{Binding GifPreviewResult}"
+                                   GifPreviewQuery="{Binding GifPreviewQuery}"
                                    MessageInput="{Binding MessageInput, Mode=TwoWay}"
                                    IsLoading="{Binding IsLoading}"
                                    Messages="{Binding Messages}"
@@ -218,20 +222,23 @@
                                    DeleteMessageCommand="{Binding DeleteMessageCommand}"
                                    CancelEditMessageCommand="{Binding CancelEditMessageCommand}"
                                    SaveMessageEditCommand="{Binding SaveMessageEditCommand}"
+                                   SendGifPreviewCommand="{Binding SendGifPreviewCommand}"
+                                   ShuffleGifPreviewCommand="{Binding ShuffleGifPreviewCommand}"
+                                   CancelGifPreviewCommand="{Binding CancelGifPreviewCommand}"
                                    AddReactionRequested="OnChatAreaAddReactionRequested"
                                    StartThreadRequested="OnChatAreaStartThreadRequested"
                                    ViewThreadRequested="OnChatAreaViewThreadRequested"
                                    ReactionToggleRequested="OnChatAreaReactionToggleRequested"
                                    ImageClicked="OnChatAreaImageClicked"
-                                   MentionSelected="OnChatAreaMentionSelected"
+                                   AutocompleteSuggestionSelected="OnChatAreaAutocompleteSuggestionSelected"
                                    GifButtonClicked="OnChatAreaGifButtonClicked"
                                    AttachButtonClicked="OnChatAreaAttachButtonClicked"
                                    RemovePendingAttachmentRequested="OnChatAreaRemovePendingAttachment"
                                    FileDropped="OnChatAreaFileDropped"
-                                   NavigateMentionUp="OnChatAreaNavigateMentionUp"
-                                   NavigateMentionDown="OnChatAreaNavigateMentionDown"
-                                   SelectCurrentMention="OnChatAreaSelectCurrentMention"
-                                   CloseMentionPopup="OnChatAreaCloseMentionPopup">
+                                   NavigateAutocompleteUp="OnChatAreaNavigateAutocompleteUp"
+                                   NavigateAutocompleteDown="OnChatAreaNavigateAutocompleteDown"
+                                   SelectCurrentAutocompleteSuggestion="OnChatAreaSelectCurrentAutocompleteSuggestion"
+                                   CloseAutocompletePopup="OnChatAreaCloseAutocompletePopup">
                 <controls:ChatAreaView.IsVisible>
                     <MultiBinding Converter="{x:Static BoolConverters.And}">
                         <Binding Path="IsViewingDM" Converter="{x:Static BoolConverters.Not}"/>
@@ -244,10 +251,11 @@
         <!-- Right Sidebar Splitter -->
         <GridSplitter Grid.Column="4"
                       Width="4"
-                      Background="Transparent"
+                      Background="{StaticResource Content1Brush}"
                       ResizeDirection="Columns"
                       ResizeBehavior="PreviousAndNext"
-                      Cursor="SizeWestEast"/>
+                      Cursor="SizeWestEast"
+                      DragCompleted="OnRightSplitterDragCompleted"/>
 
         <!-- Right Sidebar (Members List - always visible) -->
         <controls:MembersListView Grid.Column="5"
