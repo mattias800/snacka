@@ -1,3 +1,4 @@
+using System.Globalization;
 using System.Text.RegularExpressions;
 using Avalonia;
 using Avalonia.Controls;
@@ -22,6 +23,9 @@ public class MessageContentBlock : StackPanel
     private static readonly Dictionary<string, Bitmap?> _gifCache = new();
     private static readonly HashSet<string> _pendingRequests = new();
     private static readonly object _cacheLock = new();
+
+    // Font size multiplier for emoji-only messages
+    private const double EmojiOnlyFontSizeMultiplier = 2.5;
 
     // Regex to detect Tenor GIF URLs
     private static readonly Regex TenorGifRegex = new(
@@ -85,11 +89,16 @@ public class MessageContentBlock : StackPanel
             return;
         }
 
+        // Determine font size - use larger size for emoji-only messages
+        var effectiveFontSize = IsEmojiOnly(trimmedContent)
+            ? FontSize * EmojiOnlyFontSizeMultiplier
+            : FontSize;
+
         // Add the markdown text block
         var markdownBlock = new MarkdownTextBlock
         {
             Markdown = Content,
-            FontSize = FontSize
+            FontSize = effectiveFontSize
         };
         Children.Add(markdownBlock);
 
@@ -312,5 +321,98 @@ public class MessageContentBlock : StackPanel
         {
             _previewCache.Clear();
         }
+    }
+
+    /// <summary>
+    /// Checks if a string contains only emoji characters (and whitespace).
+    /// Returns true for messages like "👍" or "🎉 🚀" but false for "hello 👍" or "123".
+    /// </summary>
+    private static bool IsEmojiOnly(string text)
+    {
+        if (string.IsNullOrWhiteSpace(text))
+            return false;
+
+        var hasEmoji = false;
+        var enumerator = StringInfo.GetTextElementEnumerator(text);
+
+        while (enumerator.MoveNext())
+        {
+            var element = enumerator.GetTextElement();
+
+            // Skip whitespace
+            if (string.IsNullOrWhiteSpace(element))
+                continue;
+
+            // Check if this text element is an emoji
+            if (!IsEmoji(element))
+                return false;
+
+            hasEmoji = true;
+        }
+
+        return hasEmoji;
+    }
+
+    /// <summary>
+    /// Checks if a text element (which may be a single char or a grapheme cluster) is an emoji.
+    /// </summary>
+    private static bool IsEmoji(string textElement)
+    {
+        if (string.IsNullOrEmpty(textElement))
+            return false;
+
+        // Get the first code point
+        var codePoint = char.ConvertToUtf32(textElement, 0);
+
+        // Check various emoji Unicode ranges
+        // Basic emoticons (😀-🙏)
+        if (codePoint >= 0x1F600 && codePoint <= 0x1F64F) return true;
+        // Miscellaneous symbols and pictographs (🌀-🗿)
+        if (codePoint >= 0x1F300 && codePoint <= 0x1F5FF) return true;
+        // Transport and map symbols (🚀-🛿)
+        if (codePoint >= 0x1F680 && codePoint <= 0x1F6FF) return true;
+        // Supplemental symbols and pictographs (🤀-🧿)
+        if (codePoint >= 0x1F900 && codePoint <= 0x1F9FF) return true;
+        // Symbols and pictographs extended-A (🩀-🩯)
+        if (codePoint >= 0x1FA00 && codePoint <= 0x1FA6F) return true;
+        // Symbols and pictographs extended-B (🩰-🫿)
+        if (codePoint >= 0x1FA70 && codePoint <= 0x1FAFF) return true;
+        // Dingbats (✀-➿)
+        if (codePoint >= 0x2700 && codePoint <= 0x27BF) return true;
+        // Miscellaneous symbols (☀-⛿)
+        if (codePoint >= 0x2600 && codePoint <= 0x26FF) return true;
+        // Enclosed alphanumeric supplement (🄀-🅿)
+        if (codePoint >= 0x1F100 && codePoint <= 0x1F1FF) return true;
+        // Enclosed ideographic supplement (🈀-🉑)
+        if (codePoint >= 0x1F200 && codePoint <= 0x1F2FF) return true;
+        // Playing cards (🂠-🃿)
+        if (codePoint >= 0x1F0A0 && codePoint <= 0x1F0FF) return true;
+        // Arrows supplement
+        if (codePoint >= 0x2B00 && codePoint <= 0x2BFF) return true;
+        // Geometric shapes
+        if (codePoint >= 0x25A0 && codePoint <= 0x25FF) return true;
+        // CJK symbols (some emoji like ㊗ ㊙)
+        if (codePoint >= 0x3297 && codePoint <= 0x3299) return true;
+        // Variation selectors shouldn't count as separate characters
+        if (codePoint >= 0xFE00 && codePoint <= 0xFE0F) return true;
+
+        // Check for emoji with variation selector-16 (textElement has multiple chars)
+        // Many symbols become emoji when followed by VS16 (\uFE0F)
+        if (textElement.Contains('\uFE0F') || textElement.Contains('\u20E3'))
+        {
+            return true;
+        }
+
+        // Keycap base characters (0-9, *, #) when part of a keycap sequence
+        if (textElement.Length >= 2)
+        {
+            var firstChar = textElement[0];
+            if ((firstChar >= '0' && firstChar <= '9') || firstChar == '*' || firstChar == '#')
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }
