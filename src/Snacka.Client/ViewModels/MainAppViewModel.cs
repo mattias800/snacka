@@ -223,6 +223,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             _autocomplete.RegisterSource(new SlashCommandAutocompleteSource());
         }
+
+        // Register emoji autocomplete (triggered by :)
+        _autocomplete.RegisterSource(new EmojiAutocompleteSource());
+
         _autocomplete.PropertyChanged += (_, e) =>
         {
             if (e.PropertyName == nameof(AutocompleteManager.IsPopupOpen))
