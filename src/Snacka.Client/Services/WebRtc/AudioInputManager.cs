@@ -2,6 +2,7 @@ using SIPSorcery.Media;
 using SIPSorceryMedia.SDL2;
 using SIPSorceryMedia.Abstractions;
 using SIPSorceryMedia.Encoders;
+using Snacka.Client.Services;
 
 namespace Snacka.Client.Services.WebRtc;
 
@@ -18,6 +19,7 @@ public class AudioInputManager : IAsyncDisposable
     private bool _isSpeaking;
     private DateTime _lastAudioActivity = DateTime.MinValue;
     private Timer? _speakingTimer;
+    private bool _loggedSampleRate; // Log sample rate once per session
 
     // Voice activity detection constants
     private const int SpeakingTimeoutMs = 200;
@@ -191,11 +193,21 @@ public class AudioInputManager : IAsyncDisposable
             }
             _audioSource = null;
         }
+
+        _loggedSampleRate = false;
     }
 
     private void OnAudioSourceRawSample(AudioSamplingRatesEnum samplingRate, uint durationMilliseconds, short[] sample)
     {
         if (_isMuted || sample.Length == 0) return;
+
+        // Log sample rate once per session for debugging
+        if (!_loggedSampleRate)
+        {
+            _loggedSampleRate = true;
+            int sampleRateHz = AudioResampler.ToHz(samplingRate);
+            Console.WriteLine($"AudioInputManager: Raw sample rate: {sampleRateHz}Hz (enum: {samplingRate}), samples: {sample.Length}, duration: {durationMilliseconds}ms");
+        }
 
         // Get user settings
         var manualGain = _settingsStore?.Settings.InputGain ?? 1.0f;

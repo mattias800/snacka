@@ -46,9 +46,12 @@ public class AudioDeviceService : IAudioDeviceService
     private readonly ISettingsStore? _settingsStore;
     private SDL2AudioSource? _testAudioSource;
     private SDL2AudioEndPoint? _testAudioSink;
+    private AudioFormat? _selectedFormat; // Track the selected format for source/sink consistency
     private Action<float>? _onRmsUpdate;
     private bool _isLoopbackEnabled;
     private CancellationTokenSource? _testCts;
+    private readonly AudioResampler _loopbackResampler = new(); // Resampler for loopback audio
+    private bool _loggedSampleRate; // Only log sample rate once per test session
 
     // AGC for microphone test (mirrors WebRtcService AGC)
     private float _testAgcGain = 1.0f;
@@ -272,6 +275,8 @@ public class AudioDeviceService : IAudioDeviceService
                 if (selectedFormat.FormatName == null)
                     selectedFormat = formats[0];
                 _testAudioSource.SetAudioSourceFormat(selectedFormat);
+                _selectedFormat = selectedFormat; // Store for loopback sink to use same format
+                Console.WriteLine($"AudioDeviceService: Selected format: {selectedFormat.FormatName} ({selectedFormat.ClockRate}Hz)");
             }
 
             await _testAudioSource.StartAudio();
@@ -298,11 +303,11 @@ public class AudioDeviceService : IAudioDeviceService
                     var audioEncoder = new AudioEncoder(includeOpus: true);
                     _testAudioSink = new SDL2AudioEndPoint(outputDevice ?? string.Empty, audioEncoder);
 
-                    // Set same format as source
-                    var formats = _testAudioSource.GetAudioSourceFormats();
-                    if (formats.Count > 0)
+                    // Use the same format as the source to ensure sample rates match
+                    if (_selectedFormat.HasValue)
                     {
-                        _testAudioSink.SetAudioSinkFormat(formats[0]);
+                        _testAudioSink.SetAudioSinkFormat(_selectedFormat.Value);
+                        Console.WriteLine($"AudioDeviceService: Loopback sink using format: {_selectedFormat.Value.FormatName} ({_selectedFormat.Value.ClockRate}Hz)");
                     }
 
                     _ = _testAudioSink.StartAudioSink();
@@ -363,6 +368,9 @@ public class AudioDeviceService : IAudioDeviceService
         _onRmsUpdate = null;
         _onAgcUpdate = null;
         _isLoopbackEnabled = false;
+        _selectedFormat = null;
+        _loopbackResampler.Reset();
+        _loggedSampleRate = false;
         Console.WriteLine("AudioDeviceService: Stopped input test");
     }
 
@@ -439,8 +447,23 @@ public class AudioDeviceService : IAudioDeviceService
         // If loopback is enabled, send audio to output
         if (_isLoopbackEnabled && _testAudioSink != null)
         {
-            byte[] pcmBytes = new byte[sample.Length * 2];
-            Buffer.BlockCopy(sample, 0, pcmBytes, 0, pcmBytes.Length);
+            // Get the input sample rate and resample to 48kHz if needed
+            int inputRateHz = AudioResampler.ToHz(samplingRate);
+
+            // Log sample rate info once per session
+            if (!_loggedSampleRate)
+            {
+                _loggedSampleRate = true;
+                Console.WriteLine($"AudioDeviceService: Input sample rate: {inputRateHz}Hz, target: {AudioResampler.TargetSampleRate}Hz");
+            }
+
+            // Resample to 48kHz for the sink (which uses OPUS format)
+            var outputSamples = inputRateHz == AudioResampler.TargetSampleRate
+                ? sample
+                : _loopbackResampler.ResampleToCodecRate(sample, inputRateHz);
+
+            byte[] pcmBytes = new byte[outputSamples.Length * 2];
+            Buffer.BlockCopy(outputSamples, 0, pcmBytes, 0, pcmBytes.Length);
             _testAudioSink.GotAudioSample(pcmBytes);
         }
     }
