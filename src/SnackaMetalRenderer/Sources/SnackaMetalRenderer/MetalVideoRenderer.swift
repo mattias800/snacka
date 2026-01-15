@@ -14,9 +14,12 @@ public class MetalVideoRenderer {
     private var yTexture: MTLTexture?
     private var uvTexture: MTLTexture?
     private var vertexBuffer: MTLBuffer?
+    private var scaleBuffer: MTLBuffer?
 
     private var videoWidth: Int = 0
     private var videoHeight: Int = 0
+    private var displayWidth: Int = 320
+    private var displayHeight: Int = 240
 
     private let metalLayer: CAMetalLayer
     public let view: NSView
@@ -65,6 +68,14 @@ public class MetalVideoRenderer {
         }
         self.vertexBuffer = vertexBuffer
 
+        // Create scale buffer for aspect ratio correction (scaleX, scaleY)
+        var scaleData: [Float] = [1.0, 1.0]
+        guard let scaleBuffer = device.makeBuffer(bytes: &scaleData, length: scaleData.count * MemoryLayout<Float>.size, options: .storageModeShared) else {
+            fputs("MetalVideoRenderer: Failed to create scale buffer\n", stderr)
+            return nil
+        }
+        self.scaleBuffer = scaleBuffer
+
         // Compile shaders and create pipeline
         guard let pipelineState = MetalVideoRenderer.createPipelineState(device: device) else {
             fputs("MetalVideoRenderer: Failed to create pipeline state\n", stderr)
@@ -76,7 +87,7 @@ public class MetalVideoRenderer {
     }
 
     private static func createPipelineState(device: MTLDevice) -> MTLRenderPipelineState? {
-        // Metal shader source for YUV→RGB conversion
+        // Metal shader source for YUV→RGB conversion with aspect ratio correction
         let shaderSource = """
         #include <metal_stdlib>
         using namespace metal;
@@ -92,10 +103,13 @@ public class MetalVideoRenderer {
         };
 
         vertex VertexOut vertexShader(uint vertexID [[vertex_id]],
-                                       constant float4* vertices [[buffer(0)]]) {
+                                       constant float4* vertices [[buffer(0)]],
+                                       constant float2* scale [[buffer(1)]]) {
             VertexOut out;
             float4 v = vertices[vertexID];
-            out.position = float4(v.xy, 0.0, 1.0);
+            // Apply aspect ratio scaling to position
+            float2 scaledPos = v.xy * (*scale);
+            out.position = float4(scaledPos, 0.0, 1.0);
             out.texCoord = v.zw;
             return out;
         }
@@ -189,6 +203,10 @@ public class MetalVideoRenderer {
         uvTexture = uvTex
 
         fputs("MetalVideoRenderer: Initialized textures for \(width)x\(height)\n", stderr)
+
+        // Update aspect ratio scaling
+        updateAspectRatioScale()
+
         return true
     }
 
@@ -246,6 +264,7 @@ public class MetalVideoRenderer {
 
         renderEncoder.setRenderPipelineState(pipelineState)
         renderEncoder.setVertexBuffer(vertexBuffer, offset: 0, index: 0)
+        renderEncoder.setVertexBuffer(scaleBuffer, offset: 0, index: 1)
         renderEncoder.setFragmentTexture(yTexture, index: 0)
         renderEncoder.setFragmentTexture(uvTexture, index: 1)
         renderEncoder.drawPrimitives(type: .triangleStrip, vertexStart: 0, vertexCount: 4)
@@ -257,8 +276,41 @@ public class MetalVideoRenderer {
 
     /// Set display size for the Metal layer.
     public func setDisplaySize(width: Int, height: Int) {
+        displayWidth = width
+        displayHeight = height
         metalLayer.frame = CGRect(x: 0, y: 0, width: width, height: height)
         metalLayer.drawableSize = CGSize(width: width, height: height)
+        updateAspectRatioScale()
+    }
+
+    /// Update scale factors to maintain aspect ratio.
+    private func updateAspectRatioScale() {
+        guard videoWidth > 0, videoHeight > 0, displayWidth > 0, displayHeight > 0 else {
+            return
+        }
+
+        let videoAspect = Float(videoWidth) / Float(videoHeight)
+        let displayAspect = Float(displayWidth) / Float(displayHeight)
+
+        var scaleX: Float = 1.0
+        var scaleY: Float = 1.0
+
+        if videoAspect > displayAspect {
+            // Video is wider than display - pillarbox (scale Y down)
+            scaleY = displayAspect / videoAspect
+        } else {
+            // Video is taller than display - letterbox (scale X down)
+            scaleX = videoAspect / displayAspect
+        }
+
+        // Update scale buffer
+        if let scaleBuffer = scaleBuffer {
+            let scalePtr = scaleBuffer.contents().bindMemory(to: Float.self, capacity: 2)
+            scalePtr[0] = scaleX
+            scalePtr[1] = scaleY
+        }
+
+        fputs("MetalVideoRenderer: Aspect ratio scale updated: \(scaleX), \(scaleY) (video: \(videoWidth)x\(videoHeight), display: \(displayWidth)x\(displayHeight))\n", stderr)
     }
 
     deinit {

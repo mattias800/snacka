@@ -18,6 +18,9 @@ public unsafe class OpenGLVideoRenderer : IGpuVideoRenderer
     private uint _vbo;
     private uint _yTexture;
     private uint _uvTexture;
+    private int _scaleUniformLocation;
+    private float _scaleX = 1.0f;
+    private float _scaleY = 1.0f;
     private int _videoWidth;
     private int _videoHeight;
     private int _displayWidth;
@@ -38,15 +41,17 @@ public unsafe class OpenGLVideoRenderer : IGpuVideoRenderer
     /// </summary>
     public event Action? RenderingFailed;
 
-    // Vertex shader - passes through position and texture coordinates
+    // Vertex shader - passes through position and texture coordinates with aspect ratio scaling
     private const string VertexShaderSource = @"
 #version 330 core
 layout (location = 0) in vec2 aPos;
 layout (location = 1) in vec2 aTexCoord;
+uniform vec2 scale;
 out vec2 TexCoord;
 void main()
 {
-    gl_Position = vec4(aPos, 0.0, 1.0);
+    vec2 scaledPos = aPos * scale;
+    gl_Position = vec4(scaledPos, 0.0, 1.0);
     TexCoord = aTexCoord;
 }
 ";
@@ -223,6 +228,10 @@ void main()
         gl.BindVertexArray(0);
 
         _isInitialized = true;
+
+        // Initialize aspect ratio scale
+        UpdateAspectRatioScale();
+
         Console.WriteLine("OpenGLVideoRenderer: OpenGL resources created");
     }
 
@@ -251,6 +260,9 @@ void main()
         gl.UseProgram(program);
         gl.Uniform1(gl.GetUniformLocation(program, "yTexture"), 0);
         gl.Uniform1(gl.GetUniformLocation(program, "uvTexture"), 1);
+
+        // Get scale uniform location for aspect ratio correction
+        _scaleUniformLocation = gl.GetUniformLocation(program, "scale");
 
         return program;
     }
@@ -320,6 +332,10 @@ void main()
                 gl.Clear(ClearBufferMask.ColorBufferBit);
 
                 gl.UseProgram(_shaderProgram);
+
+                // Set scale uniform for aspect ratio correction
+                gl.Uniform2(_scaleUniformLocation, _scaleX, _scaleY);
+
                 gl.BindVertexArray(_vao);
                 gl.DrawArrays(PrimitiveType.Triangles, 0, 6);
                 gl.BindVertexArray(0);
@@ -385,6 +401,9 @@ void main()
             gl.TexImage2D(TextureTarget.Texture2D, 0, InternalFormat.RG8, (uint)(width / 2), (uint)(height / 2), 0, PixelFormat.RG, PixelType.UnsignedByte, null);
 
             Console.WriteLine($"OpenGLVideoRenderer: Resized to {width}x{height}");
+
+            // Update aspect ratio when video dimensions change
+            UpdateAspectRatioScale();
         }
     }
 
@@ -397,6 +416,34 @@ void main()
         {
             window.Size = new Silk.NET.Maths.Vector2D<int>(width, height);
         }
+        UpdateAspectRatioScale();
+    }
+
+    /// <summary>
+    /// Updates scale factors to maintain video aspect ratio within the display area.
+    /// </summary>
+    private void UpdateAspectRatioScale()
+    {
+        if (_videoWidth <= 0 || _videoHeight <= 0 || _displayWidth <= 0 || _displayHeight <= 0)
+            return;
+
+        float videoAspect = (float)_videoWidth / _videoHeight;
+        float displayAspect = (float)_displayWidth / _displayHeight;
+
+        if (videoAspect > displayAspect)
+        {
+            // Video is wider than display - pillarbox (scale Y down)
+            _scaleX = 1.0f;
+            _scaleY = displayAspect / videoAspect;
+        }
+        else
+        {
+            // Video is taller than display - letterbox (scale X down)
+            _scaleX = videoAspect / displayAspect;
+            _scaleY = 1.0f;
+        }
+
+        Console.WriteLine($"OpenGLVideoRenderer: Aspect ratio scale updated: {_scaleX}, {_scaleY} (video: {_videoWidth}x{_videoHeight}, display: {_displayWidth}x{_displayHeight})");
     }
 
     public void Dispose()
