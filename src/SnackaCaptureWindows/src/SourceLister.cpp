@@ -4,6 +4,14 @@
 #define NOMINMAX
 #include <Windows.h>
 #include <Psapi.h>
+#include <mfapi.h>
+#include <mfidl.h>
+#include <mfreadwrite.h>
+
+#pragma comment(lib, "mfplat.lib")
+#pragma comment(lib, "mf.lib")
+#pragma comment(lib, "mfreadwrite.lib")
+#pragma comment(lib, "mfuuid.lib")
 
 #include <iostream>
 #include <sstream>
@@ -173,10 +181,94 @@ std::vector<WindowInfo> SourceLister::EnumerateWindows() {
     return windows;
 }
 
+std::vector<CameraInfo> SourceLister::EnumerateCameras() {
+    std::vector<CameraInfo> cameras;
+
+    // Initialize Media Foundation (required for device enumeration)
+    HRESULT hr = MFStartup(MF_VERSION);
+    if (FAILED(hr)) {
+        return cameras;
+    }
+
+    // Create attributes for video capture devices
+    IMFAttributes* pAttributes = nullptr;
+    hr = MFCreateAttributes(&pAttributes, 1);
+    if (FAILED(hr)) {
+        MFShutdown();
+        return cameras;
+    }
+
+    // Request video capture devices
+    hr = pAttributes->SetGUID(
+        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE,
+        MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_GUID
+    );
+    if (FAILED(hr)) {
+        pAttributes->Release();
+        MFShutdown();
+        return cameras;
+    }
+
+    // Enumerate devices
+    IMFActivate** ppDevices = nullptr;
+    UINT32 count = 0;
+    hr = MFEnumDeviceSources(pAttributes, &ppDevices, &count);
+    pAttributes->Release();
+
+    if (FAILED(hr) || count == 0) {
+        MFShutdown();
+        return cameras;
+    }
+
+    // Get info for each device
+    for (UINT32 i = 0; i < count; i++) {
+        CameraInfo info;
+        info.index = static_cast<int>(i);
+
+        // Get friendly name
+        WCHAR* friendlyName = nullptr;
+        UINT32 nameLength = 0;
+        hr = ppDevices[i]->GetAllocatedString(
+            MF_DEVSOURCE_ATTRIBUTE_FRIENDLY_NAME,
+            &friendlyName,
+            &nameLength
+        );
+        if (SUCCEEDED(hr) && friendlyName) {
+            info.name = WideToUtf8(friendlyName);
+            CoTaskMemFree(friendlyName);
+        }
+
+        // Get symbolic link (unique device ID)
+        WCHAR* symbolicLink = nullptr;
+        UINT32 linkLength = 0;
+        hr = ppDevices[i]->GetAllocatedString(
+            MF_DEVSOURCE_ATTRIBUTE_SOURCE_TYPE_VIDCAP_SYMBOLIC_LINK,
+            &symbolicLink,
+            &linkLength
+        );
+        if (SUCCEEDED(hr) && symbolicLink) {
+            info.id = WideToUtf8(symbolicLink);
+            CoTaskMemFree(symbolicLink);
+        } else {
+            // Fallback to index as ID
+            info.id = std::to_string(i);
+        }
+
+        cameras.push_back(info);
+        ppDevices[i]->Release();
+    }
+
+    CoTaskMemFree(ppDevices);
+    MFShutdown();
+
+    return cameras;
+}
+
 SourceList SourceLister::GetAvailableSources() {
     SourceList sources;
     sources.displays = EnumerateDisplays();
     sources.windows = EnumerateWindows();
+    sources.cameras = EnumerateCameras();
     // Applications list is empty on Windows (macOS-only concept)
     return sources;
 }
@@ -211,7 +303,19 @@ void SourceLister::PrintSourcesAsJson(const SourceList& sources) {
     std::cout << "  ],\n";
 
     // Applications (empty on Windows)
-    std::cout << "  \"applications\": []\n";
+    std::cout << "  \"applications\": [],\n";
+
+    // Cameras
+    std::cout << "  \"cameras\": [\n";
+    for (size_t i = 0; i < sources.cameras.size(); i++) {
+        const auto& c = sources.cameras[i];
+        std::cout << "    {\n";
+        std::cout << "      \"id\": \"" << EscapeJson(c.id) << "\",\n";
+        std::cout << "      \"name\": \"" << EscapeJson(c.name) << "\",\n";
+        std::cout << "      \"index\": " << c.index << "\n";
+        std::cout << "    }" << (i < sources.cameras.size() - 1 ? "," : "") << "\n";
+    }
+    std::cout << "  ]\n";
 
     std::cout << "}\n";
 }
@@ -233,6 +337,11 @@ void SourceLister::PrintSources(const SourceList& sources) {
 
     std::cout << "\nApplications:\n";
     std::cout << "  (Application capture not supported on Windows)\n";
+
+    std::cout << "\nCameras:\n";
+    for (const auto& c : sources.cameras) {
+        std::cout << "  [" << c.index << "] " << c.name << "\n";
+    }
 }
 
 }  // namespace snacka

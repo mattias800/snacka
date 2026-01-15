@@ -63,6 +63,10 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
         }
 
         switch config.source {
+        case .camera:
+            // Camera capture should use CameraCapturer, not ScreenCapturer
+            throw CaptureError.captureNotSupported("Use CameraCapturer for camera sources")
+
         case .display(let index):
             guard index >= 0 && index < content.displays.count else {
                 throw CaptureError.sourceNotFound("Display \(index) not found")
@@ -187,8 +191,11 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             handleVideoFrame(sampleBuffer)
         case .audio:
             handleAudioFrame(sampleBuffer)
+        case .microphone:
+            // Microphone output not used for screen capture
+            break
         @unknown default:
-            // Includes .microphone (macOS 14+) and any future types
+            // Future types
             break
         }
     }

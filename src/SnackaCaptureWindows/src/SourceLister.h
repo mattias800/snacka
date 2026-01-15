@@ -19,6 +19,7 @@ public:
 private:
     static std::vector<DisplayInfo> EnumerateDisplays();
     static std::vector<WindowInfo> EnumerateWindows();
+    static std::vector<CameraInfo> EnumerateCameras();
 };
 
 }  // namespace snacka

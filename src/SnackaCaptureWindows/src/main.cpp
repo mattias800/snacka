@@ -2,6 +2,7 @@
 #include "SourceLister.h"
 #include "DisplayCapturer.h"
 #include "WindowCapturer.h"
+#include "CameraCapturer.h"
 #include "AudioCapturer.h"
 #include "MediaFoundationEncoder.h"
 
@@ -34,24 +35,25 @@ BOOL WINAPI ConsoleHandler(DWORD signal) {
 
 void PrintUsage() {
     std::cerr << R"(
-SnackaCaptureWindows - Screen and audio capture tool for Windows
+SnackaCaptureWindows - Screen, window, and camera capture tool for Windows
 
 USAGE:
     SnackaCaptureWindows list [--json]
     SnackaCaptureWindows [OPTIONS]
 
 COMMANDS:
-    list              List available capture sources
+    list              List available capture sources (displays, windows, cameras)
 
 OPTIONS:
     --display <index>   Display index to capture (default: 0)
     --window <hwnd>     Window handle to capture
-    --width <pixels>    Output width (default: 1920)
-    --height <pixels>   Output height (default: 1080)
-    --fps <rate>        Frames per second (default: 30)
-    --audio             Capture system audio
+    --camera <id>       Camera device ID or index to capture
+    --width <pixels>    Output width (default: 1920, camera: 640)
+    --height <pixels>   Output height (default: 1080, camera: 480)
+    --fps <rate>        Frames per second (default: 30, camera: 15)
+    --audio             Capture system audio (not used with camera)
     --encode            Output H.264 encoded video (instead of raw NV12)
-    --bitrate <mbps>    Encoding bitrate in Mbps (default: 6)
+    --bitrate <mbps>    Encoding bitrate in Mbps (default: 6, camera: 2)
     --json              Output source list as JSON (with 'list' command)
     --help              Show this help message
 
@@ -60,6 +62,7 @@ EXAMPLES:
     SnackaCaptureWindows --display 0 --width 1920 --height 1080 --fps 30
     SnackaCaptureWindows --display 0 --encode --bitrate 8 --audio
     SnackaCaptureWindows --window 12345678 --audio
+    SnackaCaptureWindows --camera 0 --encode --bitrate 2
 )";
 }
 
@@ -75,7 +78,7 @@ int ListSources(bool asJson) {
     return 0;
 }
 
-int Capture(int displayIndex, HWND windowHandle, int width, int height, int fps, bool captureAudio, bool encodeH264, int bitrateMbps) {
+int Capture(int displayIndex, HWND windowHandle, const std::string& cameraId, int width, int height, int fps, bool captureAudio, bool encodeH264, int bitrateMbps) {
     // Set stdout to binary mode for raw frame output
     _setmode(_fileno(stdout), _O_BINARY);
     _setmode(_fileno(stderr), _O_BINARY);
@@ -86,7 +89,8 @@ int Capture(int displayIndex, HWND windowHandle, int width, int height, int fps,
     // Initialize COM for audio
     CoInitializeEx(nullptr, COINIT_MULTITHREADED);
 
-    std::cerr << "SnackaCaptureWindows: Starting capture "
+    std::string sourceType = !cameraId.empty() ? "camera" : (windowHandle != nullptr ? "window" : "display");
+    std::cerr << "SnackaCaptureWindows: Starting " << sourceType << " capture "
               << width << "x" << height << " @ " << fps << "fps"
               << (captureAudio ? ", audio=true" : ", audio=false")
               << (encodeH264 ? ", encode=H.264 @ " + std::to_string(bitrateMbps) + "Mbps" : ", encode=raw NV12") << "\n";
@@ -211,7 +215,21 @@ int Capture(int displayIndex, HWND windowHandle, int width, int height, int fps,
     // Start video capture
     bool captureStarted = false;
 
-    if (windowHandle != nullptr) {
+    if (!cameraId.empty()) {
+        // Camera capture
+        auto capturer = std::make_unique<CameraCapturer>();
+        if (capturer->Initialize(cameraId, width, height, fps)) {
+            capturer->Start(videoCallback);
+            captureStarted = true;
+
+            // Wait for shutdown
+            while (g_running && capturer->IsRunning()) {
+                Sleep(100);
+            }
+
+            capturer->Stop();
+        }
+    } else if (windowHandle != nullptr) {
         // Window capture
         auto capturer = std::make_unique<WindowCapturer>();
         if (capturer->Initialize(windowHandle, width, height, fps)) {
@@ -291,18 +309,21 @@ int main(int argc, char* argv[]) {
     // Parse capture options
     int displayIndex = 0;
     HWND windowHandle = nullptr;
-    int width = 1920;
-    int height = 1080;
-    int fps = 30;
+    std::string cameraId;
+    int width = -1;  // -1 means use default for source type
+    int height = -1;
+    int fps = -1;
     bool captureAudio = false;
     bool encodeH264 = false;
-    int bitrateMbps = 6;
+    int bitrateMbps = -1;
 
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "--display" && i + 1 < args.size()) {
             displayIndex = std::stoi(args[++i]);
         } else if (args[i] == "--window" && i + 1 < args.size()) {
             windowHandle = reinterpret_cast<HWND>(std::stoull(args[++i]));
+        } else if (args[i] == "--camera" && i + 1 < args.size()) {
+            cameraId = args[++i];
         } else if (args[i] == "--width" && i + 1 < args.size()) {
             width = std::stoi(args[++i]);
         } else if (args[i] == "--height" && i + 1 < args.size()) {
@@ -317,6 +338,13 @@ int main(int argc, char* argv[]) {
             bitrateMbps = std::stoi(args[++i]);
         }
     }
+
+    // Set defaults based on source type
+    bool isCamera = !cameraId.empty();
+    if (width < 0) width = isCamera ? 640 : 1920;
+    if (height < 0) height = isCamera ? 480 : 1080;
+    if (fps < 0) fps = isCamera ? 15 : 30;
+    if (bitrateMbps < 0) bitrateMbps = isCamera ? 2 : 6;
 
     // Validate parameters
     if (width <= 0 || width > 4096) {
@@ -336,5 +364,5 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    return Capture(displayIndex, windowHandle, width, height, fps, captureAudio, encodeH264, bitrateMbps);
+    return Capture(displayIndex, windowHandle, cameraId, width, height, fps, captureAudio, encodeH264, bitrateMbps);
 }

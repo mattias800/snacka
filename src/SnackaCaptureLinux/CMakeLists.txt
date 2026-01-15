@@ -15,6 +15,8 @@ add_executable(SnackaCaptureLinux
     src/VaapiEncoder.h
     src/X11Capturer.cpp
     src/X11Capturer.h
+    src/V4L2Capturer.cpp
+    src/V4L2Capturer.h
     src/SourceLister.cpp
     src/SourceLister.h
     src/Protocol.h

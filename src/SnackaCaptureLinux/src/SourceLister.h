@@ -8,8 +8,11 @@ namespace snacka {
 /// Utility class for listing available capture sources on Linux
 class SourceLister {
 public:
-    /// Get list of available capture sources (displays and windows)
+    /// Get list of available capture sources (displays, windows, and cameras)
     static SourceList GetAvailableSources();
+
+    /// Enumerate available V4L2 video capture devices
+    static std::vector<CameraInfo> EnumerateCameras();
 
     /// Print sources in human-readable format to stderr
     static void PrintSources(const SourceList& sources);

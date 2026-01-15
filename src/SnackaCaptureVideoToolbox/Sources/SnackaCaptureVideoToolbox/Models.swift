@@ -6,6 +6,7 @@ struct AvailableSources: Codable {
     let displays: [DisplaySource]
     let windows: [WindowSource]
     let applications: [ApplicationSource]
+    let cameras: [CameraSource]
 }
 
 struct DisplaySource: Codable {
@@ -27,12 +28,20 @@ struct ApplicationSource: Codable {
     let name: String
 }
 
+struct CameraSource: Codable {
+    let id: String        // AVCaptureDevice.uniqueID for stable identification
+    let name: String      // Localized device name
+    let index: Int        // Index in device list (for fallback selection)
+    let position: String  // "front", "back", or "unspecified"
+}
+
 // MARK: - Capture Configuration
 
 enum CaptureSourceType {
     case display(index: Int)
     case window(id: Int)
     case application(bundleId: String)
+    case camera(id: String)  // Camera unique ID or index as string
 }
 
 struct CaptureConfig {

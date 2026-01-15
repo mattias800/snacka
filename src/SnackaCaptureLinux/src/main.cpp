@@ -1,6 +1,7 @@
 #include "Protocol.h"
 #include "SourceLister.h"
 #include "X11Capturer.h"
+#include "V4L2Capturer.h"
 #include "VaapiEncoder.h"
 
 #include <iostream>
@@ -25,22 +26,23 @@ void SignalHandler(int signal) {
 
 void PrintUsage() {
     std::cerr << R"(
-SnackaCaptureLinux - Screen capture tool for Linux with VAAPI encoding
+SnackaCaptureLinux - Screen and camera capture tool for Linux with VAAPI encoding
 
 USAGE:
     SnackaCaptureLinux list [--json]
     SnackaCaptureLinux [OPTIONS]
 
 COMMANDS:
-    list              List available capture sources
+    list              List available capture sources (displays, windows, cameras)
 
 OPTIONS:
     --display <index>   Display index to capture (default: 0)
-    --width <pixels>    Output width (default: 1920)
-    --height <pixels>   Output height (default: 1080)
-    --fps <rate>        Frames per second (default: 30)
+    --camera <id>       Camera device path or index to capture (e.g., /dev/video0 or 0)
+    --width <pixels>    Output width (default: 1920, camera: 640)
+    --height <pixels>   Output height (default: 1080, camera: 480)
+    --fps <rate>        Frames per second (default: 30, camera: 15)
     --encode            Output H.264 encoded video (instead of raw NV12)
-    --bitrate <mbps>    Encoding bitrate in Mbps (default: 6)
+    --bitrate <mbps>    Encoding bitrate in Mbps (default: 6, camera: 2)
     --json              Output source list as JSON (with 'list' command)
     --help              Show this help message
 
@@ -48,6 +50,8 @@ EXAMPLES:
     SnackaCaptureLinux list --json
     SnackaCaptureLinux --display 0 --width 1920 --height 1080 --fps 30
     SnackaCaptureLinux --display 0 --encode --bitrate 8
+    SnackaCaptureLinux --camera 0 --encode --bitrate 2
+    SnackaCaptureLinux --camera /dev/video0 --width 640 --height 480 --fps 15
 
 OUTPUT:
     Without --encode: Raw NV12 video frames to stdout
@@ -67,13 +71,14 @@ int ListSources(bool asJson) {
     return 0;
 }
 
-int Capture(int displayIndex, int width, int height, int fps, bool encodeH264, int bitrateMbps) {
+int Capture(int displayIndex, const std::string& cameraId, int width, int height, int fps, bool encodeH264, int bitrateMbps) {
     // Set up signal handlers for clean shutdown
     signal(SIGINT, SignalHandler);
     signal(SIGTERM, SignalHandler);
     signal(SIGPIPE, SignalHandler);
 
-    std::cerr << "SnackaCaptureLinux: Starting capture "
+    std::string sourceType = !cameraId.empty() ? "camera" : "display";
+    std::cerr << "SnackaCaptureLinux: Starting " << sourceType << " capture "
               << width << "x" << height << " @ " << fps << "fps"
               << (encodeH264 ? ", encode=H.264 @ " + std::to_string(bitrateMbps) + "Mbps" : ", encode=raw NV12")
               << "\n";
@@ -167,20 +172,45 @@ int Capture(int displayIndex, int width, int height, int fps, bool encodeH264, i
     };
 
     // Start video capture
-    X11Capturer capturer;
-    if (!capturer.Initialize(displayIndex, width, height, fps)) {
-        std::cerr << "SnackaCaptureLinux: Failed to initialize X11 capture\n";
+    bool captureStarted = false;
+
+    if (!cameraId.empty()) {
+        // Camera capture using V4L2
+        V4L2Capturer capturer;
+        if (capturer.Initialize(cameraId, width, height, fps)) {
+            capturer.Start(frameCallback);
+            captureStarted = true;
+
+            // Wait for shutdown
+            while (g_running && capturer.IsRunning()) {
+                usleep(100000);  // 100ms
+            }
+
+            capturer.Stop();
+        } else {
+            std::cerr << "SnackaCaptureLinux: Failed to initialize V4L2 camera capture\n";
+        }
+    } else {
+        // Display capture using X11
+        X11Capturer capturer;
+        if (capturer.Initialize(displayIndex, width, height, fps)) {
+            capturer.Start(frameCallback);
+            captureStarted = true;
+
+            // Wait for shutdown
+            while (g_running && capturer.IsRunning()) {
+                usleep(100000);  // 100ms
+            }
+
+            capturer.Stop();
+        } else {
+            std::cerr << "SnackaCaptureLinux: Failed to initialize X11 capture\n";
+        }
+    }
+
+    if (!captureStarted) {
         return 1;
     }
-
-    capturer.Start(frameCallback);
-
-    // Wait for shutdown
-    while (g_running && capturer.IsRunning()) {
-        usleep(100000);  // 100ms
-    }
-
-    capturer.Stop();
 
     // Stop encoder
     if (encoder) {
@@ -218,15 +248,18 @@ int main(int argc, char* argv[]) {
 
     // Parse capture options
     int displayIndex = 0;
-    int width = 1920;
-    int height = 1080;
-    int fps = 30;
+    std::string cameraId;
+    int width = -1;  // -1 means use default for source type
+    int height = -1;
+    int fps = -1;
     bool encodeH264 = false;
-    int bitrateMbps = 6;
+    int bitrateMbps = -1;
 
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "--display" && i + 1 < args.size()) {
             displayIndex = std::stoi(args[++i]);
+        } else if (args[i] == "--camera" && i + 1 < args.size()) {
+            cameraId = args[++i];
         } else if (args[i] == "--width" && i + 1 < args.size()) {
             width = std::stoi(args[++i]);
         } else if (args[i] == "--height" && i + 1 < args.size()) {
@@ -239,6 +272,13 @@ int main(int argc, char* argv[]) {
             bitrateMbps = std::stoi(args[++i]);
         }
     }
+
+    // Set defaults based on source type
+    bool isCamera = !cameraId.empty();
+    if (width < 0) width = isCamera ? 640 : 1920;
+    if (height < 0) height = isCamera ? 480 : 1080;
+    if (fps < 0) fps = isCamera ? 15 : 30;
+    if (bitrateMbps < 0) bitrateMbps = isCamera ? 2 : 6;
 
     // Validate parameters
     if (width <= 0 || width > 4096) {
@@ -258,5 +298,5 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    return Capture(displayIndex, width, height, fps, encodeH264, bitrateMbps);
+    return Capture(displayIndex, cameraId, width, height, fps, encodeH264, bitrateMbps);
 }

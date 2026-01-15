@@ -1,5 +1,6 @@
 import Foundation
 import ScreenCaptureKit
+import AVFoundation
 
 /// Lists available capture sources using ScreenCaptureKit
 enum SourceLister {
@@ -35,11 +36,66 @@ enum SourceLister {
             )
         }
 
+        // Enumerate cameras using AVFoundation
+        let cameras = getAvailableCameras()
+
         return AvailableSources(
             displays: displays,
             windows: windows,
-            applications: applications
+            applications: applications,
+            cameras: cameras
         )
+    }
+
+    /// Returns available camera devices using AVFoundation
+    static func getAvailableCameras() -> [CameraSource] {
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
+            mediaType: .video,
+            position: .unspecified
+        )
+
+        return discoverySession.devices.enumerated().map { index, device in
+            let position: String
+            switch device.position {
+            case .front:
+                position = "front"
+            case .back:
+                position = "back"
+            case .unspecified:
+                position = "unspecified"
+            @unknown default:
+                position = "unspecified"
+            }
+
+            return CameraSource(
+                id: device.uniqueID,
+                name: device.localizedName,
+                index: index,
+                position: position
+            )
+        }
+    }
+
+    /// Find a camera by unique ID or index
+    static func findCamera(idOrIndex: String) -> AVCaptureDevice? {
+        let cameras = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInWideAngleCamera, .externalUnknown],
+            mediaType: .video,
+            position: .unspecified
+        ).devices
+
+        // First try to find by unique ID
+        if let device = cameras.first(where: { $0.uniqueID == idOrIndex }) {
+            return device
+        }
+
+        // Then try to find by index
+        if let index = Int(idOrIndex), index >= 0 && index < cameras.count {
+            return cameras[index]
+        }
+
+        return nil
     }
 
     /// Find a display by index

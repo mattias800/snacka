@@ -43,6 +43,11 @@ struct List: AsyncParsableCommand {
             for app in sources.applications {
                 print("  [\(app.bundleId)] \(app.name)")
             }
+            print("\nCameras:")
+            for camera in sources.cameras {
+                let positionStr = camera.position != "unspecified" ? " (\(camera.position))" : ""
+                print("  [\(camera.index)] \(camera.name)\(positionStr) - id: \(camera.id)")
+            }
         }
     }
 }
@@ -63,6 +68,9 @@ struct Capture: AsyncParsableCommand {
 
     @Option(name: .long, help: "Application bundle ID to capture")
     var app: String?
+
+    @Option(name: .long, help: "Camera unique ID or index to capture")
+    var camera: String?
 
     @Option(name: .long, help: "Output width")
     var width: Int = 1920
@@ -89,11 +97,11 @@ struct Capture: AsyncParsableCommand {
     var bitrate: Int = 6
 
     func validate() throws {
-        let sourceCount = [display != nil, window != nil, app != nil].filter { $0 }.count
+        let sourceCount = [display != nil, window != nil, app != nil, camera != nil].filter { $0 }.count
         if sourceCount == 0 {
             // Default to display 0
         } else if sourceCount > 1 {
-            throw ValidationError("Specify only one of --display, --window, or --app")
+            throw ValidationError("Specify only one of --display, --window, --app, or --camera")
         }
 
         guard width > 0 && width <= 4096 else {
@@ -110,7 +118,9 @@ struct Capture: AsyncParsableCommand {
     func run() async throws {
         // Determine capture source
         let sourceType: CaptureSourceType
-        if let windowId = window {
+        if let cameraId = camera {
+            sourceType = .camera(id: cameraId)
+        } else if let windowId = window {
             sourceType = .window(id: windowId)
         } else if let bundleId = app {
             sourceType = .application(bundleId: bundleId)
@@ -132,12 +142,24 @@ struct Capture: AsyncParsableCommand {
 
         // Log to stderr so it doesn't interfere with video output
         let outputFormat = encode ? "H.264 @ \(bitrate)Mbps" : "NV12"
-        fputs("SnackaCaptureVideoToolbox: Starting capture \(width)x\(height) @ \(fps)fps, audio=\(audio), output=\(outputFormat)\n", stderr)
 
-        let capturer = ScreenCapturer(config: config)
-        try await capturer.start()
+        // Use CameraCapturer for camera source, ScreenCapturer for screen sources
+        if case .camera = sourceType {
+            fputs("SnackaCaptureVideoToolbox: Starting camera capture \(width)x\(height) @ \(fps)fps, output=\(outputFormat)\n", stderr)
 
-        // Keep running until terminated
-        await capturer.waitUntilDone()
+            let capturer = CameraCapturer(config: config)
+            try await capturer.start()
+
+            // Keep running until terminated
+            await capturer.waitUntilDone()
+        } else {
+            fputs("SnackaCaptureVideoToolbox: Starting screen capture \(width)x\(height) @ \(fps)fps, audio=\(audio), output=\(outputFormat)\n", stderr)
+
+            let capturer = ScreenCapturer(config: config)
+            try await capturer.start()
+
+            // Keep running until terminated
+            await capturer.waitUntilDone()
+        }
     }
 }

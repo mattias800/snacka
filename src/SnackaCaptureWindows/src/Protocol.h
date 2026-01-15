@@ -70,10 +70,17 @@ struct WindowInfo {
     std::string bundleId;    // Empty on Windows (macOS concept)
 };
 
+struct CameraInfo {
+    std::string id;          // Device symbolic link (unique identifier)
+    std::string name;        // Friendly device name
+    int index;               // Index in device list
+};
+
 struct SourceList {
     std::vector<DisplayInfo> displays;
     std::vector<WindowInfo> windows;
     std::vector<std::string> applications;  // Empty on Windows
+    std::vector<CameraInfo> cameras;
 };
 
 // Calculate NV12 frame size

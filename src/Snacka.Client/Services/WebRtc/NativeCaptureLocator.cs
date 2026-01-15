@@ -374,6 +374,148 @@ public class NativeCaptureLocator
     }
 
     /// <summary>
+    /// Checks if native camera capture is available on the current platform.
+    /// Returns true if the native capture tool supports camera capture.
+    /// </summary>
+    public bool IsNativeCameraCaptureAvailable()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return ShouldUseSnackaCaptureVideoToolbox();
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return ShouldUseSnackaCaptureWindows();
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return ShouldUseSnackaCaptureLinux();
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the path to the native capture tool that supports camera capture.
+    /// Returns null if no native camera capture tool is available.
+    /// </summary>
+    public string? GetNativeCameraCapturePath()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return GetSnackaCaptureVideoToolboxPath();
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return GetSnackaCaptureWindowsPath();
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return GetSnackaCaptureLinuxPath();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Builds native camera capture command arguments for any platform.
+    /// </summary>
+    /// <param name="cameraId">Camera device ID or index</param>
+    /// <param name="width">Output width</param>
+    /// <param name="height">Output height</param>
+    /// <param name="fps">Frames per second</param>
+    /// <param name="bitrateMbps">Encoding bitrate in Mbps</param>
+    public string GetNativeCameraCaptureArgs(string cameraId, int width, int height, int fps, int bitrateMbps = 2)
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return GetSnackaCaptureVideoToolboxCameraArgs(cameraId, width, height, fps, bitrateMbps);
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return GetSnackaCaptureWindowsCameraArgs(cameraId, width, height, fps, bitrateMbps);
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return GetSnackaCaptureLinuxCameraArgs(cameraId, width, height, fps, bitrateMbps);
+        }
+
+        throw new PlatformNotSupportedException("Native camera capture not supported on this platform");
+    }
+
+    /// <summary>
+    /// Builds SnackaCaptureVideoToolbox camera capture arguments (macOS).
+    /// </summary>
+    private string GetSnackaCaptureVideoToolboxCameraArgs(string cameraId, int width, int height, int fps, int bitrateMbps)
+    {
+        var args = new List<string> { "capture" };
+
+        // Camera source - quote the ID in case it contains special characters
+        args.Add($"--camera \"{cameraId}\"");
+
+        // Resolution and framerate
+        args.Add($"--width {width}");
+        args.Add($"--height {height}");
+        args.Add($"--fps {fps}");
+
+        // Use direct H.264 encoding via VideoToolbox
+        args.Add("--encode");
+        args.Add($"--bitrate {bitrateMbps}");
+
+        return string.Join(" ", args);
+    }
+
+    /// <summary>
+    /// Builds SnackaCaptureWindows camera capture arguments (Windows).
+    /// </summary>
+    private string GetSnackaCaptureWindowsCameraArgs(string cameraId, int width, int height, int fps, int bitrateMbps)
+    {
+        var args = new List<string>();
+
+        // Camera source - quote the ID in case it contains special characters
+        args.Add($"--camera \"{cameraId}\"");
+
+        // Resolution and framerate
+        args.Add($"--width {width}");
+        args.Add($"--height {height}");
+        args.Add($"--fps {fps}");
+
+        // Use direct H.264 encoding via Media Foundation
+        args.Add("--encode");
+        args.Add($"--bitrate {bitrateMbps}");
+
+        return string.Join(" ", args);
+    }
+
+    /// <summary>
+    /// Builds SnackaCaptureLinux camera capture arguments (Linux).
+    /// </summary>
+    private string GetSnackaCaptureLinuxCameraArgs(string cameraId, int width, int height, int fps, int bitrateMbps)
+    {
+        var args = new List<string>();
+
+        // Camera source - quote the ID in case it contains special characters
+        args.Add($"--camera \"{cameraId}\"");
+
+        // Resolution and framerate
+        args.Add($"--width {width}");
+        args.Add($"--height {height}");
+        args.Add($"--fps {fps}");
+
+        // Use direct H.264 encoding via VAAPI
+        args.Add("--encode");
+        args.Add($"--bitrate {bitrateMbps}");
+
+        return string.Join(" ", args);
+    }
+
+    /// <summary>
     /// Gets the bundle identifier for the current app.
     /// On macOS, this is used to exclude our app's audio from screen capture.
     /// </summary>

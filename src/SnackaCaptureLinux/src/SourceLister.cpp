@@ -3,10 +3,17 @@
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrandr.h>
 
+#include <linux/videodev2.h>
+#include <sys/ioctl.h>
+#include <fcntl.h>
+#include <unistd.h>
+#include <dirent.h>
+
 #include <iostream>
 #include <sstream>
 #include <iomanip>
 #include <cstring>
+#include <algorithm>
 
 namespace snacka {
 
@@ -103,7 +110,65 @@ SourceList SourceLister::GetAvailableSources() {
     }
 
     XCloseDisplay(display);
+
+    // Enumerate cameras
+    sources.cameras = EnumerateCameras();
+
     return sources;
+}
+
+std::vector<CameraInfo> SourceLister::EnumerateCameras() {
+    std::vector<CameraInfo> cameras;
+
+    // Scan /dev for video devices
+    DIR* dir = opendir("/dev");
+    if (!dir) {
+        return cameras;
+    }
+
+    std::vector<std::string> videoDevices;
+    struct dirent* entry;
+    while ((entry = readdir(dir)) != nullptr) {
+        std::string name = entry->d_name;
+        if (name.find("video") == 0) {
+            videoDevices.push_back("/dev/" + name);
+        }
+    }
+    closedir(dir);
+
+    // Sort devices by name
+    std::sort(videoDevices.begin(), videoDevices.end());
+
+    int cameraIndex = 0;
+    for (const auto& devicePath : videoDevices) {
+        int fd = open(devicePath.c_str(), O_RDWR | O_NONBLOCK);
+        if (fd < 0) {
+            continue;
+        }
+
+        // Query device capabilities
+        struct v4l2_capability cap;
+        if (ioctl(fd, VIDIOC_QUERYCAP, &cap) < 0) {
+            close(fd);
+            continue;
+        }
+
+        // Check if this is a video capture device
+        if (!(cap.device_caps & V4L2_CAP_VIDEO_CAPTURE)) {
+            close(fd);
+            continue;
+        }
+
+        CameraInfo info;
+        info.id = devicePath;
+        info.name = reinterpret_cast<const char*>(cap.card);
+        info.index = cameraIndex++;
+
+        cameras.push_back(info);
+        close(fd);
+    }
+
+    return cameras;
 }
 
 void SourceLister::PrintSources(const SourceList& sources) {
@@ -120,6 +185,17 @@ void SourceLister::PrintSources(const SourceList& sources) {
         std::cerr << "------------------\n";
         for (const auto& window : sources.windows) {
             std::cerr << "  [" << window.id << "] " << window.name << "\n";
+        }
+    }
+
+    std::cerr << "\nAvailable Cameras:\n";
+    std::cerr << "------------------\n";
+    if (sources.cameras.empty()) {
+        std::cerr << "  (No cameras found)\n";
+    } else {
+        for (const auto& camera : sources.cameras) {
+            std::cerr << "  [" << camera.index << "] " << camera.name
+                      << " (" << camera.id << ")\n";
         }
     }
 
@@ -155,7 +231,20 @@ void SourceLister::PrintSourcesAsJson(const SourceList& sources) {
     }
 
     std::cout << "  ],\n";
-    std::cout << "  \"applications\": []\n";
+    std::cout << "  \"applications\": [],\n";
+
+    // Cameras
+    std::cout << "  \"cameras\": [\n";
+    for (size_t i = 0; i < sources.cameras.size(); i++) {
+        const auto& camera = sources.cameras[i];
+        std::cout << "    {\n";
+        std::cout << "      \"id\": \"" << EscapeJson(camera.id) << "\",\n";
+        std::cout << "      \"name\": \"" << EscapeJson(camera.name) << "\",\n";
+        std::cout << "      \"index\": " << camera.index << "\n";
+        std::cout << "    }" << (i < sources.cameras.size() - 1 ? "," : "") << "\n";
+    }
+    std::cout << "  ]\n";
+
     std::cout << "}\n";
 }
 
