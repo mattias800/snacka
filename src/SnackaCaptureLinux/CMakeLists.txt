@@ -8,6 +8,7 @@ set(CMAKE_CXX_STANDARD_REQUIRED ON)
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(LIBVA REQUIRED libva libva-drm)
 pkg_check_modules(X11 REQUIRED x11 xext xrandr)
+pkg_check_modules(PULSE REQUIRED libpulse)
 
 add_executable(SnackaCaptureLinux
     src/main.cpp
@@ -17,6 +18,8 @@ add_executable(SnackaCaptureLinux
     src/X11Capturer.h
     src/V4L2Capturer.cpp
     src/V4L2Capturer.h
+    src/PulseAudioCapturer.cpp
+    src/PulseAudioCapturer.h
     src/SourceLister.cpp
     src/SourceLister.h
     src/Protocol.h
@@ -26,17 +29,20 @@ target_include_directories(SnackaCaptureLinux PRIVATE
     ${CMAKE_CURRENT_SOURCE_DIR}/src
     ${LIBVA_INCLUDE_DIRS}
     ${X11_INCLUDE_DIRS}
+    ${PULSE_INCLUDE_DIRS}
 )
 
 target_link_libraries(SnackaCaptureLinux PRIVATE
     ${LIBVA_LIBRARIES}
     ${X11_LIBRARIES}
+    ${PULSE_LIBRARIES}
     pthread
 )
 
 target_compile_options(SnackaCaptureLinux PRIVATE
     ${LIBVA_CFLAGS_OTHER}
     ${X11_CFLAGS_OTHER}
+    ${PULSE_CFLAGS_OTHER}
 )
 
 # Output to a predictable location

@@ -297,7 +297,7 @@ public class NativeCaptureLocator
     /// <summary>
     /// Builds SnackaCaptureLinux command arguments based on source and settings.
     /// </summary>
-    public string GetSnackaCaptureLinuxArgs(ScreenCaptureSource? source, int width, int height, int fps)
+    public string GetSnackaCaptureLinuxArgs(ScreenCaptureSource? source, int width, int height, int fps, bool captureAudio = false)
     {
         var args = new List<string>();
 
@@ -313,6 +313,12 @@ public class NativeCaptureLocator
         args.Add($"--width {width}");
         args.Add($"--height {height}");
         args.Add($"--fps {fps}");
+
+        // Audio capture via PulseAudio/PipeWire
+        if (captureAudio)
+        {
+            args.Add("--audio");
+        }
 
         // Use direct H.264 encoding via VAAPI
         args.Add("--encode");

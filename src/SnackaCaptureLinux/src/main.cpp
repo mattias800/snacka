@@ -3,6 +3,7 @@
 #include "X11Capturer.h"
 #include "V4L2Capturer.h"
 #include "VaapiEncoder.h"
+#include "PulseAudioCapturer.h"
 
 #include <iostream>
 #include <string>
@@ -11,6 +12,7 @@
 #include <csignal>
 #include <unistd.h>
 #include <ctime>
+#include <mutex>
 
 using namespace snacka;
 
@@ -42,6 +44,7 @@ OPTIONS:
     --width <pixels>    Output width (default: 1920, camera: 640)
     --height <pixels>   Output height (default: 1080, camera: 480)
     --fps <rate>        Frames per second (default: 30, camera: 15)
+    --audio             Capture system audio (via PulseAudio/PipeWire)
     --encode            Output H.264 encoded video (instead of raw NV12)
     --bitrate <mbps>    Encoding bitrate in Mbps (default: 6, camera: 2)
     --preview           Output preview frames to stderr for local display
@@ -52,13 +55,14 @@ OPTIONS:
 EXAMPLES:
     SnackaCaptureLinux list --json
     SnackaCaptureLinux --display 0 --width 1920 --height 1080 --fps 30
-    SnackaCaptureLinux --display 0 --encode --bitrate 8
+    SnackaCaptureLinux --display 0 --encode --bitrate 8 --audio
     SnackaCaptureLinux --camera 0 --encode --bitrate 2
     SnackaCaptureLinux --camera /dev/video0 --width 640 --height 480 --fps 15
 
 OUTPUT:
-    Without --encode: Raw NV12 video frames to stdout
-    With --encode: H.264 NAL units in AVCC format (4-byte length prefix) to stdout
+    Video: H.264 NAL units in AVCC format (4-byte length prefix) to stdout
+    Audio: MCAP packets (48kHz stereo 16-bit PCM) to stderr
+    Preview: PREV packets (NV12 frames) to stderr
 )";
 }
 
@@ -74,7 +78,10 @@ int ListSources(bool asJson) {
     return 0;
 }
 
-int Capture(int displayIndex, const std::string& cameraId, int width, int height, int fps, bool encodeH264, int bitrateMbps, bool outputPreview, int previewFps) {
+// Mutex for stderr output (shared between video preview and audio)
+std::mutex g_stderrMutex;
+
+int Capture(int displayIndex, const std::string& cameraId, int width, int height, int fps, bool encodeH264, int bitrateMbps, bool outputPreview, int previewFps, bool captureAudio) {
     // Set up signal handlers for clean shutdown
     signal(SIGINT, SignalHandler);
     signal(SIGTERM, SignalHandler);
@@ -84,6 +91,7 @@ int Capture(int displayIndex, const std::string& cameraId, int width, int height
     std::cerr << "SnackaCaptureLinux: Starting " << sourceType << " capture "
               << width << "x" << height << " @ " << fps << "fps"
               << (encodeH264 ? ", encode=H.264 @ " + std::to_string(bitrateMbps) + "Mbps" : ", encode=raw NV12")
+              << (captureAudio ? ", audio=enabled" : "")
               << "\n";
 
     // Frame statistics
@@ -146,6 +154,17 @@ int Capture(int displayIndex, const std::string& cameraId, int width, int height
         });
     }
 
+    // Initialize audio capture if requested
+    std::unique_ptr<PulseAudioCapturer> audioCapturer;
+    uint64_t audioPacketCount = 0;
+    if (captureAudio) {
+        audioCapturer = std::make_unique<PulseAudioCapturer>();
+        if (!audioCapturer->Initialize()) {
+            std::cerr << "SnackaCaptureLinux: WARNING - Failed to initialize PulseAudio, audio capture disabled\n";
+            audioCapturer.reset();
+        }
+    }
+
     // Frame callback
     auto frameCallback = [&](const uint8_t* data, size_t size, uint64_t timestamp) {
         if (!g_running) return;
@@ -205,13 +224,42 @@ int Capture(int displayIndex, const std::string& cameraId, int width, int height
                 static_cast<uint32_t>(size)
             );
 
-            // Write header + pixel data to stderr
-            write(STDERR_FILENO, &header, sizeof(header));
-            write(STDERR_FILENO, data, size);
+            // Write header + pixel data to stderr (with mutex for thread safety)
+            {
+                std::lock_guard<std::mutex> lock(g_stderrMutex);
+                write(STDERR_FILENO, &header, sizeof(header));
+                write(STDERR_FILENO, data, size);
+            }
 
             previewFrameCount++;
         }
     };
+
+    // Audio callback - writes MCAP packets to stderr
+    auto audioCallback = [&](const int16_t* data, size_t sampleCount, uint64_t timestamp) {
+        if (!g_running) return;
+
+        // Create MCAP audio packet header
+        AudioPacketHeader header(static_cast<uint32_t>(sampleCount), timestamp);
+
+        // Write header + audio data to stderr (with mutex for thread safety)
+        {
+            std::lock_guard<std::mutex> lock(g_stderrMutex);
+            write(STDERR_FILENO, &header, sizeof(header));
+            write(STDERR_FILENO, data, sampleCount * 4);  // 2 channels * 2 bytes
+        }
+
+        audioPacketCount++;
+        if (audioPacketCount <= 5 || audioPacketCount % 100 == 0) {
+            std::cerr << "SnackaCaptureLinux: Audio packet " << audioPacketCount
+                      << " (" << sampleCount << " samples)\n";
+        }
+    };
+
+    // Start audio capture if available
+    if (audioCapturer) {
+        audioCapturer->Start(audioCallback);
+    }
 
     // Start video capture
     bool captureStarted = false;
@@ -251,6 +299,9 @@ int Capture(int displayIndex, const std::string& cameraId, int width, int height
     }
 
     if (!captureStarted) {
+        if (audioCapturer) {
+            audioCapturer->Stop();
+        }
         return 1;
     }
 
@@ -259,8 +310,14 @@ int Capture(int displayIndex, const std::string& cameraId, int width, int height
         encoder->Stop();
     }
 
-    std::cerr << "SnackaCaptureLinux: Capture stopped (frames: " << frameCount
-              << ", encoded: " << encodedFrameCount << ")\n";
+    // Stop audio capture
+    if (audioCapturer) {
+        audioCapturer->Stop();
+    }
+
+    std::cerr << "SnackaCaptureLinux: Capture stopped (video frames: " << frameCount
+              << ", encoded: " << encodedFrameCount
+              << ", audio packets: " << audioPacketCount << ")\n";
 
     return 0;
 }
@@ -298,6 +355,7 @@ int main(int argc, char* argv[]) {
     int bitrateMbps = -1;
     bool outputPreview = false;
     int previewFps = 10;
+    bool captureAudio = false;
 
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "--display" && i + 1 < args.size()) {
@@ -318,6 +376,8 @@ int main(int argc, char* argv[]) {
             outputPreview = true;
         } else if (args[i] == "--preview-fps" && i + 1 < args.size()) {
             previewFps = std::stoi(args[++i]);
+        } else if (args[i] == "--audio") {
+            captureAudio = true;
         }
     }
 
@@ -346,5 +406,5 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    return Capture(displayIndex, cameraId, width, height, fps, encodeH264, bitrateMbps, outputPreview, previewFps);
+    return Capture(displayIndex, cameraId, width, height, fps, encodeH264, bitrateMbps, outputPreview, previewFps, captureAudio);
 }
