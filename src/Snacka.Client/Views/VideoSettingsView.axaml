@@ -55,7 +55,7 @@
                                    VerticalAlignment="Center"/>
                         <ComboBox Grid.Column="1"
                                   ItemsSource="{Binding ResolutionOptions}"
-                                  SelectedValue="{Binding SelectedResolution}"
+                                  SelectedValue="{Binding SelectedHeight}"
                                   SelectedValueBinding="{Binding Value}"
                                   DisplayMemberBinding="{Binding DisplayName}"
                                   Background="{StaticResource BackgroundBrush}"

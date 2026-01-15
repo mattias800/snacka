@@ -22,12 +22,13 @@ public class CameraManager : IAsyncDisposable
 
     // Default video capture settings (used if settings not available)
     private const int DefaultVideoWidth = 640;
-    private const int DefaultVideoHeight = 480;
+    private const int DefaultVideoHeight = 360;
     private const int DefaultVideoFps = 15;
     private const int DefaultVideoBitrateMbps = 2;
 
     /// <summary>
     /// Gets video settings from user preferences or uses defaults.
+    /// Width is calculated from height assuming 16:9 aspect ratio.
     /// </summary>
     private (int width, int height, int fps, int bitrateMbps) GetVideoSettings()
     {
@@ -38,25 +39,25 @@ public class CameraManager : IAsyncDisposable
 
         var settings = _settingsStore.Settings;
 
-        // Parse resolution string (e.g., "640x480")
-        var width = DefaultVideoWidth;
-        var height = DefaultVideoHeight;
-        if (!string.IsNullOrEmpty(settings.CameraResolution))
-        {
-            var parts = settings.CameraResolution.Split('x');
-            if (parts.Length == 2 &&
-                int.TryParse(parts[0], out var parsedWidth) &&
-                int.TryParse(parts[1], out var parsedHeight))
-            {
-                width = parsedWidth;
-                height = parsedHeight;
-            }
-        }
+        // Use height from settings, calculate width assuming 16:9 aspect ratio
+        var height = settings.CameraHeight > 0 ? settings.CameraHeight : DefaultVideoHeight;
+        var width = CalculateWidthFor16x9(height);
 
         var fps = settings.CameraFramerate > 0 ? settings.CameraFramerate : DefaultVideoFps;
         var bitrate = settings.CameraBitrateMbps > 0 ? settings.CameraBitrateMbps : DefaultVideoBitrateMbps;
 
         return (width, height, fps, bitrate);
+    }
+
+    /// <summary>
+    /// Calculates width for a given height assuming 16:9 aspect ratio.
+    /// </summary>
+    private static int CalculateWidthFor16x9(int height)
+    {
+        // 16:9 aspect ratio: width = height * 16 / 9
+        // Round to nearest even number for video encoding compatibility
+        var width = (int)Math.Round(height * 16.0 / 9.0);
+        return width % 2 == 0 ? width : width + 1;
     }
 
     /// <summary>

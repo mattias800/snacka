@@ -8,9 +8,9 @@ using Snacka.Client.Services.GpuVideo;
 namespace Snacka.Client.ViewModels;
 
 /// <summary>
-/// Option item for resolution dropdown.
+/// Option item for resolution dropdown (height-based).
 /// </summary>
-public record ResolutionOption(string Value, string DisplayName);
+public record ResolutionOption(int Value, string DisplayName);
 
 /// <summary>
 /// Option item for framerate dropdown.
@@ -38,7 +38,7 @@ public class VideoSettingsViewModel : ViewModelBase
     private string _cameraStatus = "Not testing";
 
     // Quality settings
-    private string _selectedResolution;
+    private int _selectedHeight;
     private int _selectedFramerate;
     private int _selectedBitrate;
 
@@ -62,12 +62,13 @@ public class VideoSettingsViewModel : ViewModelBase
 
         VideoDevices = new ObservableCollection<VideoDeviceItem>();
 
-        // Initialize quality options
+        // Initialize quality options (height-based, width calculated assuming 16:9)
+        // Standard 16:9 resolutions: 640x360, 1280x720, 1920x1080
         ResolutionOptions = new ObservableCollection<ResolutionOption>
         {
-            new("640x480", "480p (640x480)"),
-            new("1280x720", "720p (1280x720)"),
-            new("1920x1080", "1080p (1920x1080)")
+            new(360, "360p (640×360)"),
+            new(720, "720p (1280×720)"),
+            new(1080, "1080p (1920×1080)")
         };
 
         FramerateOptions = new ObservableCollection<FramerateOption>
@@ -88,7 +89,7 @@ public class VideoSettingsViewModel : ViewModelBase
 
         // Load saved selections
         _selectedVideoDevice = _settingsStore.Settings.VideoDevice;
-        _selectedResolution = _settingsStore.Settings.CameraResolution;
+        _selectedHeight = _settingsStore.Settings.CameraHeight;
         _selectedFramerate = _settingsStore.Settings.CameraFramerate;
         _selectedBitrate = _settingsStore.Settings.CameraBitrateMbps;
 
@@ -116,14 +117,14 @@ public class VideoSettingsViewModel : ViewModelBase
     public ObservableCollection<FramerateOption> FramerateOptions { get; }
     public ObservableCollection<BitrateOption> BitrateOptions { get; }
 
-    public string SelectedResolution
+    public int SelectedHeight
     {
-        get => _selectedResolution;
+        get => _selectedHeight;
         set
         {
-            if (_selectedResolution == value) return;
-            this.RaiseAndSetIfChanged(ref _selectedResolution, value);
-            _settingsStore.Settings.CameraResolution = value;
+            if (_selectedHeight == value) return;
+            this.RaiseAndSetIfChanged(ref _selectedHeight, value);
+            _settingsStore.Settings.CameraHeight = value;
             _settingsStore.Save();
 
             // Restart test with new resolution if testing
@@ -280,7 +281,7 @@ public class VideoSettingsViewModel : ViewModelBase
                 // Get camera ID - if null, use "0" as default
                 var cameraId = _selectedVideoDevice ?? "0";
 
-                await _cameraTestService.StartAsync(cameraId, _selectedResolution, _selectedFramerate, _selectedBitrate);
+                await _cameraTestService.StartAsync(cameraId, _selectedHeight, _selectedFramerate, _selectedBitrate);
                 IsTestingCamera = true;
                 CameraStatus = "Receiving frames";
             }
@@ -306,7 +307,7 @@ public class VideoSettingsViewModel : ViewModelBase
         try
         {
             var cameraId = _selectedVideoDevice ?? "0";
-            await _cameraTestService.StartAsync(cameraId, _selectedResolution, _selectedFramerate, _selectedBitrate);
+            await _cameraTestService.StartAsync(cameraId, _selectedHeight, _selectedFramerate, _selectedBitrate);
             CameraStatus = "Receiving frames";
         }
         catch (Exception ex)

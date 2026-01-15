@@ -50,10 +50,10 @@ public class CameraTestService : IDisposable
     /// Starts camera test with dual preview output.
     /// </summary>
     /// <param name="cameraId">Camera device ID or index</param>
-    /// <param name="resolution">Resolution string like "640x480"</param>
+    /// <param name="height">Video height (480, 720, 1080). Width calculated assuming 16:9 aspect ratio.</param>
     /// <param name="fps">Frame rate</param>
     /// <param name="bitrateMbps">Encoding bitrate in Mbps</param>
-    public async Task StartAsync(string cameraId, string resolution, int fps, int bitrateMbps)
+    public async Task StartAsync(string cameraId, int height, int fps, int bitrateMbps)
     {
         if (_isRunning)
         {
@@ -64,13 +64,9 @@ public class CameraTestService : IDisposable
         _encodedFrameCount = 0;
         _cts = new CancellationTokenSource();
 
-        // Parse resolution
-        var parts = resolution.Split('x');
-        if (parts.Length != 2 || !int.TryParse(parts[0], out var width) || !int.TryParse(parts[1], out var height))
-        {
-            OnError?.Invoke($"Invalid resolution format: {resolution}");
-            return;
-        }
+        // Calculate width assuming 16:9 aspect ratio (most common for webcams)
+        // The GPU renderer's aspect ratio correction will handle any mismatch
+        var width = CalculateWidthFor16x9(height);
 
         // Get native capture tool path
         var capturePath = _captureLocator.GetNativeCameraCapturePath();
@@ -349,6 +345,18 @@ public class CameraTestService : IDisposable
         _cts = null;
 
         Console.WriteLine($"CameraTestService: Stopped (raw frames: {_rawFrameCount}, encoded frames: {_encodedFrameCount})");
+    }
+
+    /// <summary>
+    /// Calculates width for a given height assuming 16:9 aspect ratio.
+    /// Common webcam heights: 480 → 853, 720 → 1280, 1080 → 1920
+    /// </summary>
+    private static int CalculateWidthFor16x9(int height)
+    {
+        // 16:9 aspect ratio: width = height * 16 / 9
+        // Round to nearest even number for video encoding compatibility
+        var width = (int)Math.Round(height * 16.0 / 9.0);
+        return width % 2 == 0 ? width : width + 1;
     }
 
     public void Dispose()
