@@ -5,24 +5,109 @@ import Foundation
 @available(macOS 13.0, *)
 struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
     static let configuration = CommandConfiguration(
-        abstract: "Screen and audio capture tool using ScreenCaptureKit",
-        subcommands: [List.self, Capture.self],
-        defaultSubcommand: Capture.self
-    )
-}
-
-// MARK: - List Command
-
-@available(macOS 13.0, *)
-struct List: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "List available capture sources"
+        abstract: "Screen, window, and camera capture tool using ScreenCaptureKit and AVFoundation"
     )
 
-    @Flag(name: .long, help: "Output as JSON")
+    // MARK: - List Mode (positional argument)
+
+    @Argument(help: "Use 'list' to enumerate available capture sources")
+    var command: String?
+
+    @Flag(name: .long, help: "Output list as JSON")
     var json = false
 
+    // MARK: - Capture Source Options
+
+    @Option(name: .long, help: "Display index to capture")
+    var display: Int?
+
+    @Option(name: .long, help: "Window ID to capture")
+    var window: Int?
+
+    @Option(name: .long, help: "Application bundle ID to capture")
+    var app: String?
+
+    @Option(name: .long, help: "Camera unique ID or index to capture")
+    var camera: String?
+
+    // MARK: - Video Settings
+
+    @Option(name: .long, help: "Output width")
+    var width: Int = 1920
+
+    @Option(name: .long, help: "Output height")
+    var height: Int = 1080
+
+    @Option(name: .long, help: "Frames per second")
+    var fps: Int = 30
+
+    // MARK: - Audio Settings
+
+    @Flag(name: .long, help: "Capture audio from the source")
+    var audio = false
+
+    @Flag(name: .long, inversion: .prefixedNo, help: "Exclude audio from current process (default: true)")
+    var excludeSelf = true
+
+    @Option(name: .long, help: "Bundle ID of app to exclude from audio capture")
+    var excludeApp: String?
+
+    // MARK: - Encoding Settings
+
+    @Flag(name: .long, help: "Output H.264 encoded video (instead of raw NV12)")
+    var encode = false
+
+    @Option(name: .long, help: "Encoding bitrate in Mbps (default: 6)")
+    var bitrate: Int = 6
+
+    // MARK: - Preview Settings
+
+    @Flag(name: .long, help: "Output preview frames to stderr for local display")
+    var preview = false
+
+    @Option(name: .long, help: "Preview frame rate (default: 10)")
+    var previewFps: Int = 10
+
+    // MARK: - Validation
+
+    func validate() throws {
+        // Skip validation for list command
+        if command == "list" {
+            return
+        }
+
+        let sourceCount = [display != nil, window != nil, app != nil, camera != nil].filter { $0 }.count
+        if sourceCount > 1 {
+            throw ValidationError("Specify only one of --display, --window, --app, or --camera")
+        }
+
+        guard width > 0 && width <= 4096 else {
+            throw ValidationError("Width must be between 1 and 4096")
+        }
+        guard height > 0 && height <= 4096 else {
+            throw ValidationError("Height must be between 1 and 4096")
+        }
+        guard fps > 0 && fps <= 120 else {
+            throw ValidationError("FPS must be between 1 and 120")
+        }
+    }
+
+    // MARK: - Run
+
     func run() async throws {
+        // Handle list command
+        if command == "list" {
+            try await runList()
+            return
+        }
+
+        // Run capture
+        try await runCapture()
+    }
+
+    // MARK: - List Sources
+
+    private func runList() async throws {
         let sources = try await SourceLister.getAvailableSources()
 
         if json {
@@ -50,78 +135,10 @@ struct List: AsyncParsableCommand {
             }
         }
     }
-}
 
-// MARK: - Capture Command
+    // MARK: - Capture
 
-@available(macOS 13.0, *)
-struct Capture: AsyncParsableCommand {
-    static let configuration = CommandConfiguration(
-        abstract: "Capture screen/window with optional audio"
-    )
-
-    @Option(name: .long, help: "Display index to capture")
-    var display: Int?
-
-    @Option(name: .long, help: "Window ID to capture")
-    var window: Int?
-
-    @Option(name: .long, help: "Application bundle ID to capture")
-    var app: String?
-
-    @Option(name: .long, help: "Camera unique ID or index to capture")
-    var camera: String?
-
-    @Option(name: .long, help: "Output width")
-    var width: Int = 1920
-
-    @Option(name: .long, help: "Output height")
-    var height: Int = 1080
-
-    @Option(name: .long, help: "Frames per second")
-    var fps: Int = 30
-
-    @Flag(name: .long, help: "Capture audio from the source")
-    var audio = false
-
-    @Flag(name: .long, inversion: .prefixedNo, help: "Exclude audio from current process (default: true)")
-    var excludeSelf = true
-
-    @Option(name: .long, help: "Bundle ID of app to exclude from audio capture")
-    var excludeApp: String?
-
-    @Flag(name: .long, help: "Output H.264 encoded video (instead of raw NV12)")
-    var encode = false
-
-    @Option(name: .long, help: "Encoding bitrate in Mbps (default: 6)")
-    var bitrate: Int = 6
-
-    @Flag(name: .long, help: "Output preview frames to stderr for local display")
-    var preview = false
-
-    @Option(name: .long, help: "Preview frame rate (default: 10)")
-    var previewFps: Int = 10
-
-    func validate() throws {
-        let sourceCount = [display != nil, window != nil, app != nil, camera != nil].filter { $0 }.count
-        if sourceCount == 0 {
-            // Default to display 0
-        } else if sourceCount > 1 {
-            throw ValidationError("Specify only one of --display, --window, --app, or --camera")
-        }
-
-        guard width > 0 && width <= 4096 else {
-            throw ValidationError("Width must be between 1 and 4096")
-        }
-        guard height > 0 && height <= 4096 else {
-            throw ValidationError("Height must be between 1 and 4096")
-        }
-        guard fps > 0 && fps <= 120 else {
-            throw ValidationError("FPS must be between 1 and 120")
-        }
-    }
-
-    func run() async throws {
+    private func runCapture() async throws {
         // Determine capture source
         let sourceType: CaptureSourceType
         if let cameraId = camera {

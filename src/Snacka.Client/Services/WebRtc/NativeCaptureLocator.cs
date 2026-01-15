@@ -208,7 +208,7 @@ public class NativeCaptureLocator
     /// </summary>
     public string GetSnackaCaptureVideoToolboxArgs(ScreenCaptureSource? source, int width, int height, int fps, bool captureAudio)
     {
-        var args = new List<string> { "capture" };
+        var args = new List<string>();
 
         // Source type
         if (source == null || source.Type == ScreenCaptureSourceType.Display)
@@ -456,7 +456,7 @@ public class NativeCaptureLocator
     /// </summary>
     private string GetSnackaCaptureVideoToolboxCameraArgs(string cameraId, int width, int height, int fps, int bitrateMbps, bool outputPreview, int previewFps)
     {
-        var args = new List<string> { "capture" };
+        var args = new List<string>();
 
         // Camera source - quote the ID in case it contains special characters
         args.Add($"--camera \"{cameraId}\"");

@@ -80,8 +80,9 @@ struct CaptureConfig {
 /// Protocol marker for video/audio output streams
 /// Video: BGR24 raw frames to stdout
 /// Audio: PCM to stderr (interleaved with log messages using a header with format info)
+/// All multi-byte fields use big-endian (network byte order) for consistency
 struct AudioPacketHeader {
-    static let magic: UInt32 = 0x4D434150  // "MCAP" in ASCII
+    static let magic: UInt32 = 0x4D434150  // "MCAP" in ASCII (big-endian)
     static let version: UInt8 = 2  // Version 2 includes format info
 
     let sampleCount: UInt32
@@ -93,7 +94,7 @@ struct AudioPacketHeader {
 
     var data: Data {
         var header = Data()
-        var magic = Self.magic
+        var magic = Self.magic.bigEndian  // Convert to big-endian
         var version = Self.version
         var samples = sampleCount
         var ts = timestamp
@@ -102,7 +103,7 @@ struct AudioPacketHeader {
         var ch = channels
         var floatFlag = isFloat
 
-        header.append(Data(bytes: &magic, count: 4))      // 0-3: magic
+        header.append(Data(bytes: &magic, count: 4))      // 0-3: magic (big-endian)
         header.append(Data(bytes: &version, count: 1))    // 4: version
         header.append(Data(bytes: &bits, count: 1))       // 5: bits per sample
         header.append(Data(bytes: &ch, count: 1))         // 6: channels

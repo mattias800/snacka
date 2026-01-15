@@ -30,9 +30,10 @@ inline uint64_t ToBigEndian64(uint64_t host) {
 
 // Audio packet header format - must match SCREEN_CAPTURE_PROTOCOL.md
 // Total size: 24 bytes
+// All multi-byte fields use big-endian (network byte order) for consistency
 #pragma pack(push, 1)
 struct AudioPacketHeader {
-    uint32_t magic;          // 0x4D434150 "MCAP" little-endian
+    uint32_t magic;          // 0x4D434150 "MCAP" big-endian
     uint8_t  version;        // 2
     uint8_t  bitsPerSample;  // 16
     uint8_t  channels;       // 2
@@ -41,12 +42,12 @@ struct AudioPacketHeader {
     uint32_t sampleRate;     // 48000
     uint64_t timestamp;      // Milliseconds
 
-    static constexpr uint32_t MAGIC = 0x4D434150;  // "MCAP" in little-endian
+    static constexpr uint32_t MAGIC = 0x4D434150;  // "MCAP" in big-endian
     static constexpr uint8_t VERSION = 2;
 
     AudioPacketHeader() = default;
     AudioPacketHeader(uint32_t samples, uint64_t ts)
-        : magic(MAGIC)
+        : magic(htonl(MAGIC))
         , version(VERSION)
         , bitsPerSample(16)
         , channels(2)

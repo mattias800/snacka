@@ -6,7 +6,7 @@ namespace Snacka.Client.Services.WebRtc;
 public enum StderrPacketType
 {
     Unknown,
-    Audio,    // MCAP - Audio packet (little-endian magic)
+    Audio,    // MCAP - Audio packet (big-endian magic)
     Preview,  // PREV - Preview frame (big-endian magic)
     Log       // LOGM - Log message (big-endian magic)
 }
@@ -52,8 +52,8 @@ public struct PreviewPacket
 /// </summary>
 public class StderrPacketParser
 {
-    // Magic numbers
-    private const uint AudioMagic = 0x5041434D;      // "MCAP" little-endian (read as LE: bytes are 4D 43 41 50)
+    // Magic numbers - all use big-endian (network byte order)
+    private const uint AudioMagic = 0x4D434150;     // "MCAP" big-endian (bytes: 4D 43 41 50)
     private const uint PreviewMagic = 0x50524556;   // "PREV" big-endian
     private const uint LogMagic = 0x4C4F474D;       // "LOGM" big-endian
 
@@ -145,16 +145,14 @@ public class StderrPacketParser
 
             if (_scanIndex < 4) continue;
 
-            // Check for audio magic (little-endian)
-            var magicLE = BitConverter.ToUInt32(_scanBuffer, 0);
-            if (magicLE == AudioMagic)
+            // Check for magic numbers (all big-endian - network byte order)
+            var magicBE = (uint)((_scanBuffer[0] << 24) | (_scanBuffer[1] << 16) |
+                                 (_scanBuffer[2] << 8) | _scanBuffer[3]);
+
+            if (magicBE == AudioMagic)
             {
                 return StderrPacketType.Audio;
             }
-
-            // Check for preview/log magic (big-endian - network byte order)
-            var magicBE = (uint)((_scanBuffer[0] << 24) | (_scanBuffer[1] << 16) |
-                                 (_scanBuffer[2] << 8) | _scanBuffer[3]);
             if (magicBE == PreviewMagic)
             {
                 return StderrPacketType.Preview;
