@@ -117,9 +117,10 @@ public interface ISignalRService : IAsyncDisposable
     event Action<TypingEvent>? UserTyping;
     event Action<DMTypingEvent>? DMUserTyping;
 
-    // SSRC mapping events (for per-user volume control)
+    // SSRC mapping events (for per-user volume control and video routing)
     event Action<SsrcMappingEvent>? UserAudioSsrcMapped;
     event Action<ScreenAudioSsrcMappingEvent>? UserScreenAudioSsrcMapped;
+    event Action<CameraVideoSsrcMappingEvent>? UserCameraVideoSsrcMapped;
     event Action<SsrcMappingBatchEvent>? SsrcMappingsBatchReceived;
 
     // Thread events
@@ -250,9 +251,10 @@ public class SignalRService : ISignalRService
     public event Action<TypingEvent>? UserTyping;
     public event Action<DMTypingEvent>? DMUserTyping;
 
-    // SSRC mapping events (for per-user volume control)
+    // SSRC mapping events (for per-user volume control and video routing)
     public event Action<SsrcMappingEvent>? UserAudioSsrcMapped;
     public event Action<ScreenAudioSsrcMappingEvent>? UserScreenAudioSsrcMapped;
+    public event Action<CameraVideoSsrcMappingEvent>? UserCameraVideoSsrcMapped;
     public event Action<SsrcMappingBatchEvent>? SsrcMappingsBatchReceived;
 
     // Thread events
@@ -765,6 +767,12 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: UserScreenAudioSsrcMapped - user {e.UserId} has screen audio SSRC {e.ScreenAudioSsrc} in channel {e.ChannelId}");
             UserScreenAudioSsrcMapped?.Invoke(e);
+        });
+
+        _hubConnection.On<CameraVideoSsrcMappingEvent>("UserCameraVideoSsrcMapped", e =>
+        {
+            Console.WriteLine($"SignalR: UserCameraVideoSsrcMapped - user {e.UserId} has camera video SSRC {e.CameraVideoSsrc} in channel {e.ChannelId}");
+            UserCameraVideoSsrcMapped?.Invoke(e);
         });
 
         _hubConnection.On<SsrcMappingBatchEvent>("SsrcMappingsBatch", e =>

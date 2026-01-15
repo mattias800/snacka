@@ -12,6 +12,12 @@ public record SsrcMappingEvent(Guid ChannelId, Guid UserId, uint AudioSsrc);
 public record ScreenAudioSsrcMappingEvent(Guid ChannelId, Guid UserId, uint ScreenAudioSsrc);
 
 /// <summary>
+/// Event sent when a user's camera video SSRC is discovered by the server.
+/// Clients use this to route incoming camera video to the correct user's video decoder.
+/// </summary>
+public record CameraVideoSsrcMappingEvent(Guid ChannelId, Guid UserId, uint CameraVideoSsrc);
+
+/// <summary>
 /// Batch event containing all current SSRC mappings for a channel.
 /// Sent to new users when they join a voice channel.
 /// </summary>

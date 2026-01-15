@@ -394,6 +394,26 @@ public class SnackaHub : Hub
                 });
             };
 
+            // Subscribe to camera video SSRC discovery - client needs this to route video to correct decoder
+            session.OnCameraVideoSsrcDiscovered += (sess, cameraVideoSsrc) =>
+            {
+                _ = Task.Run(async () =>
+                {
+                    try
+                    {
+                        // Broadcast to all participants in the voice channel
+                        await hubContext.Clients.Group($"voice:{channelId}")
+                            .SendAsync("UserCameraVideoSsrcMapped", new CameraVideoSsrcMappingEvent(channelId, sess.UserId, cameraVideoSsrc));
+                        _logger.LogInformation("Broadcast camera video SSRC {Ssrc} for user {UserId} in channel {ChannelId}",
+                            cameraVideoSsrc, sess.UserId, channelId);
+                    }
+                    catch (Exception ex)
+                    {
+                        _logger.LogWarning(ex, "Failed to broadcast camera video SSRC for user {UserId}", sess.UserId);
+                    }
+                });
+            };
+
             session.OnIceCandidate += candidate =>
             {
                 // Queue the ICE candidate to be sent asynchronously

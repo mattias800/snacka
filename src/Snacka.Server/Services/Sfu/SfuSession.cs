@@ -95,6 +95,13 @@ public class SfuSession : IDisposable
     /// </summary>
     public event Action<SfuSession, uint>? OnScreenAudioSsrcDiscovered;
 
+    /// <summary>
+    /// Fired when the camera video SSRC is discovered for this client.
+    /// Used to route incoming camera video to the correct user's video decoder.
+    /// Args: (session, cameraVideoSsrc)
+    /// </summary>
+    public event Action<SfuSession, uint>? OnCameraVideoSsrcDiscovered;
+
     public SfuSession(
         Guid userId,
         Guid channelId,
@@ -222,6 +229,7 @@ public class SfuSession : IDisposable
             _cameraVideoSsrc = ssrc;
             _logger.LogInformation("SFU session {UserId}: Detected camera video (PT={PayloadType}, SSRC={Ssrc})",
                 UserId, payloadType, ssrc);
+            OnCameraVideoSsrcDiscovered?.Invoke(this, ssrc);
         }
         return VideoStreamType.Camera;
     }
