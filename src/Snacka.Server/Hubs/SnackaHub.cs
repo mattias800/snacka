@@ -69,9 +69,10 @@ public class SnackaHub : Hub
                 foreach (var communityId in communityIds)
                 {
                     await Groups.AddToGroupAsync(Context.ConnectionId, $"community:{communityId}");
+                    _logger.LogInformation("User {Username} added to group community:{CommunityId}", user.Username, communityId);
                 }
 
-                _logger.LogInformation("User {Username} connected", user.Username);
+                _logger.LogInformation("User {Username} connected, added to {Count} community groups", user.Username, communityIds.Count);
             }
         }
         catch (Exception ex)

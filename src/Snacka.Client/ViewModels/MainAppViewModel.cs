@@ -215,16 +215,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         Messages = new ObservableCollection<MessageResponse>();
         Members = new ObservableCollection<CommunityMemberResponse>();
 
-        // Initialize unified autocomplete with @ mentions and / commands
+        // Initialize unified autocomplete with @ mentions, / commands, and :emojis
         _autocomplete.RegisterSource(new MentionAutocompleteSource(() => Members, auth.UserId));
-
-        // Only register slash commands if GIFs are enabled (all current commands are GIF-related)
-        if (_isGifsEnabled)
-        {
-            _autocomplete.RegisterSource(new SlashCommandAutocompleteSource());
-        }
-
-        // Register emoji autocomplete (triggered by :)
+        _autocomplete.RegisterSource(new SlashCommandAutocompleteSource(gifsEnabled: _isGifsEnabled));
         _autocomplete.RegisterSource(new EmojiAutocompleteSource());
 
         _autocomplete.PropertyChanged += (_, e) =>
@@ -739,7 +732,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 Members[index] = Members[index] with { IsOnline = false };
         });
 
-        _signalR.CommunityMemberAdded += e => Dispatcher.UIThread.Post(async () =>
+        _signalR.CommunityMemberAdded += e =>
         {
             Console.WriteLine($"CommunityMemberAdded event received: communityId={e.CommunityId}, userId={e.UserId}");
             Console.WriteLine($"SelectedCommunity: {SelectedCommunity?.Id} ({SelectedCommunity?.Name})");
@@ -748,25 +741,35 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             if (SelectedCommunity is not null && e.CommunityId == SelectedCommunity.Id)
             {
                 Console.WriteLine("Reloading members list...");
-                var result = await _apiClient.GetMembersAsync(SelectedCommunity.Id);
-                if (result.Success && result.Data is not null)
+                _ = Dispatcher.UIThread.InvokeAsync(async () =>
                 {
-                    Console.WriteLine($"Loaded {result.Data.Count()} members");
-                    Members.Clear();
-                    foreach (var member in result.Data)
-                        Members.Add(member);
-                    this.RaisePropertyChanged(nameof(SortedMembers));
-                }
-                else
-                {
-                    Console.WriteLine($"Failed to load members: {result.Error}");
-                }
+                    try
+                    {
+                        var result = await _apiClient.GetMembersAsync(SelectedCommunity.Id);
+                        if (result.Success && result.Data is not null)
+                        {
+                            Console.WriteLine($"Loaded {result.Data.Count()} members");
+                            Members.Clear();
+                            foreach (var member in result.Data)
+                                Members.Add(member);
+                            this.RaisePropertyChanged(nameof(SortedMembers));
+                        }
+                        else
+                        {
+                            Console.WriteLine($"Failed to load members: {result.Error}");
+                        }
+                    }
+                    catch (Exception ex)
+                    {
+                        Console.WriteLine($"Exception while reloading members: {ex.Message}");
+                    }
+                });
             }
             else
             {
                 Console.WriteLine("Community doesn't match selected community, skipping reload");
             }
-        });
+        };
 
         _signalR.CommunityMemberRemoved += e => Dispatcher.UIThread.Post(() =>
         {
