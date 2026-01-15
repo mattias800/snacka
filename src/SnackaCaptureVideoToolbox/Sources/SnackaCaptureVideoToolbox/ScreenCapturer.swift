@@ -24,9 +24,6 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
     private var frameCount: UInt64 = 0
     private var audioSampleCount: UInt64 = 0
     private var encodedFrameCount: UInt64 = 0
-    private var previewFrameCount: UInt64 = 0
-    private var lastPreviewTime: CFAbsoluteTime = 0
-    private var previewInterval: CFTimeInterval = 0.1  // Default 10fps
 
     // Audio format info (detected from first audio frame)
     private var audioSampleRate: UInt32 = 48000
@@ -135,12 +132,6 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             fputs("SnackaCaptureVideoToolbox: H.264 encoder initialized\n", stderr)
         }
 
-        // Set up preview interval if preview is enabled
-        if config.outputPreview {
-            previewInterval = 1.0 / Double(config.previewFps)
-            fputs("SnackaCaptureVideoToolbox: Preview output enabled at \(config.previewFps) fps\n", stderr)
-        }
-
         // Create and start stream
         stream = SCStream(filter: filter, configuration: streamConfig, delegate: self)
 
@@ -216,10 +207,6 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
 
         frameCount += 1
 
-        // Check if we should output a preview frame
-        let currentTime = CFAbsoluteTimeGetCurrent()
-        let shouldOutputPreview = config.outputPreview && (currentTime - lastPreviewTime) >= previewInterval
-
         // If encoding is enabled, pass the pixel buffer directly to the encoder
         if config.encodeH264, let encoder = encoder {
             let pts = CMSampleBufferGetPresentationTimeStamp(sampleBuffer)
@@ -233,11 +220,6 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
                 }
             } catch {
                 fputs("SnackaCaptureVideoToolbox: Error encoding frame: \(error)\n", stderr)
-            }
-
-            // Output preview frame even when encoding
-            if shouldOutputPreview {
-                outputPreviewFrame(pixelBuffer: pixelBuffer, timestamp: UInt64(currentTime * 1000))
             }
             return
         }
@@ -301,78 +283,6 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             }
         } catch {
             fputs("SnackaCaptureVideoToolbox: Error writing video frame: \(error)\n", stderr)
-        }
-
-        // Output preview frame for raw path
-        if shouldOutputPreview {
-            lastPreviewTime = currentTime
-            previewFrameCount += 1
-            StderrWriter.shared.writePreviewFrame(
-                width: width,
-                height: height,
-                format: .nv12,
-                timestamp: UInt64(currentTime * 1000),
-                pixelData: nv12Data
-            )
-            if previewFrameCount <= 5 || previewFrameCount % 100 == 0 {
-                fputs("SnackaCaptureVideoToolbox: Preview frame \(previewFrameCount) (\(width)x\(height) NV12)\n", stderr)
-            }
-        }
-    }
-
-    /// Output a preview frame to stderr for local display
-    private func outputPreviewFrame(pixelBuffer: CVPixelBuffer, timestamp: UInt64) {
-        CVPixelBufferLockBaseAddress(pixelBuffer, .readOnly)
-        defer { CVPixelBufferUnlockBaseAddress(pixelBuffer, .readOnly) }
-
-        let width = CVPixelBufferGetWidth(pixelBuffer)
-        let height = CVPixelBufferGetHeight(pixelBuffer)
-
-        guard CVPixelBufferGetPlaneCount(pixelBuffer) == 2 else { return }
-
-        guard let yPlaneBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 0) else { return }
-        let yBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 0)
-
-        guard let uvPlaneBase = CVPixelBufferGetBaseAddressOfPlane(pixelBuffer, 1) else { return }
-        let uvBytesPerRow = CVPixelBufferGetBytesPerRowOfPlane(pixelBuffer, 1)
-
-        let yPlaneSize = width * height
-        let uvPlaneSize = width * (height / 2)
-        let totalSize = yPlaneSize + uvPlaneSize
-
-        var nv12Data = Data(count: totalSize)
-
-        nv12Data.withUnsafeMutableBytes { destBuffer in
-            let destPtr = destBuffer.baseAddress!.assumingMemoryBound(to: UInt8.self)
-            let yPtr = yPlaneBase.assumingMemoryBound(to: UInt8.self)
-            let uvPtr = uvPlaneBase.assumingMemoryBound(to: UInt8.self)
-
-            for row in 0..<height {
-                let srcOffset = row * yBytesPerRow
-                let destOffset = row * width
-                memcpy(destPtr + destOffset, yPtr + srcOffset, width)
-            }
-
-            let uvDestStart = yPlaneSize
-            for row in 0..<(height / 2) {
-                let srcOffset = row * uvBytesPerRow
-                let destOffset = uvDestStart + row * width
-                memcpy(destPtr + destOffset, uvPtr + srcOffset, width)
-            }
-        }
-
-        lastPreviewTime = CFAbsoluteTimeGetCurrent()
-        previewFrameCount += 1
-        StderrWriter.shared.writePreviewFrame(
-            width: width,
-            height: height,
-            format: .nv12,
-            timestamp: timestamp,
-            pixelData: nv12Data
-        )
-
-        if previewFrameCount <= 5 || previewFrameCount % 100 == 0 {
-            fputs("SnackaCaptureVideoToolbox: Preview frame \(previewFrameCount) (\(width)x\(height) NV12)\n", stderr)
         }
     }
 

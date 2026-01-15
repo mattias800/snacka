@@ -31,8 +31,7 @@ public class VideoSettingsViewModel : ViewModelBase
     private string? _selectedVideoDevice;
     private bool _isTestingCamera;
     private bool _isLoadingDevices;
-    private int _rawFrameCount;
-    private int _encodedFrameCount;
+    private int _frameCount;
     private int _frameWidth;
     private int _frameHeight;
     private string _cameraStatus = "Not testing";
@@ -43,16 +42,10 @@ public class VideoSettingsViewModel : ViewModelBase
     private int _selectedBitrate;
 
     /// <summary>
-    /// Fired when a raw NV12 frame is received (for GPU rendering).
+    /// Fired when a preview frame is received (NV12 format for GPU rendering).
     /// Parameters: width, height, nv12Data
     /// </summary>
-    public event Action<int, int, byte[]>? OnRawNv12Frame;
-
-    /// <summary>
-    /// Fired when an encoded NV12 frame is received (for GPU rendering).
-    /// Parameters: width, height, nv12Data
-    /// </summary>
-    public event Action<int, int, byte[]>? OnEncodedNv12Frame;
+    public event Action<int, int, byte[]>? OnPreviewFrame;
 
     public VideoSettingsViewModel(ISettingsStore settingsStore, IVideoDeviceService videoDeviceService)
     {
@@ -93,16 +86,17 @@ public class VideoSettingsViewModel : ViewModelBase
         _selectedFramerate = _settingsStore.Settings.CameraFramerate;
         _selectedBitrate = _settingsStore.Settings.CameraBitrateMbps;
 
-        // Wire up camera test service events (NV12 for GPU rendering)
-        _cameraTestService.OnRawNv12FrameReceived += (width, height, nv12Data) =>
-            Dispatcher.UIThread.Post(() => HandleRawNv12Frame(width, height, nv12Data));
-        _cameraTestService.OnEncodedNv12FrameReceived += (width, height, nv12Data) =>
-            Dispatcher.UIThread.Post(() => HandleEncodedNv12Frame(width, height, nv12Data));
+        // Wire up camera test service events
+        _cameraTestService.OnPreviewFrameReceived += (width, height, nv12Data) =>
+            Dispatcher.UIThread.Post(() => HandlePreviewFrame(width, height, nv12Data));
         _cameraTestService.OnError += error =>
             Dispatcher.UIThread.Post(() => CameraStatus = $"Error: {error}");
 
         // Add "None" option immediately so UI has something to show
         VideoDevices.Add(new VideoDeviceItem(null, "None"));
+
+        // Enumerate devices immediately (fire-and-forget)
+        _ = InitializeAsync();
     }
 
     /// <summary>
@@ -196,16 +190,10 @@ public class VideoSettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _isTestingCamera, value);
     }
 
-    public int RawFrameCount
+    public int FrameCount
     {
-        get => _rawFrameCount;
-        set => this.RaiseAndSetIfChanged(ref _rawFrameCount, value);
-    }
-
-    public int EncodedFrameCount
-    {
-        get => _encodedFrameCount;
-        set => this.RaiseAndSetIfChanged(ref _encodedFrameCount, value);
+        get => _frameCount;
+        set => this.RaiseAndSetIfChanged(ref _frameCount, value);
     }
 
     public string CameraStatus
@@ -263,8 +251,7 @@ public class VideoSettingsViewModel : ViewModelBase
         {
             await _cameraTestService.StopAsync();
             IsTestingCamera = false;
-            RawFrameCount = 0;
-            EncodedFrameCount = 0;
+            FrameCount = 0;
             _frameWidth = 0;
             _frameHeight = 0;
             CameraStatus = "Not testing";
@@ -274,8 +261,7 @@ public class VideoSettingsViewModel : ViewModelBase
         {
             try
             {
-                RawFrameCount = 0;
-                EncodedFrameCount = 0;
+                FrameCount = 0;
                 CameraStatus = "Starting...";
 
                 // Get camera ID - if null, use "0" as default
@@ -297,8 +283,7 @@ public class VideoSettingsViewModel : ViewModelBase
     private async Task RestartCameraTest()
     {
         await _cameraTestService.StopAsync();
-        RawFrameCount = 0;
-        EncodedFrameCount = 0;
+        FrameCount = 0;
         _frameWidth = 0;
         _frameHeight = 0;
         CameraStatus = "Restarting...";
@@ -318,9 +303,9 @@ public class VideoSettingsViewModel : ViewModelBase
         }
     }
 
-    private void HandleRawNv12Frame(int width, int height, byte[] nv12Data)
+    private void HandlePreviewFrame(int width, int height, byte[] nv12Data)
     {
-        RawFrameCount++;
+        FrameCount++;
 
         if (_frameWidth != width || _frameHeight != height)
         {
@@ -330,27 +315,7 @@ public class VideoSettingsViewModel : ViewModelBase
         }
 
         // Fire event for View to render (GPU will handle YUV→RGB conversion)
-        OnRawNv12Frame?.Invoke(width, height, nv12Data);
-    }
-
-    private void HandleEncodedNv12Frame(int width, int height, byte[] nv12Data)
-    {
-        EncodedFrameCount++;
-
-        // Fire event for View to render (GPU will handle YUV→RGB conversion)
-        OnEncodedNv12Frame?.Invoke(width, height, nv12Data);
-    }
-
-    private async Task StopCameraTestAsync()
-    {
-        await _cameraTestService.StopAsync();
-        IsTestingCamera = false;
-        RawFrameCount = 0;
-        EncodedFrameCount = 0;
-        _frameWidth = 0;
-        _frameHeight = 0;
-        CameraStatus = "Not testing";
-        this.RaisePropertyChanged(nameof(Resolution));
+        OnPreviewFrame?.Invoke(width, height, nv12Data);
     }
 }
 

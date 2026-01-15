@@ -10,44 +10,31 @@ namespace Snacka.Client.Views;
 
 public partial class VideoSettingsView : UserControl
 {
-    private GpuVideoView? _rawPreviewView;
-    private GpuVideoView? _encodedPreviewView;
-    private Image? _rawPreviewFallback;
-    private Image? _encodedPreviewFallback;
+    private GpuVideoView? _previewView;
+    private Image? _previewFallback;
 
-    private int _rawVideoWidth;
-    private int _rawVideoHeight;
-    private int _encodedVideoWidth;
-    private int _encodedVideoHeight;
+    private int _videoWidth;
+    private int _videoHeight;
 
     // Track whether GPU rendering is working
-    private bool _rawUsingGpu = true;
-    private bool _encodedUsingGpu = true;
+    private bool _usingGpu = true;
 
     public VideoSettingsView()
     {
         InitializeComponent();
 
         // Get references to controls
-        _rawPreviewView = this.FindControl<GpuVideoView>("RawPreviewView");
-        _encodedPreviewView = this.FindControl<GpuVideoView>("EncodedPreviewView");
-        _rawPreviewFallback = this.FindControl<Image>("RawPreviewFallback");
-        _encodedPreviewFallback = this.FindControl<Image>("EncodedPreviewFallback");
+        _previewView = this.FindControl<GpuVideoView>("PreviewView");
+        _previewFallback = this.FindControl<Image>("PreviewFallback");
 
         // Check if GPU rendering is available
-        _rawUsingGpu = GpuVideoRendererFactory.IsAvailable();
-        _encodedUsingGpu = GpuVideoRendererFactory.IsAvailable();
+        _usingGpu = GpuVideoRendererFactory.IsAvailable();
 
-        // Show fallback controls if GPU not available
-        if (!_rawUsingGpu && _rawPreviewFallback != null)
+        // Show fallback control if GPU not available
+        if (!_usingGpu && _previewFallback != null)
         {
-            _rawPreviewFallback.IsVisible = true;
-            Console.WriteLine("VideoSettingsView: GPU not available, using software fallback for raw preview");
-        }
-        if (!_encodedUsingGpu && _encodedPreviewFallback != null)
-        {
-            _encodedPreviewFallback.IsVisible = true;
-            Console.WriteLine("VideoSettingsView: GPU not available, using software fallback for encoded preview");
+            _previewFallback.IsVisible = true;
+            Console.WriteLine("VideoSettingsView: GPU not available, using software fallback");
         }
 
         // Subscribe to DataContext changes to wire up frame events
@@ -58,83 +45,45 @@ public partial class VideoSettingsView : UserControl
     {
         if (DataContext is VideoSettingsViewModel viewModel)
         {
-            // Subscribe to NV12 frame events
-            viewModel.OnRawNv12Frame += OnRawNv12Frame;
-            viewModel.OnEncodedNv12Frame += OnEncodedNv12Frame;
+            // Subscribe to NV12 frame event
+            viewModel.OnPreviewFrame += OnPreviewFrame;
         }
     }
 
-    private void OnRawNv12Frame(int width, int height, byte[] nv12Data)
+    private void OnPreviewFrame(int width, int height, byte[] nv12Data)
     {
-        if (_rawUsingGpu && _rawPreviewView != null)
+        if (_usingGpu && _previewView != null)
         {
             // Try GPU rendering
-            if (width != _rawVideoWidth || height != _rawVideoHeight)
+            if (width != _videoWidth || height != _videoHeight)
             {
-                _rawVideoWidth = width;
-                _rawVideoHeight = height;
+                _videoWidth = width;
+                _videoHeight = height;
 
-                if (!_rawPreviewView.InitializeRenderer(width, height))
+                if (!_previewView.InitializeRenderer(width, height))
                 {
-                    Console.WriteLine($"VideoSettingsView: GPU init failed for raw preview, falling back to software");
-                    _rawUsingGpu = false;
-                    if (_rawPreviewFallback != null) _rawPreviewFallback.IsVisible = true;
+                    Console.WriteLine($"VideoSettingsView: GPU init failed, falling back to software");
+                    _usingGpu = false;
+                    if (_previewFallback != null) _previewFallback.IsVisible = true;
                 }
                 else
                 {
-                    Console.WriteLine($"VideoSettingsView: Initialized raw preview GPU renderer for {width}x{height}");
+                    Console.WriteLine($"VideoSettingsView: Initialized GPU renderer for {width}x{height}");
                 }
             }
 
-            if (_rawUsingGpu)
+            if (_usingGpu)
             {
-                _rawPreviewView.RenderFrame(nv12Data);
+                _previewView.RenderFrame(nv12Data);
                 return;
             }
         }
 
         // Software fallback: convert NV12 to bitmap
-        if (_rawPreviewFallback != null)
+        if (_previewFallback != null)
         {
             var bitmap = CreateBitmapFromNv12(nv12Data, width, height);
-            _rawPreviewFallback.Source = bitmap;
-        }
-    }
-
-    private void OnEncodedNv12Frame(int width, int height, byte[] nv12Data)
-    {
-        if (_encodedUsingGpu && _encodedPreviewView != null)
-        {
-            // Try GPU rendering
-            if (width != _encodedVideoWidth || height != _encodedVideoHeight)
-            {
-                _encodedVideoWidth = width;
-                _encodedVideoHeight = height;
-
-                if (!_encodedPreviewView.InitializeRenderer(width, height))
-                {
-                    Console.WriteLine($"VideoSettingsView: GPU init failed for encoded preview, falling back to software");
-                    _encodedUsingGpu = false;
-                    if (_encodedPreviewFallback != null) _encodedPreviewFallback.IsVisible = true;
-                }
-                else
-                {
-                    Console.WriteLine($"VideoSettingsView: Initialized encoded preview GPU renderer for {width}x{height}");
-                }
-            }
-
-            if (_encodedUsingGpu)
-            {
-                _encodedPreviewView.RenderFrame(nv12Data);
-                return;
-            }
-        }
-
-        // Software fallback: convert NV12 to bitmap
-        if (_encodedPreviewFallback != null)
-        {
-            var bitmap = CreateBitmapFromNv12(nv12Data, width, height);
-            _encodedPreviewFallback.Source = bitmap;
+            _previewFallback.Source = bitmap;
         }
     }
 

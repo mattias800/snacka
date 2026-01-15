@@ -134,68 +134,35 @@
                         </Button>
                     </Panel>
 
-                    <!-- Dual Camera Preview (GPU-accelerated with software fallback) -->
-                    <Grid ColumnDefinitions="*,20,*" IsVisible="{Binding IsTestingCamera}">
-                        <!-- Raw Preview -->
-                        <StackPanel Grid.Column="0" Spacing="8">
-                            <TextBlock Text="Raw Capture"
-                                       FontSize="12"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource Foreground2Brush}"/>
-                            <Border Background="{StaticResource BackgroundBrush}"
-                                    CornerRadius="10"
-                                    Padding="4"
-                                    HorizontalAlignment="Left"
-                                    ClipToBounds="True">
-                                <Panel Width="280" Height="210">
-                                    <!-- GPU renderer (primary) -->
-                                    <controls:GpuVideoView x:Name="RawPreviewView"
-                                                           Width="280"
-                                                           Height="210"/>
-                                    <!-- Software fallback -->
-                                    <Image x:Name="RawPreviewFallback"
-                                           Width="280"
-                                           Height="210"
-                                           Stretch="Uniform"
-                                           IsVisible="False"/>
-                                </Panel>
-                            </Border>
-                            <TextBlock FontSize="11" Foreground="{StaticResource Foreground3Brush}">
-                                <Run Text="Frames: "/>
-                                <Run Text="{Binding RawFrameCount}"/>
-                            </TextBlock>
-                        </StackPanel>
-
-                        <!-- Encoded Preview -->
-                        <StackPanel Grid.Column="2" Spacing="8">
-                            <TextBlock Text="Encoded (what others see)"
-                                       FontSize="12"
-                                       FontWeight="SemiBold"
-                                       Foreground="{StaticResource Foreground2Brush}"/>
-                            <Border Background="{StaticResource BackgroundBrush}"
-                                    CornerRadius="10"
-                                    Padding="4"
-                                    HorizontalAlignment="Left"
-                                    ClipToBounds="True">
-                                <Panel Width="280" Height="210">
-                                    <!-- GPU renderer (primary) -->
-                                    <controls:GpuVideoView x:Name="EncodedPreviewView"
-                                                           Width="280"
-                                                           Height="210"/>
-                                    <!-- Software fallback -->
-                                    <Image x:Name="EncodedPreviewFallback"
-                                           Width="280"
-                                           Height="210"
-                                           Stretch="Uniform"
-                                           IsVisible="False"/>
-                                </Panel>
-                            </Border>
-                            <TextBlock FontSize="11" Foreground="{StaticResource Foreground3Brush}">
-                                <Run Text="Frames: "/>
-                                <Run Text="{Binding EncodedFrameCount}"/>
-                            </TextBlock>
-                        </StackPanel>
-                    </Grid>
+                    <!-- Camera Preview (GPU-accelerated with software fallback) -->
+                    <StackPanel Spacing="8" IsVisible="{Binding IsTestingCamera}">
+                        <TextBlock Text="Preview"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource Foreground2Brush}"/>
+                        <Border Background="{StaticResource BackgroundBrush}"
+                                CornerRadius="10"
+                                Padding="4"
+                                HorizontalAlignment="Left"
+                                ClipToBounds="True">
+                            <Panel Width="320" Height="180">
+                                <!-- GPU renderer (primary) -->
+                                <controls:GpuVideoView x:Name="PreviewView"
+                                                       Width="320"
+                                                       Height="180"/>
+                                <!-- Software fallback -->
+                                <Image x:Name="PreviewFallback"
+                                       Width="320"
+                                       Height="180"
+                                       Stretch="Uniform"
+                                       IsVisible="False"/>
+                            </Panel>
+                        </Border>
+                        <TextBlock FontSize="11" Foreground="{StaticResource Foreground3Brush}">
+                            <Run Text="Frames: "/>
+                            <Run Text="{Binding FrameCount}"/>
+                        </TextBlock>
+                    </StackPanel>
 
                     <!-- Camera Status -->
                     <StackPanel Spacing="8" IsVisible="{Binding IsTestingCamera}">
@@ -222,7 +189,7 @@
                     </StackPanel>
 
                     <!-- Instructions when not testing -->
-                    <TextBlock Text="Click 'Test Camera' to see a preview of your camera. The left preview shows raw capture, the right shows the encoded stream that others will see."
+                    <TextBlock Text="Click 'Test Camera' to see a preview of what others will see when you share your camera."
                                FontSize="12"
                                Foreground="{StaticResource Foreground3Brush}"
                                TextWrapping="Wrap"

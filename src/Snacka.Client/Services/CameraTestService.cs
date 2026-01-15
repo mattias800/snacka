@@ -17,20 +17,13 @@ public class CameraTestService : IDisposable
     private CancellationTokenSource? _cts;
     private bool _isRunning;
 
-    private int _rawFrameCount;
-    private int _encodedFrameCount;
-
-    /// <summary>
-    /// Fired when a raw preview frame is received (NV12 format for GPU rendering).
-    /// Parameters: width, height, nv12Data
-    /// </summary>
-    public event Action<int, int, byte[]>? OnRawNv12FrameReceived;
+    private int _frameCount;
 
     /// <summary>
     /// Fired when a decoded H.264 frame is received (NV12 format for GPU rendering).
     /// Parameters: width, height, nv12Data
     /// </summary>
-    public event Action<int, int, byte[]>? OnEncodedNv12FrameReceived;
+    public event Action<int, int, byte[]>? OnPreviewFrameReceived;
 
     /// <summary>
     /// Fired when an error occurs during capture/decode.
@@ -38,8 +31,7 @@ public class CameraTestService : IDisposable
     public event Action<string>? OnError;
 
     public bool IsRunning => _isRunning;
-    public int RawFrameCount => _rawFrameCount;
-    public int EncodedFrameCount => _encodedFrameCount;
+    public int FrameCount => _frameCount;
 
     public CameraTestService()
     {
@@ -60,17 +52,12 @@ public class CameraTestService : IDisposable
             await StopAsync();
         }
 
-        _rawFrameCount = 0;
-        _encodedFrameCount = 0;
+        _frameCount = 0;
         _cts = new CancellationTokenSource();
 
         // Calculate width assuming 16:9 aspect ratio (most common for webcams)
         // The GPU renderer's aspect ratio correction will handle any mismatch
         var width = CalculateWidthFor16x9(height);
-
-        // Adjust preview FPS based on resolution to reduce data throughput
-        // Higher resolutions = more data per frame, so use lower preview FPS
-        var previewFps = GetPreviewFpsForResolution(height);
 
         // Get native capture tool path
         var capturePath = _captureLocator.GetNativeCameraCapturePath();
@@ -80,10 +67,10 @@ public class CameraTestService : IDisposable
             return;
         }
 
-        // Build arguments with preview enabled
-        var args = _captureLocator.GetNativeCameraCaptureArgs(cameraId, width, height, fps, bitrateMbps, outputPreview: true, previewFps: previewFps);
+        // Build arguments (no preview - we decode H.264 for preview)
+        var args = _captureLocator.GetNativeCameraCaptureArgs(cameraId, width, height, fps, bitrateMbps);
 
-        Console.WriteLine($"CameraTestService: Starting capture at {width}x{height}@{fps}fps, preview at {previewFps}fps");
+        Console.WriteLine($"CameraTestService: Starting capture at {width}x{height}@{fps}fps");
         Console.WriteLine($"CameraTestService: Command: {capturePath} {args}");
 
         try
@@ -109,9 +96,9 @@ public class CameraTestService : IDisposable
 
             _isRunning = true;
 
-            // Start parsing stderr for preview frames
+            // Start parsing stderr for log messages
             var token = _cts.Token;
-            _stderrParserTask = Task.Run(() => ParseStderrLoop(width, height, token), token);
+            _stderrParserTask = Task.Run(() => ParseStderrLoop(token), token);
 
             // Start piping stdout (H.264) to decoder
             _ = Task.Run(() => PipeH264ToDecoder(token), token);
@@ -126,26 +113,13 @@ public class CameraTestService : IDisposable
         }
     }
 
-    private void ParseStderrLoop(int expectedWidth, int expectedHeight, CancellationToken token)
+    private void ParseStderrLoop(CancellationToken token)
     {
         if (_captureProcess == null) return;
 
         try
         {
             var parser = new StderrPacketParser(_captureProcess.StandardError.BaseStream);
-
-            parser.OnPreviewPacket += packet =>
-            {
-                _rawFrameCount++;
-
-                if (_rawFrameCount <= 5 || _rawFrameCount % 100 == 0)
-                {
-                    Console.WriteLine($"CameraTestService: Raw preview frame {_rawFrameCount}, {packet.Width}x{packet.Height}");
-                }
-
-                // Fire NV12 event directly (no CPU conversion - GPU will handle YUV→RGB)
-                OnRawNv12FrameReceived?.Invoke(packet.Width, packet.Height, packet.PixelData);
-            };
 
             parser.OnLogMessage += message =>
             {
@@ -287,15 +261,15 @@ public class CameraTestService : IDisposable
 
     private void OnH264FrameDecoded(int width, int height, byte[] nv12Data)
     {
-        _encodedFrameCount++;
+        _frameCount++;
 
-        if (_encodedFrameCount <= 5 || _encodedFrameCount % 100 == 0)
+        if (_frameCount <= 5 || _frameCount % 100 == 0)
         {
-            Console.WriteLine($"CameraTestService: Decoded H.264 frame {_encodedFrameCount}, {width}x{height}");
+            Console.WriteLine($"CameraTestService: Decoded H.264 frame {_frameCount}, {width}x{height}");
         }
 
         // Fire NV12 event directly (GPU will handle YUV→RGB)
-        OnEncodedNv12FrameReceived?.Invoke(width, height, nv12Data);
+        OnPreviewFrameReceived?.Invoke(width, height, nv12Data);
     }
 
     /// <summary>
@@ -349,7 +323,7 @@ public class CameraTestService : IDisposable
         _cts?.Dispose();
         _cts = null;
 
-        Console.WriteLine($"CameraTestService: Stopped (raw frames: {_rawFrameCount}, encoded frames: {_encodedFrameCount})");
+        Console.WriteLine($"CameraTestService: Stopped (frames: {_frameCount})");
     }
 
     /// <summary>
@@ -362,21 +336,6 @@ public class CameraTestService : IDisposable
         // Round to nearest even number for video encoding compatibility
         var width = (int)Math.Round(height * 16.0 / 9.0);
         return width % 2 == 0 ? width : width + 1;
-    }
-
-    /// <summary>
-    /// Gets appropriate preview FPS for a given resolution.
-    /// Higher resolutions use lower preview FPS to reduce data throughput and GC pressure.
-    /// NV12 data sizes: 360p ~350KB, 720p ~1.4MB, 1080p ~3.1MB per frame.
-    /// </summary>
-    private static int GetPreviewFpsForResolution(int height)
-    {
-        return height switch
-        {
-            >= 1080 => 5,   // 1080p: ~15MB/s at 5fps (was ~45MB/s at 15fps)
-            >= 720 => 10,   // 720p: ~14MB/s at 10fps
-            _ => 15         // 360p and below: ~5MB/s at 15fps
-        };
     }
 
     public void Dispose()

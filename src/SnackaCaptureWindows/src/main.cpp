@@ -54,8 +54,6 @@ OPTIONS:
     --audio             Capture system audio (not used with camera)
     --encode            Output H.264 encoded video (instead of raw NV12)
     --bitrate <mbps>    Encoding bitrate in Mbps (default: 6, camera: 2)
-    --preview           Output preview frames to stderr for local display
-    --preview-fps <n>   Preview frame rate (default: 10)
     --json              Output source list as JSON (with 'list' command)
     --help              Show this help message
 
@@ -80,7 +78,7 @@ int ListSources(bool asJson) {
     return 0;
 }
 
-int Capture(int displayIndex, HWND windowHandle, const std::string& cameraId, int width, int height, int fps, bool captureAudio, bool encodeH264, int bitrateMbps, bool outputPreview, int previewFps) {
+int Capture(int displayIndex, HWND windowHandle, const std::string& cameraId, int width, int height, int fps, bool captureAudio, bool encodeH264, int bitrateMbps) {
     // Set stdout to binary mode for raw frame output
     _setmode(_fileno(stdout), _O_BINARY);
     _setmode(_fileno(stderr), _O_BINARY);
@@ -101,17 +99,6 @@ int Capture(int displayIndex, HWND windowHandle, const std::string& cameraId, in
     uint64_t frameCount = 0;
     uint64_t audioPacketCount = 0;
     uint64_t encodedFrameCount = 0;
-    uint64_t previewFrameCount = 0;
-
-    // Preview timing
-    double previewIntervalMs = 1000.0 / previewFps;
-    LARGE_INTEGER perfFreq, lastPreviewTime;
-    QueryPerformanceFrequency(&perfFreq);
-    lastPreviewTime.QuadPart = 0;
-
-    if (outputPreview) {
-        std::cerr << "SnackaCaptureWindows: Preview output enabled at " << previewFps << " fps\n";
-    }
 
     // Initialize H.264 encoder if requested
     std::unique_ptr<MediaFoundationEncoder> encoder;
@@ -163,18 +150,6 @@ int Capture(int displayIndex, HWND windowHandle, const std::string& cameraId, in
 
         frameCount++;
 
-        // Check if we should output a preview frame
-        bool shouldOutputPreview = false;
-        if (outputPreview) {
-            LARGE_INTEGER currentTime;
-            QueryPerformanceCounter(&currentTime);
-            double elapsedMs = (currentTime.QuadPart - lastPreviewTime.QuadPart) * 1000.0 / perfFreq.QuadPart;
-            if (elapsedMs >= previewIntervalMs) {
-                shouldOutputPreview = true;
-                lastPreviewTime = currentTime;
-            }
-        }
-
         if (encodeH264 && encoder) {
             // Encode to H.264
             if (!encoder->EncodeNV12(data, size, static_cast<int64_t>(timestamp))) {
@@ -198,26 +173,6 @@ int Capture(int displayIndex, HWND windowHandle, const std::string& cameraId, in
             if (frameCount <= 5 || frameCount % 100 == 0) {
                 std::cerr << "SnackaCaptureWindows: Video frame " << frameCount
                           << " (" << width << "x" << height << " NV12, " << size << " bytes)\n";
-            }
-        }
-
-        // Output preview frame if needed
-        if (shouldOutputPreview) {
-            PreviewPacketHeader header(
-                static_cast<uint16_t>(width),
-                static_cast<uint16_t>(height),
-                PreviewFormat::NV12,
-                timestamp,
-                static_cast<uint32_t>(size)
-            );
-
-            // Write header + pixel data to stderr
-            _write(_fileno(stderr), &header, sizeof(header));
-            _write(_fileno(stderr), data, static_cast<unsigned int>(size));
-
-            previewFrameCount++;
-            if (previewFrameCount <= 5 || previewFrameCount % 100 == 0) {
-                // Log preview frames (to file to avoid mixing with preview data)
             }
         }
     };
@@ -361,8 +316,6 @@ int main(int argc, char* argv[]) {
     bool captureAudio = false;
     bool encodeH264 = false;
     int bitrateMbps = -1;
-    bool outputPreview = false;
-    int previewFps = 10;
 
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "--display" && i + 1 < args.size()) {
@@ -383,10 +336,6 @@ int main(int argc, char* argv[]) {
             encodeH264 = true;
         } else if (args[i] == "--bitrate" && i + 1 < args.size()) {
             bitrateMbps = std::stoi(args[++i]);
-        } else if (args[i] == "--preview") {
-            outputPreview = true;
-        } else if (args[i] == "--preview-fps" && i + 1 < args.size()) {
-            previewFps = std::stoi(args[++i]);
         }
     }
 
@@ -415,5 +364,5 @@ int main(int argc, char* argv[]) {
         return 1;
     }
 
-    return Capture(displayIndex, windowHandle, cameraId, width, height, fps, captureAudio, encodeH264, bitrateMbps, outputPreview, previewFps);
+    return Capture(displayIndex, windowHandle, cameraId, width, height, fps, captureAudio, encodeH264, bitrateMbps);
 }
