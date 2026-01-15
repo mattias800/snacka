@@ -7,6 +7,13 @@ namespace Snacka.Client.Services.Autocomplete;
 /// </summary>
 public class SlashCommandAutocompleteSource : IAutocompleteSource
 {
+    private readonly SlashCommand[] _commands;
+
+    public SlashCommandAutocompleteSource(bool gifsEnabled = false)
+    {
+        _commands = SlashCommandRegistry.GetCommands(gifsEnabled);
+    }
+
     public char TriggerCharacter => '/';
 
     public bool IsValidTriggerPosition(string text, int triggerIndex)
@@ -17,10 +24,10 @@ public class SlashCommandAutocompleteSource : IAutocompleteSource
 
     public IEnumerable<IAutocompleteSuggestion> GetSuggestions(string filterText)
     {
-        return SlashCommandRegistry.Commands
+        return _commands
             .Where(c => string.IsNullOrEmpty(filterText) ||
                         c.Name.StartsWith(filterText, StringComparison.OrdinalIgnoreCase))
-            .Take(5)
+            .Take(8)
             .Select(c => new SlashCommandSuggestion(c));
     }
 
