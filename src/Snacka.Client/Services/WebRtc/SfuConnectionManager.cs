@@ -74,9 +74,9 @@ public class SfuConnectionManager : IAsyncDisposable
     public event Action<uint, ushort, uint, int, bool, byte[], bool>? AudioPacketReceived;
 
     /// <summary>
-    /// Fired when video RTP packet is received. Args: (payload, timestamp, marker, payloadType)
+    /// Fired when video RTP packet is received. Args: (ssrc, payload, timestamp, marker, payloadType)
     /// </summary>
-    public event Action<byte[], uint, bool, int>? VideoPacketReceived;
+    public event Action<uint, byte[], uint, bool, int>? VideoPacketReceived;
 
     /// <summary>
     /// Fired when audio formats are negotiated.
@@ -238,7 +238,7 @@ public class SfuConnectionManager : IAsyncDisposable
             }
             else if (media == SDPMediaTypesEnum.video)
             {
-                VideoPacketReceived?.Invoke(rtpPkt.Payload, timestamp, marker, payloadType);
+                VideoPacketReceived?.Invoke(ssrc, rtpPkt.Payload, timestamp, marker, payloadType);
             }
         };
 

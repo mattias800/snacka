@@ -150,6 +150,8 @@ public class WebRtcService : IWebRtcService
     private readonly H264FrameAssembler _screenFrameAssembler = new();
     // SSRC to UserId mapping for incoming video
     private readonly ConcurrentDictionary<uint, Guid> _ssrcToUserMap = new();
+    // Camera video SSRC to UserId mapping (received from server)
+    private readonly ConcurrentDictionary<uint, Guid> _cameraVideoSsrcToUserMap = new();
     // SSRC to payload type mapping for detecting camera vs screen share
     private readonly ConcurrentDictionary<uint, int> _ssrcPayloadTypeMap = new();
     // UserIds of screen shares we're currently watching (can watch multiple)
@@ -256,7 +258,8 @@ public class WebRtcService : IWebRtcService
         // Wire up SFU connection manager events
         _sfuConnectionManager.ConnectionStatusChanged += status => UpdateConnectionStatus(status);
         _sfuConnectionManager.AudioPacketReceived += OnSfuAudioPacketReceived;
-        _sfuConnectionManager.VideoPacketReceived += OnSfuVideoPacketReceived;
+        _sfuConnectionManager.VideoPacketReceived += (ssrc, payload, timestamp, marker, payloadType) =>
+            OnSfuVideoPacketReceived(ssrc, payload, timestamp, marker, payloadType);
 
         // Subscribe to SFU signaling events (routed through SfuConnectionManager)
         _signalR.SfuOfferReceived += async e => await HandleSfuOfferAsync(e.ChannelId, e.Sdp);
@@ -279,6 +282,16 @@ public class WebRtcService : IWebRtcService
             {
                 _audioOutputManager.ScreenAudioSsrcToUserMap[e.ScreenAudioSsrc] = e.UserId;
                 Console.WriteLine($"WebRTC: Mapped screen audio SSRC {e.ScreenAudioSsrc} to user {e.UserId}");
+            }
+        };
+
+        // Subscribe to camera video SSRC mapping events
+        _signalR.UserCameraVideoSsrcMapped += e =>
+        {
+            if (_currentChannelId == e.ChannelId)
+            {
+                _cameraVideoSsrcToUserMap[e.CameraVideoSsrc] = e.UserId;
+                Console.WriteLine($"WebRTC: Mapped camera video SSRC {e.CameraVideoSsrc} to user {e.UserId}");
             }
         };
 
@@ -445,6 +458,7 @@ public class WebRtcService : IWebRtcService
         _videoDecoderManager.ClearAll();
         _ssrcToUserMap.Clear();
         _ssrcPayloadTypeMap.Clear();
+        _cameraVideoSsrcToUserMap.Clear();
         _watchingScreenShareUserIds.Clear();
         _cameraFrameAssembler.Reset();
         _screenFrameAssembler.Reset();
@@ -568,7 +582,7 @@ public class WebRtcService : IWebRtcService
     /// Handles video RTP packets received from the SFU server.
     /// Routes to frame assemblers and video decoder manager.
     /// </summary>
-    private void OnSfuVideoPacketReceived(byte[] payload, uint timestamp, bool marker, int payloadType)
+    private void OnSfuVideoPacketReceived(uint ssrc, byte[] payload, uint timestamp, bool marker, int payloadType)
     {
         // Select the appropriate frame assembler based on payload type
         // PT 96 = camera, PT 97 = screen share
@@ -582,7 +596,7 @@ public class WebRtcService : IWebRtcService
             // For video, we need to determine the user ID from SSRC or watched users
             Guid userId = Guid.Empty;
 
-            if (streamType == VideoStreamType.ScreenShare && _watchingScreenShareUserIds.Count > 0)
+            if (streamType == VideoStreamType.ScreenShare)
             {
                 // For screen share, use first watched user
                 lock (_watchingScreenShareUserIds)
@@ -591,6 +605,14 @@ public class WebRtcService : IWebRtcService
                     {
                         userId = _watchingScreenShareUserIds.First();
                     }
+                }
+            }
+            else if (streamType == VideoStreamType.Camera)
+            {
+                // For camera video, look up user ID from SSRC mapping
+                if (_cameraVideoSsrcToUserMap.TryGetValue(ssrc, out var mappedUserId))
+                {
+                    userId = mappedUserId;
                 }
             }
 
