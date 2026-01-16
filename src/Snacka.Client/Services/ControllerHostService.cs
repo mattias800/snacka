@@ -79,6 +79,7 @@ public interface IControllerHostService : IDisposable
 public class ControllerHostService : ReactiveObject, IControllerHostService
 {
     private readonly ISignalRService _signalR;
+    private readonly IVirtualControllerService _virtualController;
 
     public ObservableCollection<ControllerAccessRequest> PendingRequests { get; } = new();
     public ObservableCollection<ActiveControllerSession> ActiveSessions { get; } = new();
@@ -89,6 +90,16 @@ public class ControllerHostService : ReactiveObject, IControllerHostService
     public ControllerHostService(ISignalRService signalR)
     {
         _signalR = signalR;
+        _virtualController = VirtualControllerServiceFactory.Create();
+
+        if (_virtualController.IsSupported)
+        {
+            Console.WriteLine("ControllerHostService: Virtual controller support available");
+        }
+        else
+        {
+            Console.WriteLine($"ControllerHostService: Virtual controller not available - {_virtualController.NotSupportedReason}");
+        }
 
         // Subscribe to SignalR events
         _signalR.ControllerAccessRequested += OnAccessRequested;
@@ -109,6 +120,19 @@ public class ControllerHostService : ReactiveObject, IControllerHostService
         }
 
         PendingRequests.Remove(request);
+
+        // Create virtual controller for this slot
+        if (_virtualController.IsSupported && !_virtualController.HasController(controllerSlot))
+        {
+            if (_virtualController.CreateController(controllerSlot))
+            {
+                Console.WriteLine($"ControllerHostService: Created virtual controller for slot {controllerSlot}");
+            }
+            else
+            {
+                Console.WriteLine($"ControllerHostService: Failed to create virtual controller for slot {controllerSlot}");
+            }
+        }
 
         // Add to active sessions
         var session = new ActiveControllerSession(
@@ -224,14 +248,29 @@ public class ControllerHostService : ReactiveObject, IControllerHostService
         if (session != null)
         {
             ActiveSessions.Remove(session);
+
+            // Destroy virtual controller if no other sessions use this slot
+            var slotStillInUse = ActiveSessions.Any(s => s.ControllerSlot == session.ControllerSlot);
+            if (!slotStillInUse && _virtualController.HasController(session.ControllerSlot))
+            {
+                _virtualController.DestroyController(session.ControllerSlot);
+                Console.WriteLine($"ControllerHostService: Destroyed virtual controller for slot {session.ControllerSlot}");
+            }
+
             Console.WriteLine($"ControllerHostService: Session with {session.GuestUsername} ended ({e.Reason})");
         }
     }
 
     private void OnControllerStateReceived(ControllerStateReceivedEvent e)
     {
-        // The SignalRService already logs to stdout
-        // Forward to any listeners (for future virtual controller integration)
+        // Feed to virtual controller if available
+        var state = e.State;
+        if (_virtualController.IsSupported && _virtualController.HasController(state.ControllerSlot))
+        {
+            _virtualController.UpdateState(state.ControllerSlot, state);
+        }
+
+        // Forward to any listeners
         ControllerStateReceived?.Invoke(e);
     }
 
@@ -240,5 +279,6 @@ public class ControllerHostService : ReactiveObject, IControllerHostService
         _signalR.ControllerAccessRequested -= OnAccessRequested;
         _signalR.ControllerAccessStopped -= OnAccessStopped;
         _signalR.ControllerStateReceived -= OnControllerStateReceived;
+        _virtualController.Dispose();
     }
 }

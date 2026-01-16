@@ -340,13 +340,14 @@ Send over WebRTC DataChannel for lowest latency:
 - [x] Access control: Request/Accept/Decline/Stop controller access flow
 - [x] Controller state logged to host stdout (for debugging/Phase 1)
 - [x] UI: "Share Controller" button on screen share tiles
-- [ ] UI: Accept/reject controller share request dialog on host
+- [x] UI: Accept/reject controller share request notification on host
 
-#### Virtual Controller (Host Side) - NOT STARTED
-- [ ] Create `IVirtualControllerService` interface
-- [ ] Implement `WindowsVirtualControllerService` using ViGEm.NET
-- [ ] Implement `LinuxVirtualControllerService` using uinput P/Invoke
-- [ ] Feed received `ControllerStateMessage` to virtual controller
+#### Virtual Controller (Host Side) ✅ COMPLETE
+- [x] Create `IVirtualControllerService` interface
+- [x] Implement `WindowsVirtualControllerService` using ViGEm.NET (Nefarius.ViGEm.Client)
+- [x] Implement `LinuxVirtualControllerService` using uinput P/Invoke
+- [x] Feed received `ControllerStateMessage` to virtual controller
+- [x] Factory pattern for platform-specific instantiation
 
 ### Phase 2: Android Guest Support
 - [ ] Implement `AndroidControllerInputService` using Game Controller API
@@ -518,4 +519,4 @@ public record ControllerInfo(
 ---
 
 **Last Updated:** 2026-01-16
-**Status:** ~60% - Input capture complete, network transport complete (SignalR-based access control, state streaming, stdout logging). Virtual controller creation not started. Missing: host UI for accept/decline, virtual controller drivers (ViGEm/uinput).
+**Status:** ~85% - Phase 1 complete! Input capture, network transport, and virtual controller all working. Windows uses ViGEm, Linux uses uinput. Missing: controller session management panel (showing active sessions with stop/mute controls).

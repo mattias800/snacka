@@ -664,6 +664,67 @@
                                 CloseRequested="OnLightboxCloseRequested"
                                 HorizontalAlignment="Stretch"
                                 VerticalAlignment="Stretch"/>
+
+        <!-- Controller Access Request Notification (top-right corner) -->
+        <Border Grid.ColumnSpan="6"
+                HorizontalAlignment="Right"
+                VerticalAlignment="Top"
+                Margin="16"
+                IsVisible="{Binding HasPendingControllerRequests}">
+            <Border Background="{StaticResource Content1Brush}"
+                    BorderBrush="{StaticResource PrimaryBrush}"
+                    BorderThickness="1"
+                    CornerRadius="12"
+                    Padding="16"
+                    MinWidth="280"
+                    MaxWidth="360">
+                <StackPanel Spacing="12">
+                    <StackPanel Orientation="Horizontal" Spacing="8">
+                        <ui:SymbolIcon Symbol="Games" FontSize="18" Foreground="{StaticResource PrimaryBrush}"/>
+                        <TextBlock Text="Controller Request"
+                                   FontSize="14"
+                                   FontWeight="SemiBold"
+                                   Foreground="{StaticResource ForegroundBrush}"/>
+                    </StackPanel>
+
+                    <ItemsControl ItemsSource="{Binding PendingControllerRequests}">
+                        <ItemsControl.ItemTemplate>
+                            <DataTemplate>
+                                <Border Background="{StaticResource BackgroundBrush}"
+                                        CornerRadius="8"
+                                        Padding="12"
+                                        Margin="0,4">
+                                    <StackPanel Spacing="10">
+                                        <TextBlock FontSize="13" Foreground="{StaticResource ForegroundBrush}" TextWrapping="Wrap">
+                                            <Run Text="{Binding RequesterUsername}" FontWeight="SemiBold"/>
+                                            <Run Text=" wants to share their controller"/>
+                                        </TextBlock>
+
+                                        <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
+                                            <Button Classes="btn-secondary"
+                                                    Padding="12,6"
+                                                    Command="{Binding $parent[UserControl].((vm:MainAppViewModel)DataContext).DeclineControllerRequestCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <TextBlock Text="Decline" FontSize="12"/>
+                                            </Button>
+                                            <Button Classes="btn-primary"
+                                                    Padding="12,6"
+                                                    Command="{Binding $parent[UserControl].((vm:MainAppViewModel)DataContext).AcceptControllerRequestCommand}"
+                                                    CommandParameter="{Binding}">
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <ui:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="White"/>
+                                                    <TextBlock Text="Accept" FontSize="12" FontWeight="SemiBold"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </StackPanel>
+                                    </StackPanel>
+                                </Border>
+                            </DataTemplate>
+                        </ItemsControl.ItemTemplate>
+                    </ItemsControl>
+                </StackPanel>
+            </Border>
+        </Border>
         </Grid>
     </Grid>
 </UserControl>

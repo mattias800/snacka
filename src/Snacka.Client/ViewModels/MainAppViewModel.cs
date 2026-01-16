@@ -141,6 +141,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isLoadingPendingInvites;
     private ObservableCollection<CommunityInviteResponse> _pendingInvites = new();
 
+    // Controller access request state
+    private byte _selectedControllerSlot = 0;
+
     // Thread state
     private ThreadViewModel? _currentThread;
     private double _threadPanelWidth = 400;
@@ -332,6 +335,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         ClosePendingInvitesPopupCommand = ReactiveCommand.Create(ClosePendingInvitesPopup);
         AcceptInviteCommand = ReactiveCommand.CreateFromTask<CommunityInviteResponse>(AcceptInviteAsync);
         DeclineInviteCommand = ReactiveCommand.CreateFromTask<CommunityInviteResponse>(DeclineInviteAsync);
+
+        // Controller access request commands
+        AcceptControllerRequestCommand = ReactiveCommand.CreateFromTask<ControllerAccessRequest>(AcceptControllerRequestAsync);
+        DeclineControllerRequestCommand = ReactiveCommand.CreateFromTask<ControllerAccessRequest>(DeclineControllerRequestAsync);
+        StopControllerSessionCommand = ReactiveCommand.CreateFromTask<ActiveControllerSession>(StopControllerSessionAsync);
+
+        // Subscribe to controller host service events for UI updates
+        _controllerHostService.PendingRequests.CollectionChanged += (_, _) =>
+        {
+            Dispatcher.UIThread.Post(() => this.RaisePropertyChanged(nameof(HasPendingControllerRequests)));
+        };
 
         // Thread commands
         OpenThreadCommand = ReactiveCommand.CreateFromTask<MessageResponse>(OpenThreadAsync);
@@ -1235,6 +1249,23 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public int PendingInviteCount => _pendingInvites.Count;
     public bool HasPendingInvites => _pendingInvites.Count > 0;
     public bool HasNoPendingInvites => _pendingInvites.Count == 0 && !_isLoadingPendingInvites;
+
+    // Controller access request properties
+    public ObservableCollection<ControllerAccessRequest> PendingControllerRequests =>
+        _controllerHostService.PendingRequests;
+
+    public ObservableCollection<ActiveControllerSession> ActiveControllerSessions =>
+        _controllerHostService.ActiveSessions;
+
+    public bool HasPendingControllerRequests => PendingControllerRequests.Count > 0;
+
+    public byte SelectedControllerSlot
+    {
+        get => _selectedControllerSlot;
+        set => this.RaiseAndSetIfChanged(ref _selectedControllerSlot, value);
+    }
+
+    public byte[] AvailableControllerSlots => [0, 1, 2, 3];
 
     // Thread properties
     public ThreadViewModel? CurrentThread
@@ -2308,6 +2339,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ClosePendingInvitesPopupCommand { get; }
     public ReactiveCommand<CommunityInviteResponse, Unit> AcceptInviteCommand { get; }
     public ReactiveCommand<CommunityInviteResponse, Unit> DeclineInviteCommand { get; }
+
+    // Controller access request commands
+    public ReactiveCommand<ControllerAccessRequest, Unit> AcceptControllerRequestCommand { get; }
+    public ReactiveCommand<ControllerAccessRequest, Unit> DeclineControllerRequestCommand { get; }
+    public ReactiveCommand<ActiveControllerSession, Unit> StopControllerSessionCommand { get; }
 
     // Thread commands
     public ReactiveCommand<MessageResponse, Unit> OpenThreadCommand { get; }
@@ -3902,6 +3938,50 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"Error declining invite: {ex.Message}");
+        }
+    }
+
+    // Controller access request methods
+    private async Task AcceptControllerRequestAsync(ControllerAccessRequest request)
+    {
+        if (_currentVoiceChannel == null) return;
+
+        try
+        {
+            // Use the selected slot or auto-assign
+            var slot = _controllerHostService.GetNextAvailableSlot(_currentVoiceChannel.Id) ?? SelectedControllerSlot;
+            await _controllerHostService.AcceptRequestAsync(request.ChannelId, request.RequesterUserId, slot);
+            Console.WriteLine($"Accepted controller request from {request.RequesterUsername} as Player {slot + 1}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error accepting controller request: {ex.Message}");
+        }
+    }
+
+    private async Task DeclineControllerRequestAsync(ControllerAccessRequest request)
+    {
+        try
+        {
+            await _controllerHostService.DeclineRequestAsync(request.ChannelId, request.RequesterUserId);
+            Console.WriteLine($"Declined controller request from {request.RequesterUsername}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error declining controller request: {ex.Message}");
+        }
+    }
+
+    private async Task StopControllerSessionAsync(ActiveControllerSession session)
+    {
+        try
+        {
+            await _controllerHostService.StopSessionAsync(session.ChannelId, session.GuestUserId);
+            Console.WriteLine($"Stopped controller session with {session.GuestUsername}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error stopping controller session: {ex.Message}");
         }
     }
 
