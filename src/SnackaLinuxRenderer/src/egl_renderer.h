@@ -3,13 +3,16 @@
 
 #include <stdbool.h>
 #include <stdint.h>
+#include <unistd.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES2/gl2.h>
 #include <GLES2/gl2ext.h>
 #include <X11/Xlib.h>
 #include <va/va.h>
+#include <va/va_x11.h>
 #include <va/va_drmcommon.h>
+#include <drm_fourcc.h>
 
 // EGL renderer structure
 typedef struct EglRenderer {

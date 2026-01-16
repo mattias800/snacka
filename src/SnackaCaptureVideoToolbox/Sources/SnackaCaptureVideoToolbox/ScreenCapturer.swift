@@ -191,11 +191,8 @@ class ScreenCapturer: NSObject, SCStreamDelegate, SCStreamOutput {
             handleVideoFrame(sampleBuffer)
         case .audio:
             handleAudioFrame(sampleBuffer)
-        case .microphone:
-            // Microphone output not used for screen capture
-            break
         @unknown default:
-            // Future types
+            // Includes .microphone (macOS 13+) and future types
             break
         }
     }
