@@ -2129,32 +2129,72 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// Request controller access from a user who is sharing their screen.
-    /// This initiates the controller streaming handshake.
+    /// Toggle controller access for a user who is sharing their screen.
+    /// If already streaming to this host, stop streaming. Otherwise, request access.
     /// </summary>
-    public async Task RequestControllerAccessAsync(VideoStreamViewModel stream)
+    public async Task ToggleControllerAccessAsync(VideoStreamViewModel stream)
     {
         if (_currentVoiceChannel == null)
         {
-            Console.WriteLine("MainApp: Cannot request controller access - not in voice channel");
+            Console.WriteLine("MainApp: Cannot toggle controller access - not in voice channel");
             return;
         }
 
         if (stream.StreamType != VideoStreamType.ScreenShare)
         {
-            Console.WriteLine("MainApp: Cannot request controller access - not a screen share stream");
+            Console.WriteLine("MainApp: Cannot toggle controller access - not a screen share stream");
             return;
         }
 
         if (stream.UserId == _auth.UserId)
         {
-            Console.WriteLine("MainApp: Cannot request controller access from yourself");
+            Console.WriteLine("MainApp: Cannot toggle controller access for yourself");
+            return;
+        }
+
+        // Check if already streaming to this host - if so, stop
+        if (IsStreamingControllerTo(stream.UserId))
+        {
+            Console.WriteLine($"MainApp: Stopping controller streaming to {stream.Username} ({stream.UserId})");
+            await _controllerStreamingService.StopStreamingAsync();
             return;
         }
 
         Console.WriteLine($"MainApp: Requesting controller access from {stream.Username} ({stream.UserId})");
         await _controllerStreamingService.RequestAccessAsync(_currentVoiceChannel.Id, stream.UserId);
     }
+
+    /// <summary>
+    /// Toggle controller access for the current fullscreen stream.
+    /// </summary>
+    public async Task ToggleFullscreenControllerAccessAsync()
+    {
+        if (FullscreenStream == null)
+        {
+            Console.WriteLine("MainApp: Cannot toggle controller access - no fullscreen stream");
+            return;
+        }
+
+        await ToggleControllerAccessAsync(FullscreenStream);
+    }
+
+    /// <summary>
+    /// Check if we're currently streaming controller input to a specific user.
+    /// </summary>
+    public bool IsStreamingControllerTo(Guid userId)
+    {
+        return _controllerStreamingService.IsStreaming && _controllerStreamingService.StreamingHostUserId == userId;
+    }
+
+    /// <summary>
+    /// Whether we're currently streaming controller input to anyone.
+    /// </summary>
+    public bool IsControllerStreaming => _controllerStreamingService.IsStreaming;
+
+    /// <summary>
+    /// The host user ID we're streaming controller to, if any.
+    /// </summary>
+    public Guid? ControllerStreamingHostUserId => _controllerStreamingService.StreamingHostUserId;
 
     private void OnNv12VideoFrameForFullscreen(Guid userId, VideoStreamType streamType, int width, int height, byte[] nv12Data)
     {

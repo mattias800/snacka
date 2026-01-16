@@ -1,5 +1,7 @@
 # Snacka
 
+*Nu snackar vi!*
+
 A self-hosted communication platform where you own your data.
 
 ![Snacka Screenshot](docs/screenshots/main-app.png)

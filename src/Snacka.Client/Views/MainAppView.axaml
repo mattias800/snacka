@@ -508,11 +508,26 @@
                                        VerticalAlignment="Center"/>
                         </StackPanel>
 
-                        <!-- Right side: Volume slider and Close button -->
+                        <!-- Right side: Controller button, Volume slider and Close button -->
                         <StackPanel HorizontalAlignment="Right"
                                     VerticalAlignment="Center"
                                     Orientation="Horizontal"
                                     Spacing="16">
+                            <!-- Share Controller button (only for remote screen shares) -->
+                            <Button Padding="10,6"
+                                    Background="#40FFFFFF"
+                                    BorderThickness="0"
+                                    CornerRadius="12"
+                                    Cursor="Hand"
+                                    IsVisible="{Binding FullscreenStream.IsRemoteScreenShare}"
+                                    Click="OnFullscreenShareControllerClick"
+                                    ToolTip.Tip="Share your controller input with the host">
+                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                    <ui:SymbolIcon Symbol="Games" Foreground="White" FontSize="14"/>
+                                    <TextBlock x:Name="FullscreenControllerButtonText" Text="Share Controller" Foreground="White" FontSize="12" VerticalAlignment="Center"/>
+                                </StackPanel>
+                            </Button>
+
                             <!-- Volume slider for remote stream audio -->
                             <StackPanel Orientation="Horizontal"
                                         Spacing="8"
@@ -703,13 +718,13 @@
                                         <StackPanel Orientation="Horizontal" Spacing="8" HorizontalAlignment="Right">
                                             <Button Classes="btn-secondary"
                                                     Padding="12,6"
-                                                    Command="{Binding $parent[UserControl].((vm:MainAppViewModel)DataContext).DeclineControllerRequestCommand}"
+                                                    Command="{Binding $parent[UserControl].DataContext.DeclineControllerRequestCommand}"
                                                     CommandParameter="{Binding}">
                                                 <TextBlock Text="Decline" FontSize="12"/>
                                             </Button>
                                             <Button Classes="btn-primary"
                                                     Padding="12,6"
-                                                    Command="{Binding $parent[UserControl].((vm:MainAppViewModel)DataContext).AcceptControllerRequestCommand}"
+                                                    Command="{Binding $parent[UserControl].DataContext.AcceptControllerRequestCommand}"
                                                     CommandParameter="{Binding}">
                                                 <StackPanel Orientation="Horizontal" Spacing="4">
                                                     <ui:SymbolIcon Symbol="Checkmark" FontSize="12" Foreground="White"/>
@@ -778,7 +793,7 @@
                                                 Padding="10,6"
                                                 Margin="0,0,6,0"
                                                 VerticalAlignment="Center"
-                                                Command="{Binding $parent[UserControl].((vm:MainAppViewModel)DataContext).ToggleMuteControllerSessionCommand}"
+                                                Command="{Binding $parent[UserControl].DataContext.ToggleMuteControllerSessionCommand}"
                                                 CommandParameter="{Binding}"
                                                 ToolTip.Tip="Toggle mute controller input">
                                             <Panel>
@@ -796,7 +811,7 @@
                                                 Classes="btn-danger"
                                                 Padding="10,6"
                                                 VerticalAlignment="Center"
-                                                Command="{Binding $parent[UserControl].((vm:MainAppViewModel)DataContext).StopControllerSessionCommand}"
+                                                Command="{Binding $parent[UserControl].DataContext.StopControllerSessionCommand}"
                                                 CommandParameter="{Binding}"
                                                 ToolTip.Tip="Disconnect this controller">
                                             <ui:SymbolIcon Symbol="Dismiss" FontSize="12" Foreground="White"/>

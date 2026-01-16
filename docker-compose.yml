@@ -89,8 +89,6 @@ services:
       - TURN_REALM=${TURN_HOST:-localhost}
       - EXTERNAL_IP=${TURN_EXTERNAL_IP:-}
     restart: unless-stopped
-    profiles:
-      - turn  # Only starts when: docker compose --profile turn up
 
 volumes:
   snacka-uploads:

@@ -140,6 +140,12 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
                 Dispatcher.UIThread.Post(() => ChatArea?.FocusMessageInput(), DispatcherPriority.Input);
             }
         }
+        else if (e.PropertyName == nameof(MainAppViewModel.IsVideoFullscreen) ||
+                 e.PropertyName == nameof(MainAppViewModel.FullscreenStream))
+        {
+            // Update controller button state when entering/exiting fullscreen
+            Dispatcher.UIThread.Post(UpdateFullscreenControllerButton, DispatcherPriority.Normal);
+        }
     }
 
     // Global key handler for ESC to exit fullscreen/overlay and Cmd+K / Ctrl+K for quick switcher
@@ -651,7 +657,7 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     {
         if (ViewModel != null)
         {
-            await ViewModel.RequestControllerAccessAsync(stream);
+            await ViewModel.ToggleControllerAccessAsync(stream);
         }
     }
 
@@ -659,6 +665,28 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     private void OnCloseFullscreenClick(object? sender, RoutedEventArgs e)
     {
         ViewModel?.CloseFullscreen();
+    }
+
+    // Called when clicking the share controller button in fullscreen mode
+    private async void OnFullscreenShareControllerClick(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel != null)
+        {
+            await ViewModel.ToggleFullscreenControllerAccessAsync();
+            UpdateFullscreenControllerButton();
+        }
+    }
+
+    // Update the fullscreen controller button text based on streaming state
+    private void UpdateFullscreenControllerButton()
+    {
+        var textBlock = this.FindControl<TextBlock>("FullscreenControllerButtonText");
+        if (textBlock != null && ViewModel != null)
+        {
+            var isStreaming = ViewModel.FullscreenStream != null &&
+                              ViewModel.IsStreamingControllerTo(ViewModel.FullscreenStream.UserId);
+            textBlock.Text = isStreaming ? "Stop Sharing" : "Share Controller";
+        }
     }
 
     // Called when clicking outside the voice video overlay content (closes the overlay)
