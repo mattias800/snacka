@@ -284,6 +284,7 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         _webRtc.VideoFrameReceived += OnVideoFrameReceived;
         _webRtc.LocalVideoFrameCaptured += OnLocalVideoFrameCaptured;
         _webRtc.HardwareDecoderReady += OnHardwareDecoderReady;
+        _webRtc.LocalHardwarePreviewReady += OnLocalHardwarePreviewReady;
     }
 
     /// <summary>
@@ -535,6 +536,24 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         });
     }
 
+    private void OnLocalHardwarePreviewReady(VideoStreamType streamType, IHardwareVideoDecoder decoder)
+    {
+        // Route hardware decoder to local user's video stream for self-preview
+        Dispatcher.UIThread.Post(() =>
+        {
+            var stream = VideoStreams.FirstOrDefault(s => s.UserId == _localUserId && s.StreamType == streamType);
+            if (stream != null)
+            {
+                stream.HardwareDecoder = decoder;
+                Console.WriteLine($"VoiceChannelContent: Local hardware preview decoder ready ({streamType})");
+            }
+            else
+            {
+                Console.WriteLine($"VoiceChannelContent: No local stream found for hardware preview ({streamType})");
+            }
+        });
+    }
+
     /// <summary>
     /// Start watching a remote user's screen share.
     /// </summary>
@@ -596,5 +615,6 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         _webRtc.VideoFrameReceived -= OnVideoFrameReceived;
         _webRtc.LocalVideoFrameCaptured -= OnLocalVideoFrameCaptured;
         _webRtc.HardwareDecoderReady -= OnHardwareDecoderReady;
+        _webRtc.LocalHardwarePreviewReady -= OnLocalHardwarePreviewReady;
     }
 }

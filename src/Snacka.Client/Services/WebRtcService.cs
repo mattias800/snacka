@@ -77,6 +77,12 @@ public interface IWebRtcService : IAsyncDisposable
     event Action<Guid, VideoStreamType, IHardwareVideoDecoder>? HardwareDecoderReady;
 
     /// <summary>
+    /// Fired when a hardware video decoder is ready for local preview (self-view). Args: (streamType, decoder)
+    /// The UI should embed the decoder's native view for zero-copy GPU rendering.
+    /// </summary>
+    event Action<VideoStreamType, IHardwareVideoDecoder>? LocalHardwarePreviewReady;
+
+    /// <summary>
     /// Gets whether GPU video rendering is available.
     /// </summary>
     bool IsGpuRenderingAvailable { get; }
@@ -202,6 +208,12 @@ public class WebRtcService : IWebRtcService
     public event Action<VideoStreamType, int, int, byte[]>? LocalVideoFrameCaptured;
 
     /// <summary>
+    /// Fired when a hardware video decoder is ready for local preview (self-view). Args: (streamType, decoder)
+    /// The UI should embed the decoder's native view for zero-copy GPU rendering.
+    /// </summary>
+    public event Action<VideoStreamType, IHardwareVideoDecoder>? LocalHardwarePreviewReady;
+
+    /// <summary>
     /// Gets whether GPU video rendering is available on this platform.
     /// </summary>
     public bool IsGpuRenderingAvailable => _videoDecoderManager.IsGpuRenderingAvailable;
@@ -240,6 +252,8 @@ public class WebRtcService : IWebRtcService
         _cameraManager.OnFrameEncoded += OnCameraVideoEncoded;
         _cameraManager.OnLocalFrameCaptured += (width, height, rgbData) =>
             LocalVideoFrameCaptured?.Invoke(VideoStreamType.Camera, width, height, rgbData);
+        _cameraManager.HardwarePreviewReady += (streamType, decoder) =>
+            LocalHardwarePreviewReady?.Invoke(streamType, decoder);
 
         // Wire up video decoder events
         _videoDecoderManager.VideoFrameReceived += (userId, streamType, width, height, rgbData) =>
@@ -254,6 +268,8 @@ public class WebRtcService : IWebRtcService
         _screenShareManager.OnAudioEncoded += OnScreenAudioEncoded;
         _screenShareManager.OnLocalPreviewFrame += (width, height, rgbData) =>
             LocalVideoFrameCaptured?.Invoke(VideoStreamType.ScreenShare, width, height, rgbData);
+        _screenShareManager.HardwarePreviewReady += (streamType, decoder) =>
+            LocalHardwarePreviewReady?.Invoke(streamType, decoder);
 
         // Wire up SFU connection manager events
         _sfuConnectionManager.ConnectionStatusChanged += status => UpdateConnectionStatus(status);

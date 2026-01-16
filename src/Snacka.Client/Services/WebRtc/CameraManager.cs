@@ -1,4 +1,6 @@
 using System.Diagnostics;
+using Snacka.Client.Services.HardwareVideo;
+using Snacka.Shared.Models;
 
 namespace Snacka.Client.Services.WebRtc;
 
@@ -20,8 +22,13 @@ public class CameraManager : IAsyncDisposable
     private bool _isCameraOn;
     private int _sentCameraFrameCount;
 
-    // Local preview decoder
-    private FfmpegProcessDecoder? _localPreviewDecoder;
+    // Hardware video decoder for local preview (same pipeline as receiving)
+    private IHardwareVideoDecoder? _localPreviewDecoder;
+    private byte[]? _sps;
+    private byte[]? _pps;
+    private bool _hardwareDecoderFailed;
+    private int _previewWidth;
+    private int _previewHeight;
 
     // Default video capture settings (used if settings not available)
     private const int DefaultVideoWidth = 640;
@@ -76,8 +83,15 @@ public class CameraManager : IAsyncDisposable
 
     /// <summary>
     /// Fired when a local video frame is captured (for self-preview). Args: (width, height, rgbData)
+    /// This is only used as fallback when hardware decoding is unavailable.
     /// </summary>
     public event Action<int, int, byte[]>? OnLocalFrameCaptured;
+
+    /// <summary>
+    /// Fired when the hardware preview decoder is ready. Args: (streamType, decoder)
+    /// The UI should embed the decoder's native view for zero-copy GPU rendering.
+    /// </summary>
+    public event Action<VideoStreamType, IHardwareVideoDecoder>? HardwarePreviewReady;
 
     public CameraManager(ISettingsStore? settingsStore)
     {
@@ -170,15 +184,9 @@ public class CameraManager : IAsyncDisposable
 
         _videoCts = new CancellationTokenSource();
 
-        // Start local preview decoder (decodes H.264 to NV12, then converts to RGB for preview)
-        _localPreviewDecoder = new FfmpegProcessDecoder(width, height, outputFormat: DecoderOutputFormat.Nv12);
-        _localPreviewDecoder.OnDecodedFrame += (frameWidth, frameHeight, nv12Data) =>
-        {
-            // Convert NV12 to RGB for OnLocalFrameCaptured
-            var rgbData = VideoDecoderManager.ConvertNv12ToRgb(nv12Data, frameWidth, frameHeight);
-            OnLocalFrameCaptured?.Invoke(frameWidth, frameHeight, rgbData);
-        };
-        _localPreviewDecoder.Start();
+        // Store dimensions for hardware decoder initialization
+        _previewWidth = width;
+        _previewHeight = height;
 
         // Start stderr parser for log messages only
         _stderrTask = Task.Run(() =>
@@ -248,9 +256,12 @@ public class CameraManager : IAsyncDisposable
         _videoCts?.Dispose();
         _videoCts = null;
 
-        // Stop local preview decoder
+        // Stop hardware preview decoder
         _localPreviewDecoder?.Dispose();
         _localPreviewDecoder = null;
+        _sps = null;
+        _pps = null;
+        _hardwareDecoderFailed = false;
 
         // Stop native capture process
         if (_cameraProcess != null)
@@ -278,6 +289,7 @@ public class CameraManager : IAsyncDisposable
     /// <summary>
     /// Reads H.264 NAL units from native camera capture process (AVCC format).
     /// Converts to Annex B format and fires OnFrameEncoded.
+    /// Uses hardware decoding for local preview (same pipeline as receiving).
     /// </summary>
     private void CameraH264Loop(CancellationToken token, int fps)
     {
@@ -286,7 +298,7 @@ public class CameraManager : IAsyncDisposable
         var lengthBuffer = new byte[4];
         var rtpDuration = (uint)(90000 / fps);
 
-        Console.WriteLine($"CameraManager: Direct H.264 capture loop starting @ {fps}fps (AVCC format)");
+        Console.WriteLine($"CameraManager: Direct H.264 capture loop starting @ {fps}fps (AVCC format, hardware preview)");
 
         try
         {
@@ -338,6 +350,20 @@ public class CameraManager : IAsyncDisposable
                 var nalType = nalData[0] & 0x1F;
                 var isKeyframeNal = nalType == 7 || nalType == 8 || nalType == 5;
 
+                // Store SPS/PPS for hardware decoder initialization
+                if (nalType == 7) // SPS
+                {
+                    _sps = nalData;
+                    Console.WriteLine($"CameraManager: Stored SPS ({nalData.Length} bytes)");
+                    TryInitializeHardwareDecoder();
+                }
+                else if (nalType == 8) // PPS
+                {
+                    _pps = nalData;
+                    Console.WriteLine($"CameraManager: Stored PPS ({nalData.Length} bytes)");
+                    TryInitializeHardwareDecoder();
+                }
+
                 // NAL type 7 = SPS (start of new keyframe sequence)
                 if (nalType == 7 && frameData.Length > 0)
                 {
@@ -352,7 +378,6 @@ public class CameraManager : IAsyncDisposable
 
                     _sentCameraFrameCount++;
                     OnFrameEncoded?.Invoke(rtpDuration, frameBytes);
-                    _localPreviewDecoder?.DecodeFrame(frameBytes);
 
                     frameData.SetLength(0);
                     isKeyframeInProgress = true;
@@ -365,6 +390,13 @@ public class CameraManager : IAsyncDisposable
                 // Write NAL with Annex B prefix
                 frameData.Write(annexBPrefix, 0, 4);
                 frameData.Write(nalData, 0, nalData.Length);
+
+                // Feed VCL NAL units to hardware decoder for preview
+                if (_localPreviewDecoder != null && (nalType == 1 || nalType == 5))
+                {
+                    var isKeyframe = nalType == 5;
+                    _localPreviewDecoder.DecodeAndRender(nalData, isKeyframe);
+                }
 
                 // NAL type 1 = P-frame (non-IDR slice)
                 if (nalType == 1 && !isKeyframeInProgress)
@@ -379,7 +411,6 @@ public class CameraManager : IAsyncDisposable
 
                     _sentCameraFrameCount++;
                     OnFrameEncoded?.Invoke(rtpDuration, frameBytes);
-                    _localPreviewDecoder?.DecodeFrame(frameBytes);
                     frameData.SetLength(0);
                 }
                 // NAL type 5 = IDR (keyframe)
@@ -395,7 +426,6 @@ public class CameraManager : IAsyncDisposable
 
                     _sentCameraFrameCount++;
                     OnFrameEncoded?.Invoke(rtpDuration, frameBytes);
-                    _localPreviewDecoder?.DecodeFrame(frameBytes);
                     frameData.SetLength(0);
                     isKeyframeInProgress = false;
                 }
@@ -414,6 +444,49 @@ public class CameraManager : IAsyncDisposable
         }
 
         Console.WriteLine($"CameraManager: H.264 capture loop ended after {frameCount} frames");
+    }
+
+    /// <summary>
+    /// Tries to initialize the hardware decoder when both SPS and PPS are available.
+    /// </summary>
+    private void TryInitializeHardwareDecoder()
+    {
+        if (_localPreviewDecoder != null || _hardwareDecoderFailed)
+            return;
+
+        if (_sps == null || _pps == null)
+            return;
+
+        if (!HardwareVideoDecoderFactory.IsAvailable())
+        {
+            Console.WriteLine("CameraManager: Hardware decoding not available for preview");
+            _hardwareDecoderFailed = true;
+            return;
+        }
+
+        Console.WriteLine("CameraManager: Creating hardware decoder for local preview...");
+        var decoder = HardwareVideoDecoderFactory.Create();
+        if (decoder == null)
+        {
+            Console.WriteLine("CameraManager: Failed to create hardware decoder");
+            _hardwareDecoderFailed = true;
+            return;
+        }
+
+        if (decoder.Initialize(_previewWidth, _previewHeight, _sps, _pps))
+        {
+            _localPreviewDecoder = decoder;
+            Console.WriteLine($"CameraManager: Hardware preview decoder ready ({_previewWidth}x{_previewHeight})");
+
+            // Notify UI that hardware decoder is ready for embedding
+            HardwarePreviewReady?.Invoke(VideoStreamType.Camera, decoder);
+        }
+        else
+        {
+            decoder.Dispose();
+            _hardwareDecoderFailed = true;
+            Console.WriteLine("CameraManager: Failed to initialize hardware decoder for preview");
+        }
     }
 
     public async ValueTask DisposeAsync()
