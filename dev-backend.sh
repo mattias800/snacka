@@ -10,8 +10,12 @@ if [ -f .env ]; then
     set +a
 fi
 
-SERVER_URL="http://localhost:5117"
+SERVER_PORT="5117"
+SERVER_URL="http://localhost:$SERVER_PORT"
 SERVER_PROJECT="src/Snacka.Server/Snacka.Server.csproj"
+
+# Get local IP for network access
+LOCAL_IP=$(ifconfig 2>/dev/null | grep 'inet ' | grep -v '127.0.0.1' | head -1 | awk '{print $2}' || hostname -I 2>/dev/null | awk '{print $1}')
 
 echo "=== Snacka Backend Startup ==="
 echo ""
@@ -32,9 +36,9 @@ fi
 echo "Build complete."
 echo ""
 
-# Start server
+# Start server (bind to all interfaces for network access)
 echo "Starting server..."
-dotnet run --project "$SERVER_PROJECT" --no-build &
+dotnet run --project "$SERVER_PROJECT" --no-build --urls "http://0.0.0.0:$SERVER_PORT" &
 SERVER_PID=$!
 echo "Server PID: $SERVER_PID"
 
@@ -58,7 +62,11 @@ fi
 echo ""
 echo "=== Backend started ==="
 echo "Server: PID $SERVER_PID"
-echo "URL: $SERVER_URL"
+echo ""
+echo "Local:   $SERVER_URL"
+if [ -n "$LOCAL_IP" ]; then
+    echo "Network: http://$LOCAL_IP:$SERVER_PORT"
+fi
 echo ""
 echo "Press Ctrl+C to stop"
 echo ""

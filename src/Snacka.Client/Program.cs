@@ -1,7 +1,6 @@
 using Avalonia;
 using Avalonia.ReactiveUI;
 using Snacka.Client.Services;
-using Snacka.Client.Services.HardwareVideo;
 using Velopack;
 
 namespace Snacka.Client;
@@ -14,6 +13,12 @@ public sealed class Program
     public static string? DevPassword { get; private set; }
     public static string? DevWindowTitle { get; private set; }
     public static string? Profile { get; private set; }
+
+    /// <summary>
+    /// Gets the system capability service with hardware acceleration status.
+    /// Available after startup capability check completes.
+    /// </summary>
+    public static ISystemCapabilityService? CapabilityService { get; private set; }
 
     [STAThread]
     public static void Main(string[] args)
@@ -41,8 +46,10 @@ public sealed class Program
         // Set VLC environment variables FIRST, before anything else loads
         SetupVlcEnvironment();
 
-        // Check hardware video decoding availability at startup
-        CheckHardwareDecodingAvailability();
+        // Check system capabilities (hardware acceleration) at startup
+        var capabilityService = new SystemCapabilityService();
+        capabilityService.CheckCapabilities();
+        CapabilityService = capabilityService;
 
         // Check for audio test mode
         if (args.Contains("--audio-test"))
@@ -124,35 +131,4 @@ public sealed class Program
         // Linux typically has VLC plugins in standard locations that libvlc finds automatically
     }
 
-    /// <summary>
-    /// Check and log hardware video decoding availability at startup.
-    /// </summary>
-    private static void CheckHardwareDecodingAvailability()
-    {
-        Console.WriteLine("Checking hardware video decoding availability...");
-        try
-        {
-            var isAvailable = HardwareVideoDecoderFactory.IsAvailable();
-            Console.WriteLine($"Hardware video decoding available: {isAvailable}");
-
-            if (isAvailable)
-            {
-                // Try to create a decoder to verify it works
-                var decoder = HardwareVideoDecoderFactory.Create();
-                if (decoder != null)
-                {
-                    Console.WriteLine("Hardware video decoder created successfully");
-                    decoder.Dispose();
-                }
-                else
-                {
-                    Console.WriteLine("Hardware video decoder creation returned null");
-                }
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Hardware video decoding check failed: {ex.GetType().Name}: {ex.Message}");
-        }
-    }
 }

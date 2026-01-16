@@ -36,9 +36,31 @@
         </DataTemplate>
     </Window.DataTemplates>
 
-    <Grid RowDefinitions="Auto,*">
-        <!-- Update Banner -->
+    <Grid RowDefinitions="Auto,Auto,*">
+        <!-- Hardware Acceleration Warning Banner -->
         <Border Grid.Row="0"
+                Background="#FAA61A"
+                Padding="12,8"
+                IsVisible="{Binding ShowHardwareWarningBanner}">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <TextBlock Grid.Column="0" Text="&#x26A0;" FontSize="16" VerticalAlignment="Center" Margin="0,0,8,0"/>
+                <TextBlock Grid.Column="1"
+                           Text="{Binding HardwareWarningMessage}"
+                           Foreground="#202225"
+                           VerticalAlignment="Center"
+                           TextWrapping="Wrap"/>
+                <Button Grid.Column="2"
+                        Content="&#x2715;"
+                        Command="{Binding DismissHardwareWarningBanner}"
+                        Background="Transparent"
+                        Foreground="#202225"
+                        Padding="8,4"
+                        FontSize="14"/>
+            </Grid>
+        </Border>
+
+        <!-- Update Banner -->
+        <Border Grid.Row="1"
                 Background="#5865F2"
                 Padding="12,8"
                 IsVisible="{Binding ShowUpdateBanner}">
@@ -123,6 +145,6 @@
         </Border>
 
         <!-- Main Content -->
-        <ContentControl Grid.Row="1" Content="{Binding CurrentView}"/>
+        <ContentControl Grid.Row="2" Content="{Binding CurrentView}"/>
     </Grid>
 </Window>

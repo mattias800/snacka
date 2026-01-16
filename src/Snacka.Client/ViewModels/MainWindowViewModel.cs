@@ -28,6 +28,8 @@ public class MainWindowViewModel : ViewModelBase
     private bool _showUpdateBanner;
     private UpdateState _updateState = UpdateState.NoUpdate;
     private int _updateDownloadProgress;
+    private bool _showHardwareWarningBanner;
+    private string _hardwareWarningMessage = "";
 
     // File picker provider (set from View)
     public Func<Task<IStorageFile?>>? ImageFilePickerProvider { get; set; }
@@ -61,9 +63,16 @@ public class MainWindowViewModel : ViewModelBase
         {
             _updateService.ApplyUpdateAndRestart();
         });
+        DismissHardwareWarningBanner = ReactiveCommand.Create(() =>
+        {
+            ShowHardwareWarningBanner = false;
+        });
 
         // Check for updates on startup
         _ = CheckForUpdatesAsync();
+
+        // Check hardware acceleration warnings
+        CheckHardwareWarnings();
 
         // Dev mode: auto-login with provided credentials
         if (devConfig is not null)
@@ -308,6 +317,20 @@ public class MainWindowViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> DismissUpdateBanner { get; }
     public ReactiveCommand<Unit, Unit> DownloadUpdate { get; }
     public ReactiveCommand<Unit, Unit> RestartToUpdate { get; }
+    public ReactiveCommand<Unit, Unit> DismissHardwareWarningBanner { get; }
+
+    // Hardware acceleration warning properties
+    public bool ShowHardwareWarningBanner
+    {
+        get => _showHardwareWarningBanner;
+        set => this.RaiseAndSetIfChanged(ref _showHardwareWarningBanner, value);
+    }
+
+    public string HardwareWarningMessage
+    {
+        get => _hardwareWarningMessage;
+        set => this.RaiseAndSetIfChanged(ref _hardwareWarningMessage, value);
+    }
 
     private async Task CheckForUpdatesAsync()
     {
@@ -317,6 +340,30 @@ public class MainWindowViewModel : ViewModelBase
             UpdateInfo = update;
             UpdateState = update.IsDownloaded ? UpdateState.ReadyToInstall : UpdateState.UpdateAvailable;
             ShowUpdateBanner = true;
+        }
+    }
+
+    private void CheckHardwareWarnings()
+    {
+        var capabilityService = Program.CapabilityService;
+        if (capabilityService == null) return;
+
+        if (!capabilityService.IsFullHardwareAccelerationAvailable && capabilityService.Warnings.Count > 0)
+        {
+            // Build a concise warning message
+            var missingParts = new List<string>();
+            if (!capabilityService.IsNativeCaptureAvailable)
+                missingParts.Add("native capture");
+            if (!capabilityService.IsHardwareEncoderAvailable)
+                missingParts.Add("hardware encoder");
+            if (!capabilityService.IsHardwareDecoderAvailable)
+                missingParts.Add("hardware decoder");
+
+            if (missingParts.Count > 0)
+            {
+                HardwareWarningMessage = $"Performance warning: {string.Join(", ", missingParts)} unavailable. Video features may use more CPU.";
+                ShowHardwareWarningBanner = true;
+            }
         }
     }
 
