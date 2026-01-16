@@ -63,4 +63,13 @@
     <ProjectReference Include="..\Snacka.Shared\Snacka.Shared.csproj" />
   </ItemGroup>
 
+  <!-- macOS native library for hardware video decoding (VideoToolbox + Metal) -->
+  <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
+    <None Include="..\SnackaMetalRenderer\.build\arm64-apple-macosx\release\libSnackaMetalRenderer.dylib"
+          Condition="Exists('..\SnackaMetalRenderer\.build\arm64-apple-macosx\release\libSnackaMetalRenderer.dylib')">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+      <Link>libSnackaMetalRenderer.dylib</Link>
+    </None>
+  </ItemGroup>
+
 </Project>

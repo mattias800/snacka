@@ -35,6 +35,11 @@ public class FfmpegProcessDecoder : IDisposable
     private readonly int _frameSize;
     private int _timeoutCount;
 
+    // Frame dropping for latency control
+    private int _pendingInputFrames;
+    private int _droppedFrameCount;
+    private const int MaxPendingFrames = 10; // Drop frames if more than 10 pending (allows ~330ms buffer at 30fps)
+
     /// <summary>
     /// Fired when a decoded frame is ready.
     /// For RGB24: rgbData is width * height * 3 bytes
@@ -216,46 +221,16 @@ public class FfmpegProcessDecoder : IDisposable
     /// <summary>
     /// Gets hardware decoder arguments based on platform.
     /// Returns (ffmpegArgs, decoderName) tuple.
+    /// NOTE: Hardware decoding disabled due to VideoToolbox -12909 errors with some H.264 streams.
+    /// Software decoding is more reliable and still fast enough for real-time video.
     /// </summary>
     private (string args, string name) GetHardwareDecoderArgs(string outputPixFmt)
     {
         // Note: outputPixFmt parameter reserved for future use if needed
         _ = outputPixFmt;
 
-        if (_codec != VideoCodecsEnum.H264)
-        {
-            return ("", "software");
-        }
-
-        if (OperatingSystem.IsMacOS())
-        {
-            // VideoToolbox hardware decoder for H264
-            // Note: May fail with -12909 error on some streams and fall back to software decode
-            // This is a known ffmpeg/VideoToolbox compatibility issue
-            // GPU shader still handles YUV→RGB conversion regardless
-            return ("-hwaccel videotoolbox ", "videotoolbox");
-        }
-
-        if (OperatingSystem.IsWindows())
-        {
-            // Try hardware decoders in order: CUDA (NVIDIA), D3D11VA (any GPU), DXVA2 (older)
-            if (IsHwAccelAvailable("cuda"))
-                return ("-hwaccel cuda ", "cuda");
-            if (IsHwAccelAvailable("d3d11va"))
-                return ("-hwaccel d3d11va ", "d3d11va");
-            if (IsHwAccelAvailable("dxva2"))
-                return ("-hwaccel dxva2 ", "dxva2");
-        }
-
-        if (OperatingSystem.IsLinux())
-        {
-            // VAAPI for Intel/AMD, VDPAU for older NVIDIA
-            if (IsHwAccelAvailable("vaapi"))
-                return ("-hwaccel vaapi -hwaccel_device /dev/dri/renderD128 ", "vaapi");
-            if (IsHwAccelAvailable("vdpau"))
-                return ("-hwaccel vdpau ", "vdpau");
-        }
-
+        // Hardware decoding disabled - VideoToolbox has compatibility issues with some H.264 streams
+        // causing -12909 errors. Software decoding is more reliable.
         return ("", "software");
     }
 
@@ -298,9 +273,23 @@ public class FfmpegProcessDecoder : IDisposable
         }
 
         _inputFrameCount++;
+
+        // Drop frames if decoder is falling behind (latency control)
+        var pending = Interlocked.Increment(ref _pendingInputFrames);
+        if (pending > MaxPendingFrames)
+        {
+            Interlocked.Decrement(ref _pendingInputFrames);
+            _droppedFrameCount++;
+            if (_droppedFrameCount <= 5 || _droppedFrameCount % 100 == 0)
+            {
+                Console.WriteLine($"FfmpegProcessDecoder: Dropping frame {_inputFrameCount} (pending={pending}, dropped={_droppedFrameCount}) - decoder falling behind");
+            }
+            return;
+        }
+
         if (_inputFrameCount <= 5 || _inputFrameCount % 100 == 0)
         {
-            Console.WriteLine($"FfmpegProcessDecoder: Writing frame {_inputFrameCount}, size={encodedData.Length}");
+            Console.WriteLine($"FfmpegProcessDecoder: Writing frame {_inputFrameCount}, size={encodedData.Length}, pending={pending}");
         }
 
         try
@@ -314,6 +303,7 @@ public class FfmpegProcessDecoder : IDisposable
         catch (Exception ex)
         {
             Console.WriteLine($"FfmpegProcessDecoder: Write error - {ex.Message}");
+            Interlocked.Decrement(ref _pendingInputFrames);
         }
     }
 
@@ -373,6 +363,8 @@ public class FfmpegProcessDecoder : IDisposable
                     Buffer.BlockCopy(frameBuffer, 0, frameData, 0, _frameSize);
 
                     _frameCount++;
+                    Interlocked.Decrement(ref _pendingInputFrames);
+
                     if (_frameCount <= 5 || _frameCount % 100 == 0)
                     {
                         Console.WriteLine($"FfmpegProcessDecoder: Decoded frame {_frameCount}, {_width}x{_height}");
