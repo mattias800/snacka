@@ -58,7 +58,7 @@
     <!-- SDL2 native library for audio device enumeration -->
     <PackageReference Include="sdl2.nuget" Version="2.32.8" />
     <!-- ViGEm for virtual controller emulation (Windows only) -->
-    <PackageReference Include="Nefarius.ViGEm.Client" Version="1.22.0" />
+    <PackageReference Include="Nefarius.ViGEm.Client" Version="1.21.256" />
   </ItemGroup>
 
   <ItemGroup>
