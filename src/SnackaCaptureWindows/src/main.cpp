@@ -104,20 +104,21 @@ int Capture(int displayIndex, HWND windowHandle, const std::string& cameraId, in
     std::unique_ptr<MediaFoundationEncoder> encoder;
     if (encodeH264) {
         if (!MediaFoundationEncoder::IsHardwareEncoderAvailable()) {
-            std::cerr << "SnackaCaptureWindows: WARNING - No hardware H.264 encoder available, falling back to raw NV12\n";
-            encodeH264 = false;
-        } else {
-            encoder = std::make_unique<MediaFoundationEncoder>(width, height, fps, bitrateMbps);
-
-            // Initialize encoder (creates its own D3D device)
-            if (!encoder->Initialize()) {
-                std::cerr << "SnackaCaptureWindows: WARNING - Failed to initialize encoder, falling back to raw NV12\n";
-                encoder.reset();
-                encodeH264 = false;
-            } else {
-                std::cerr << "SnackaCaptureWindows: Using " << encoder->GetEncoderName() << " encoder\n";
-            }
+            std::cerr << "SnackaCaptureWindows: ERROR - No H.264 encoder available. Hardware encoding is required.\n";
+            CoUninitialize();
+            return 1;
         }
+
+        encoder = std::make_unique<MediaFoundationEncoder>(width, height, fps, bitrateMbps);
+
+        // Initialize encoder (creates its own D3D device)
+        if (!encoder->Initialize()) {
+            std::cerr << "SnackaCaptureWindows: ERROR - Failed to initialize H.264 encoder. Encoding is required.\n";
+            CoUninitialize();
+            return 1;
+        }
+
+        std::cerr << "SnackaCaptureWindows: Using " << encoder->GetEncoderName() << " encoder\n";
     }
 
     if (encodeH264 && encoder) {

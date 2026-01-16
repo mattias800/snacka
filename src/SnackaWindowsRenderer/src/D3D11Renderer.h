@@ -4,6 +4,7 @@
 #include <d3d11.h>
 #include <dxgi1_2.h>
 #include <d3dcompiler.h>
+#include <cstdint>
 
 class D3D11Renderer {
 public:
@@ -19,6 +20,9 @@ public:
 
     // Render an NV12 texture to the window
     void RenderNV12Texture(ID3D11Texture2D* texture);
+
+    // Render raw NV12 data (software decode path)
+    void RenderNV12Data(const uint8_t* data, int dataSize, int width, int height);
 
     // Get the window handle
     HWND GetHwnd() const { return m_hwnd; }
@@ -75,6 +79,15 @@ private:
     // Dimensions
     int m_width = 0;
     int m_height = 0;
+
+    // Textures for software decode path
+    ID3D11Texture2D* m_stagingTexture = nullptr;
+    ID3D11Texture2D* m_gpuNV12Texture = nullptr;
+    int m_stagingWidth = 0;
+    int m_stagingHeight = 0;
+
+    // Window visibility tracking
+    bool m_windowShown = false;
 
     // Window class atom
     static ATOM s_windowClassAtom;

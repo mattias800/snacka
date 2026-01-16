@@ -273,6 +273,21 @@ bool MediaFoundationDecoder::CreateDecoder() {
         std::cout << "MediaFoundationDecoder: Decoder doesn't support D3D11 (using software path)" << std::endl;
     }
 
+    // Enable low-latency mode for real-time video
+    IMFAttributes* pAttributes = nullptr;
+    hr = m_decoder->GetAttributes(&pAttributes);
+    if (SUCCEEDED(hr) && pAttributes) {
+        // MF_LOW_LATENCY GUID: {9c27891a-ed7a-40e1-88e8-b22727a024ee}
+        static const GUID MF_LOW_LATENCY = { 0x9c27891a, 0xed7a, 0x40e1, { 0x88, 0xe8, 0xb2, 0x27, 0x27, 0xa0, 0x24, 0xee } };
+        hr = pAttributes->SetUINT32(MF_LOW_LATENCY, TRUE);
+        if (SUCCEEDED(hr)) {
+            std::cout << "MediaFoundationDecoder: Low-latency mode enabled" << std::endl;
+        } else {
+            std::cout << "MediaFoundationDecoder: Failed to enable low-latency mode" << std::endl;
+        }
+        pAttributes->Release();
+    }
+
     return true;
 }
 
@@ -336,8 +351,18 @@ bool MediaFoundationDecoder::ConfigureDecoder() {
 }
 
 IMFSample* MediaFoundationDecoder::CreateSampleFromNAL(const uint8_t* nalData, int nalLen, bool isKeyframe) {
-    // Create buffer with 4-byte AVCC length prefix
-    int totalLength = nalLen + 4;
+    // Use Annex B format with start codes (00 00 00 01) - Media Foundation expects this
+    // For keyframes, prepend SPS and PPS
+
+    static const uint8_t startCode[] = { 0x00, 0x00, 0x00, 0x01 };
+
+    int totalLength = 4 + nalLen;  // start code + NAL
+
+    // For keyframes, prepend SPS and PPS
+    if (isKeyframe && !m_sps.empty() && !m_pps.empty()) {
+        totalLength += 4 + (int)m_sps.size();  // start code + SPS
+        totalLength += 4 + (int)m_pps.size();  // start code + PPS
+    }
 
     IMFMediaBuffer* buffer = nullptr;
     HRESULT hr = MFCreateMemoryBuffer(totalLength, &buffer);
@@ -350,14 +375,29 @@ IMFSample* MediaFoundationDecoder::CreateSampleFromNAL(const uint8_t* nalData, i
         return nullptr;
     }
 
-    // Write length prefix (big-endian)
-    bufferData[0] = (nalLen >> 24) & 0xFF;
-    bufferData[1] = (nalLen >> 16) & 0xFF;
-    bufferData[2] = (nalLen >> 8) & 0xFF;
-    bufferData[3] = nalLen & 0xFF;
+    int offset = 0;
+
+    // For keyframes, write SPS and PPS first
+    if (isKeyframe && !m_sps.empty() && !m_pps.empty()) {
+        // SPS with start code
+        memcpy(bufferData + offset, startCode, 4);
+        offset += 4;
+        memcpy(bufferData + offset, m_sps.data(), m_sps.size());
+        offset += (int)m_sps.size();
+
+        // PPS with start code
+        memcpy(bufferData + offset, startCode, 4);
+        offset += 4;
+        memcpy(bufferData + offset, m_pps.data(), m_pps.size());
+        offset += (int)m_pps.size();
+    }
+
+    // Write start code for the NAL unit
+    memcpy(bufferData + offset, startCode, 4);
+    offset += 4;
 
     // Copy NAL data
-    memcpy(bufferData + 4, nalData, nalLen);
+    memcpy(bufferData + offset, nalData, nalLen);
 
     buffer->Unlock();
     buffer->SetCurrentLength(totalLength);
@@ -392,6 +432,7 @@ bool MediaFoundationDecoder::DecodeAndRender(const uint8_t* nalData, int nalLen,
     // Create input sample
     IMFSample* inputSample = CreateSampleFromNAL(nalData, nalLen, isKeyframe);
     if (!inputSample) {
+        std::cerr << "MediaFoundationDecoder::DecodeAndRender: CreateSampleFromNAL failed" << std::endl;
         return false;
     }
 
@@ -400,16 +441,9 @@ bool MediaFoundationDecoder::DecodeAndRender(const uint8_t* nalData, int nalLen,
     inputSample->Release();
 
     if (FAILED(hr) && hr != MF_E_NOTACCEPTING) {
-        std::cerr << "MediaFoundationDecoder: ProcessInput failed: " << std::hex << hr << std::endl;
+        std::cerr << "MediaFoundationDecoder: ProcessInput failed: 0x" << std::hex << hr << std::dec << std::endl;
         return false;
     }
-
-    // Try to get output
-    MFT_OUTPUT_DATA_BUFFER outputBuffer = {};
-    outputBuffer.dwStreamID = 0;
-    outputBuffer.pSample = nullptr;
-    outputBuffer.dwStatus = 0;
-    outputBuffer.pEvents = nullptr;
 
     // Check if decoder allocates its own samples
     MFT_OUTPUT_STREAM_INFO streamInfo = {};
@@ -418,55 +452,76 @@ bool MediaFoundationDecoder::DecodeAndRender(const uint8_t* nalData, int nalLen,
     bool decoderAllocates = (streamInfo.dwFlags &
         (MFT_OUTPUT_STREAM_PROVIDES_SAMPLES | MFT_OUTPUT_STREAM_CAN_PROVIDE_SAMPLES)) != 0;
 
-    IMFSample* outputSample = nullptr;
-    if (!decoderAllocates) {
-        // We need to provide output sample
-        MFCreateSample(&outputSample);
-        IMFMediaBuffer* outBuffer = nullptr;
-        // Allocate NV12 buffer (width * height * 1.5)
-        MFCreateMemoryBuffer(m_width * m_height * 3 / 2, &outBuffer);
-        outputSample->AddBuffer(outBuffer);
-        outBuffer->Release();
-        outputBuffer.pSample = outputSample;
-    }
+    // Drain all available output frames (decoder may buffer multiple frames)
+    while (true) {
+        MFT_OUTPUT_DATA_BUFFER outputBuffer = {};
+        outputBuffer.dwStreamID = 0;
+        outputBuffer.pSample = nullptr;
+        outputBuffer.dwStatus = 0;
+        outputBuffer.pEvents = nullptr;
 
-    DWORD status = 0;
-    hr = m_decoder->ProcessOutput(0, 1, &outputBuffer, &status);
+        IMFSample* outputSample = nullptr;
+        if (!decoderAllocates) {
+            // We need to provide output sample
+            MFCreateSample(&outputSample);
+            IMFMediaBuffer* outBuffer = nullptr;
+            // Allocate NV12 buffer (width * height * 1.5)
+            MFCreateMemoryBuffer(m_width * m_height * 3 / 2, &outBuffer);
+            outputSample->AddBuffer(outBuffer);
+            outBuffer->Release();
+            outputBuffer.pSample = outputSample;
+        }
 
-    if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
-        // Decoder needs more data - not an error
-        if (outputSample) outputSample->Release();
-        return true;
-    }
+        DWORD status = 0;
+        hr = m_decoder->ProcessOutput(0, 1, &outputBuffer, &status);
 
-    if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
-        // Output format changed, reconfigure
-        if (outputSample) outputSample->Release();
-        // Handle format change if needed
-        return true;
-    }
+        if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+            // Decoder needs more data - no more frames available
+            m_needInputCount++;
+            if (outputSample) outputSample->Release();
+            break;
+        }
 
-    if (FAILED(hr)) {
-        if (outputSample) outputSample->Release();
-        return false;
-    }
+        if (hr == MF_E_TRANSFORM_STREAM_CHANGE) {
+            // Output format changed, reconfigure and continue
+            if (outputSample) outputSample->Release();
+            continue;
+        }
 
-    // Render the decoded frame
-    IMFSample* decodedSample = outputBuffer.pSample;
-    if (decodedSample) {
-        RenderFrame(decodedSample);
-        decodedSample->Release();
+        if (FAILED(hr)) {
+            if (outputSample) outputSample->Release();
+            break;
+        }
+
+        // Render the decoded frame
+        IMFSample* decodedSample = outputBuffer.pSample;
+        if (decodedSample) {
+            m_outputCount++;
+            RenderFrame(decodedSample);
+            decodedSample->Release();
+        }
     }
 
     return true;
 }
 
 void MediaFoundationDecoder::RenderFrame(IMFSample* sample) {
-    if (!m_renderer) return;
+    static int renderCount = 0;
+    renderCount++;
+
+    if (!m_renderer) {
+        std::cerr << "MediaFoundationDecoder::RenderFrame: no renderer!" << std::endl;
+        std::cerr.flush();
+        return;
+    }
 
     IMFMediaBuffer* buffer = nullptr;
     HRESULT hr = sample->GetBufferByIndex(0, &buffer);
-    if (FAILED(hr)) return;
+    if (FAILED(hr)) {
+        std::cerr << "MediaFoundationDecoder::RenderFrame: GetBufferByIndex failed: 0x" << std::hex << hr << std::dec << std::endl;
+        std::cerr.flush();
+        return;
+    }
 
     // Try to get D3D11 texture from buffer
     IMFDXGIBuffer* dxgiBuffer = nullptr;
@@ -474,6 +529,10 @@ void MediaFoundationDecoder::RenderFrame(IMFSample* sample) {
 
     if (SUCCEEDED(hr) && dxgiBuffer) {
         // Got hardware-decoded texture
+        if (renderCount <= 5 || renderCount % 100 == 0) {
+            std::cerr << "MediaFoundationDecoder::RenderFrame " << renderCount << ": hardware path (DXGI texture)" << std::endl;
+            std::cerr.flush();
+        }
         ID3D11Texture2D* texture = nullptr;
         UINT subresource = 0;
         hr = dxgiBuffer->GetResource(IID_PPV_ARGS(&texture));
@@ -481,15 +540,65 @@ void MediaFoundationDecoder::RenderFrame(IMFSample* sample) {
             dxgiBuffer->GetSubresourceIndex(&subresource);
             m_renderer->RenderNV12Texture(texture);
             texture->Release();
+        } else {
+            std::cerr << "MediaFoundationDecoder::RenderFrame: GetResource failed: 0x" << std::hex << hr << std::dec << std::endl;
+            std::cerr.flush();
         }
         dxgiBuffer->Release();
     } else {
         // Software decoded - buffer contains raw NV12 data
-        // For now, just skip - would need to upload to texture
-        std::cerr << "MediaFoundationDecoder: Software decode path not implemented" << std::endl;
+        if (renderCount <= 5 || renderCount % 100 == 0) {
+            std::cerr << "MediaFoundationDecoder::RenderFrame " << renderCount << ": software path (raw NV12)" << std::endl;
+            std::cerr.flush();
+        }
+        // Lock the buffer and render using the software path
+        BYTE* rawData = nullptr;
+        DWORD maxLength = 0;
+        DWORD currentLength = 0;
+
+        hr = buffer->Lock(&rawData, &maxLength, &currentLength);
+        if (SUCCEEDED(hr) && rawData) {
+            if (renderCount <= 5 || renderCount % 100 == 0) {
+                std::cerr << "MediaFoundationDecoder::RenderFrame " << renderCount << ": calling RenderNV12Data with " << currentLength << " bytes" << std::endl;
+                std::cerr.flush();
+            }
+            m_renderer->RenderNV12Data(rawData, currentLength, m_width, m_height);
+            buffer->Unlock();
+        } else {
+            std::cerr << "MediaFoundationDecoder: Failed to lock software decode buffer: 0x" << std::hex << hr << std::dec << std::endl;
+            std::cerr.flush();
+        }
     }
 
     buffer->Release();
+}
+
+bool MediaFoundationDecoder::RenderNV12Frame(const uint8_t* nv12Data, int dataLen, int width, int height) {
+    if (!m_renderer) {
+        // Initialize renderer if not already done
+        m_width = width;
+        m_height = height;
+
+        // Create D3D11 device if needed
+        if (!m_device) {
+            if (!CreateD3D11Device()) {
+                std::cerr << "MediaFoundationDecoder: Failed to create D3D11 device for NV12 rendering" << std::endl;
+                return false;
+            }
+        }
+
+        // Create renderer
+        m_renderer = std::make_unique<D3D11Renderer>(m_device, m_context);
+        if (!m_renderer->Initialize(width, height)) {
+            std::cerr << "MediaFoundationDecoder: Failed to initialize renderer for NV12" << std::endl;
+            m_renderer.reset();
+            return false;
+        }
+    }
+
+    // Render the raw NV12 data
+    m_renderer->RenderNV12Data(nv12Data, dataLen, width, height);
+    return true;
 }
 
 HWND MediaFoundationDecoder::GetView() const {

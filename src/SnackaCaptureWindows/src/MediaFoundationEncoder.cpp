@@ -109,7 +109,7 @@ bool MediaFoundationEncoder::Initialize(ID3D11Device* device) {
         return false;
     }
 
-    hr = m_deviceManager->ResetDevice(device, m_resetToken);
+    hr = m_deviceManager->ResetDevice(m_device.Get(), m_resetToken);
     if (FAILED(hr)) {
         std::cerr << "MediaFoundationEncoder: Failed to reset device manager: 0x"
                   << std::hex << hr << std::dec << "\n";
@@ -148,7 +148,7 @@ bool MediaFoundationEncoder::Initialize(ID3D11Device* device) {
         return false;
     }
 
-    // Create staging texture for NV12 upload
+    // Create staging texture for NV12 upload (use STAGING for CPU write access)
     D3D11_TEXTURE2D_DESC stagingDesc = {};
     stagingDesc.Width = m_width;
     stagingDesc.Height = m_height;
@@ -156,12 +156,26 @@ bool MediaFoundationEncoder::Initialize(ID3D11Device* device) {
     stagingDesc.ArraySize = 1;
     stagingDesc.Format = DXGI_FORMAT_NV12;
     stagingDesc.SampleDesc.Count = 1;
-    stagingDesc.Usage = D3D11_USAGE_DEFAULT;
-    stagingDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+    stagingDesc.Usage = D3D11_USAGE_STAGING;
+    stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+    stagingDesc.BindFlags = 0;  // No bind flags for staging textures
 
     hr = m_device->CreateTexture2D(&stagingDesc, nullptr, &m_stagingTexture);
     if (FAILED(hr)) {
         std::cerr << "MediaFoundationEncoder: Failed to create staging texture: 0x"
+                  << std::hex << hr << std::dec << "\n";
+        return false;
+    }
+
+    // Create GPU texture for encoder input (DEFAULT for GPU access)
+    D3D11_TEXTURE2D_DESC gpuDesc = stagingDesc;
+    gpuDesc.Usage = D3D11_USAGE_DEFAULT;
+    gpuDesc.CPUAccessFlags = 0;
+    gpuDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+    hr = m_device->CreateTexture2D(&gpuDesc, nullptr, &m_gpuTexture);
+    if (FAILED(hr)) {
+        std::cerr << "MediaFoundationEncoder: Failed to create GPU texture: 0x"
                   << std::hex << hr << std::dec << "\n";
         return false;
     }
@@ -245,6 +259,31 @@ bool MediaFoundationEncoder::CreateEncoder() {
         std::cerr << "MediaFoundationEncoder: Failed to activate encoder: 0x"
                   << std::hex << hr << std::dec << "\n";
         return false;
+    }
+
+    // Check if this is an async MFT and unlock it
+    ComPtr<IMFAttributes> pAttributes;
+    hr = m_encoder->GetAttributes(&pAttributes);
+    if (SUCCEEDED(hr) && pAttributes) {
+        UINT32 isAsync = 0;
+        hr = pAttributes->GetUINT32(MF_TRANSFORM_ASYNC, &isAsync);
+        if (SUCCEEDED(hr) && isAsync) {
+            m_isAsync = true;
+            std::cerr << "MediaFoundationEncoder: Async MFT detected, unlocking...\n";
+            hr = pAttributes->SetUINT32(MF_TRANSFORM_ASYNC_UNLOCK, TRUE);
+            if (FAILED(hr)) {
+                std::cerr << "MediaFoundationEncoder: Warning - Failed to unlock async MFT: 0x"
+                          << std::hex << hr << std::dec << "\n";
+            }
+
+            // Get event generator for async MFT
+            hr = m_encoder->QueryInterface(IID_PPV_ARGS(&m_eventGen));
+            if (FAILED(hr)) {
+                std::cerr << "MediaFoundationEncoder: Warning - Failed to get event generator: 0x"
+                          << std::hex << hr << std::dec << "\n";
+                m_eventGen = nullptr;
+            }
+        }
     }
 
     // Get stream IDs
@@ -356,11 +395,23 @@ bool MediaFoundationEncoder::SetOutputType() {
     hr = outputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
     if (FAILED(hr)) return false;
 
+    // Add pixel aspect ratio (1:1 for square pixels)
+    hr = MFSetAttributeRatio(outputType.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+    if (FAILED(hr)) {
+        std::cerr << "MediaFoundationEncoder: Warning - Failed to set output pixel aspect ratio\n";
+    }
+
     // H.264 Baseline profile for maximum compatibility and no B-frames
     hr = outputType->SetUINT32(MF_MT_MPEG2_PROFILE, eAVEncH264VProfile_Base);
     if (FAILED(hr)) {
         // Try without profile (some encoders don't support it)
         std::cerr << "MediaFoundationEncoder: Warning - Failed to set H.264 profile\n";
+    }
+
+    // H.264 Level 4.1 (supports up to 1080p@30fps or 720p@60fps)
+    hr = outputType->SetUINT32(MF_MT_MPEG2_LEVEL, eAVEncH264VLevel4_1);
+    if (FAILED(hr)) {
+        std::cerr << "MediaFoundationEncoder: Warning - Failed to set H.264 level\n";
     }
 
     hr = m_encoder->SetOutputType(m_outputStreamId, outputType.Get(), 0);
@@ -392,6 +443,25 @@ bool MediaFoundationEncoder::SetInputType() {
 
     hr = inputType->SetUINT32(MF_MT_INTERLACE_MODE, MFVideoInterlace_Progressive);
     if (FAILED(hr)) return false;
+
+    // Add pixel aspect ratio (1:1 for square pixels)
+    hr = MFSetAttributeRatio(inputType.Get(), MF_MT_PIXEL_ASPECT_RATIO, 1, 1);
+    if (FAILED(hr)) {
+        std::cerr << "MediaFoundationEncoder: Warning - Failed to set pixel aspect ratio\n";
+    }
+
+    // Add default stride for NV12 (Y plane stride = width)
+    hr = inputType->SetUINT32(MF_MT_DEFAULT_STRIDE, m_width);
+    if (FAILED(hr)) {
+        std::cerr << "MediaFoundationEncoder: Warning - Failed to set default stride\n";
+    }
+
+    // Add sample size for NV12 (Y plane + UV plane = width * height * 1.5)
+    UINT32 sampleSize = static_cast<UINT32>(m_width * m_height * 3 / 2);
+    hr = inputType->SetUINT32(MF_MT_SAMPLE_SIZE, sampleSize);
+    if (FAILED(hr)) {
+        std::cerr << "MediaFoundationEncoder: Warning - Failed to set sample size\n";
+    }
 
     hr = m_encoder->SetInputType(m_inputStreamId, inputType.Get(), 0);
     if (FAILED(hr)) {
@@ -463,35 +533,12 @@ bool MediaFoundationEncoder::EncodeFrame(ID3D11Texture2D* texture, int64_t times
 bool MediaFoundationEncoder::EncodeNV12(const uint8_t* nv12Data, size_t size, int64_t timestampMs) {
     if (!m_initialized) return false;
 
-    // Upload to staging texture
+    // Upload to staging texture (CPU accessible)
     D3D11_MAPPED_SUBRESOURCE mapped;
-    HRESULT hr = m_context->Map(m_stagingTexture.Get(), 0, D3D11_MAP_WRITE_DISCARD, 0, &mapped);
+    HRESULT hr = m_context->Map(m_stagingTexture.Get(), 0, D3D11_MAP_WRITE, 0, &mapped);
     if (FAILED(hr)) {
-        // Try different approach - create texture with initial data
-        std::cerr << "MediaFoundationEncoder: Map failed, creating new texture\n";
-
-        D3D11_TEXTURE2D_DESC desc = {};
-        desc.Width = m_width;
-        desc.Height = m_height;
-        desc.MipLevels = 1;
-        desc.ArraySize = 1;
-        desc.Format = DXGI_FORMAT_NV12;
-        desc.SampleDesc.Count = 1;
-        desc.Usage = D3D11_USAGE_DEFAULT;
-        desc.BindFlags = 0;
-
-        D3D11_SUBRESOURCE_DATA initData = {};
-        initData.pSysMem = nv12Data;
-        initData.SysMemPitch = m_width;
-
-        ComPtr<ID3D11Texture2D> tempTexture;
-        hr = m_device->CreateTexture2D(&desc, &initData, &tempTexture);
-        if (FAILED(hr)) {
-            std::cerr << "MediaFoundationEncoder: Failed to create temp texture\n";
-            return false;
-        }
-
-        return EncodeFrame(tempTexture.Get(), timestampMs);
+        std::cerr << "MediaFoundationEncoder: Map failed: 0x" << std::hex << hr << std::dec << "\n";
+        return false;
     }
 
     // Copy Y plane
@@ -510,84 +557,134 @@ bool MediaFoundationEncoder::EncodeNV12(const uint8_t* nv12Data, size_t size, in
 
     m_context->Unmap(m_stagingTexture.Get(), 0);
 
-    return EncodeFrame(m_stagingTexture.Get(), timestampMs);
+    // Copy from staging texture to GPU texture
+    m_context->CopyResource(m_gpuTexture.Get(), m_stagingTexture.Get());
+
+    // Encode the GPU texture
+    return EncodeFrame(m_gpuTexture.Get(), timestampMs);
 }
 
 bool MediaFoundationEncoder::ProcessOutput() {
     if (!m_encoder) return false;
 
-    while (true) {
-        DWORD status = 0;
-        MFT_OUTPUT_DATA_BUFFER outputBuffer = {};
+    // For async MFTs, we need to wait for events
+    if (m_isAsync && m_eventGen) {
+        // Try to get output events (non-blocking)
+        while (true) {
+            ComPtr<IMFMediaEvent> pEvent;
+            HRESULT hr = m_eventGen->GetEvent(MF_EVENT_FLAG_NO_WAIT, &pEvent);
 
-        // Check if we need to provide output sample
-        MFT_OUTPUT_STREAM_INFO streamInfo = {};
-        HRESULT hr = m_encoder->GetOutputStreamInfo(m_outputStreamId, &streamInfo);
+            if (hr == MF_E_NO_EVENTS_AVAILABLE) {
+                // No more events, done for now
+                return true;
+            }
+
+            if (FAILED(hr)) {
+                return true;  // No events available
+            }
+
+            MediaEventType eventType;
+            hr = pEvent->GetType(&eventType);
+            if (FAILED(hr)) continue;
+
+            if (eventType == METransformHaveOutput) {
+                // Output is available, retrieve it
+                if (!RetrieveOutput()) {
+                    return false;
+                }
+            }
+            else if (eventType == METransformNeedInput) {
+                // Ready for more input - this is just informational for us
+                return true;
+            }
+            else if (eventType == MEError) {
+                HRESULT hrStatus;
+                pEvent->GetStatus(&hrStatus);
+                std::cerr << "MediaFoundationEncoder: MFT error event: 0x"
+                          << std::hex << hrStatus << std::dec << "\n";
+                return false;
+            }
+        }
+    }
+
+    // Synchronous MFT - use regular ProcessOutput loop
+    while (true) {
+        if (!RetrieveOutput()) {
+            return true;  // No more output or error
+        }
+    }
+
+    return true;
+}
+
+bool MediaFoundationEncoder::RetrieveOutput() {
+    DWORD status = 0;
+    MFT_OUTPUT_DATA_BUFFER outputBuffer = {};
+
+    // Check if we need to provide output sample
+    MFT_OUTPUT_STREAM_INFO streamInfo = {};
+    HRESULT hr = m_encoder->GetOutputStreamInfo(m_outputStreamId, &streamInfo);
+    if (FAILED(hr)) return false;
+
+    ComPtr<IMFSample> outputSample;
+    ComPtr<IMFMediaBuffer> outputMediaBuffer;
+
+    if (!(streamInfo.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES)) {
+        // We need to allocate the output sample
+        hr = MFCreateSample(&outputSample);
         if (FAILED(hr)) return false;
 
-        ComPtr<IMFSample> outputSample;
-        ComPtr<IMFMediaBuffer> outputMediaBuffer;
+        hr = MFCreateMemoryBuffer(streamInfo.cbSize ? streamInfo.cbSize : 1024 * 1024, &outputMediaBuffer);
+        if (FAILED(hr)) return false;
 
-        if (!(streamInfo.dwFlags & MFT_OUTPUT_STREAM_PROVIDES_SAMPLES)) {
-            // We need to allocate the output sample
-            hr = MFCreateSample(&outputSample);
-            if (FAILED(hr)) return false;
+        hr = outputSample->AddBuffer(outputMediaBuffer.Get());
+        if (FAILED(hr)) return false;
 
-            hr = MFCreateMemoryBuffer(streamInfo.cbSize ? streamInfo.cbSize : 1024 * 1024, &outputMediaBuffer);
-            if (FAILED(hr)) return false;
+        outputBuffer.pSample = outputSample.Get();
+    }
 
-            hr = outputSample->AddBuffer(outputMediaBuffer.Get());
-            if (FAILED(hr)) return false;
+    outputBuffer.dwStreamID = m_outputStreamId;
 
-            outputBuffer.pSample = outputSample.Get();
-        }
+    hr = m_encoder->ProcessOutput(0, 1, &outputBuffer, &status);
 
-        outputBuffer.dwStreamID = m_outputStreamId;
+    if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
+        // No output available yet
+        return false;
+    }
 
-        hr = m_encoder->ProcessOutput(0, 1, &outputBuffer, &status);
-
-        if (hr == MF_E_TRANSFORM_NEED_MORE_INPUT) {
-            // No output available yet
-            return true;
-        }
-
-        if (FAILED(hr)) {
+    if (FAILED(hr)) {
+        if (hr != E_UNEXPECTED) {  // E_UNEXPECTED is common for async MFTs when no output ready
             std::cerr << "MediaFoundationEncoder: ProcessOutput failed: 0x"
                       << std::hex << hr << std::dec << "\n";
-            return false;
         }
+        return false;
+    }
 
-        // Get the output sample (either from our buffer or provided by encoder)
-        IMFSample* sample = outputBuffer.pSample;
-        if (!sample) continue;
+    // Get the output sample (either from our buffer or provided by encoder)
+    IMFSample* sample = outputBuffer.pSample;
+    if (!sample) return false;
 
-        // Get buffer
-        ComPtr<IMFMediaBuffer> buffer;
-        hr = sample->GetBufferByIndex(0, &buffer);
-        if (FAILED(hr)) continue;
+    // Get buffer
+    ComPtr<IMFMediaBuffer> buffer;
+    hr = sample->GetBufferByIndex(0, &buffer);
+    if (FAILED(hr)) return false;
 
-        BYTE* data = nullptr;
-        DWORD length = 0;
-        hr = buffer->Lock(&data, nullptr, &length);
-        if (FAILED(hr)) continue;
+    BYTE* data = nullptr;
+    DWORD length = 0;
+    hr = buffer->Lock(&data, nullptr, &length);
+    if (FAILED(hr)) return false;
 
-        // Check if keyframe
-        UINT32 isKeyframe = 0;
-        sample->GetUINT32(MFSampleExtension_CleanPoint, &isKeyframe);
+    // Check if keyframe
+    UINT32 isKeyframe = 0;
+    sample->GetUINT32(MFSampleExtension_CleanPoint, &isKeyframe);
 
-        // Output NAL units in AVCC format
-        OutputNalUnits(data, length, isKeyframe != 0);
+    // Output NAL units in AVCC format
+    OutputNalUnits(data, length, isKeyframe != 0);
 
-        buffer->Unlock();
+    buffer->Unlock();
 
-        // Release sample if it was provided by encoder
-        if (outputBuffer.dwStatus & MFT_OUTPUT_DATA_BUFFER_INCOMPLETE) {
-            continue;  // More output available
-        }
-
-        if (outputBuffer.pEvents) {
-            outputBuffer.pEvents->Release();
-        }
+    if (outputBuffer.pEvents) {
+        outputBuffer.pEvents->Release();
     }
 
     return true;
@@ -670,6 +767,7 @@ void MediaFoundationEncoder::Stop() {
     m_encoder.Reset();
     m_deviceManager.Reset();
     m_stagingTexture.Reset();
+    m_gpuTexture.Reset();
     m_context.Reset();
     m_device.Reset();
 

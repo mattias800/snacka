@@ -1,3 +1,4 @@
+using System.Runtime.InteropServices;
 using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
@@ -70,6 +71,36 @@ public class HardwareVideoView : NativeControlHost
 {
     private IHardwareVideoDecoder? _decoder;
 
+    // Windows API constants
+    private const int GWL_STYLE = -16;
+    private const uint WS_POPUP = 0x80000000;
+    private const uint WS_CHILD = 0x40000000;
+    private const uint WS_VISIBLE = 0x10000000;
+
+    // P/Invoke for window reparenting
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern nint SetParent(nint hWndChild, nint hWndNewParent);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int GetWindowLong(nint hWnd, int nIndex);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    private static extern int SetWindowLong(nint hWnd, int nIndex, int dwNewLong);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+    [DllImport("user32.dll", SetLastError = true)]
+    [return: MarshalAs(UnmanagedType.Bool)]
+    private static extern bool SetWindowPos(nint hWnd, nint hWndInsertAfter, int X, int Y, int cx, int cy, uint uFlags);
+
+    private const int SW_SHOW = 5;
+    private const uint SWP_NOMOVE = 0x0002;
+    private const uint SWP_NOSIZE = 0x0001;
+    private const uint SWP_NOZORDER = 0x0004;
+    private const uint SWP_FRAMECHANGED = 0x0020;
+
     public HardwareVideoView()
     {
     }
@@ -116,6 +147,38 @@ public class HardwareVideoView : NativeControlHost
             }
             else if (OperatingSystem.IsWindows())
             {
+                try
+                {
+                    // Reparent the window to become a child of Avalonia's parent
+                    Console.WriteLine($"HardwareVideoView: Reparenting window 0x{handle:X} to parent 0x{parent.Handle:X}");
+
+                    // Change window style from WS_POPUP to WS_CHILD
+                    int style = GetWindowLong(handle, GWL_STYLE);
+                    Console.WriteLine($"HardwareVideoView: Original style = 0x{style:X}");
+
+                    int newStyle = (int)(((uint)style & ~WS_POPUP) | WS_CHILD | WS_VISIBLE);
+                    int result = SetWindowLong(handle, GWL_STYLE, newStyle);
+                    int error = Marshal.GetLastWin32Error();
+                    Console.WriteLine($"HardwareVideoView: SetWindowLong returned {result}, error={error}, new style=0x{newStyle:X}");
+
+                    // Set the parent
+                    var oldParent = SetParent(handle, parent.Handle);
+                    error = Marshal.GetLastWin32Error();
+                    Console.WriteLine($"HardwareVideoView: SetParent returned 0x{oldParent:X}, error={error}");
+
+                    // Force window to update its frame and position at (0,0) within parent
+                    SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0,
+                        SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
+
+                    // Show the window
+                    ShowWindow(handle, SW_SHOW);
+                    Console.WriteLine("HardwareVideoView: Window reparenting complete");
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"HardwareVideoView: Exception during reparenting: {ex.Message}");
+                }
+
                 return new PlatformHandle(handle, "HWND");
             }
             else if (OperatingSystem.IsLinux())

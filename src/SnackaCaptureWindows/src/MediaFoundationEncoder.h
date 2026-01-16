@@ -75,6 +75,7 @@ private:
     bool SetInputType();
     bool SetOutputType();
     bool ProcessOutput();
+    bool RetrieveOutput();
     void OutputNalUnits(const uint8_t* data, size_t size, bool isKeyframe);
 
     // Configuration
@@ -85,8 +86,10 @@ private:
 
     // State
     bool m_initialized = false;
+    bool m_isAsync = false;
     int64_t m_frameCount = 0;
     const char* m_encoderName = "Unknown";
+    ComPtr<IMFMediaEventGenerator> m_eventGen;
 
     // Media Foundation objects
     ComPtr<IMFTransform> m_encoder;
@@ -96,7 +99,8 @@ private:
     // D3D11 resources
     ComPtr<ID3D11Device> m_device;
     ComPtr<ID3D11DeviceContext> m_context;
-    ComPtr<ID3D11Texture2D> m_stagingTexture;  // For CPU -> GPU upload
+    ComPtr<ID3D11Texture2D> m_stagingTexture;  // For CPU write (STAGING)
+    ComPtr<ID3D11Texture2D> m_gpuTexture;      // For GPU read (DEFAULT)
 
     // Output buffer
     std::vector<uint8_t> m_outputBuffer;

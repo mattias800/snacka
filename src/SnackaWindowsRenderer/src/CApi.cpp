@@ -2,6 +2,9 @@
 #include "MediaFoundationDecoder.h"
 #include <unordered_map>
 #include <mutex>
+#include <iostream>
+#include <sstream>
+#include <Windows.h>
 
 // Instance management
 static std::unordered_map<MFDecoderHandle, MediaFoundationDecoder*> s_instances;
@@ -56,19 +59,47 @@ SNACKA_API bool mf_decoder_initialize(
     return it->second->Initialize(width, height, spsData, spsLength, ppsData, ppsLength);
 }
 
+static void DebugLog(const char* msg) {
+    OutputDebugStringA(msg);
+    OutputDebugStringA("\n");
+    std::cerr << msg << std::endl;
+    std::cerr.flush();
+}
+
 SNACKA_API bool mf_decoder_decode_and_render(
     MFDecoderHandle handle,
     const uint8_t* nalData,
     int nalLength,
     bool isKeyframe
 ) {
-    if (!handle) return false;
+    static int apiCallCount = 0;
+    apiCallCount++;
+    if (apiCallCount <= 5 || apiCallCount % 100 == 0) {
+        std::ostringstream oss;
+        oss << "CApi::mf_decoder_decode_and_render: call " << apiCallCount
+            << ", handle=" << handle << ", len=" << nalLength;
+        DebugLog(oss.str().c_str());
+    }
+
+    if (!handle) {
+        DebugLog("CApi::mf_decoder_decode_and_render: null handle!");
+        return false;
+    }
 
     std::lock_guard<std::mutex> lock(s_mutex);
     auto it = s_instances.find(handle);
-    if (it == s_instances.end()) return false;
+    if (it == s_instances.end()) {
+        DebugLog("CApi::mf_decoder_decode_and_render: handle not found!");
+        return false;
+    }
 
-    return it->second->DecodeAndRender(nalData, nalLength, isKeyframe);
+    bool result = it->second->DecodeAndRender(nalData, nalLength, isKeyframe);
+    if (apiCallCount <= 5 || apiCallCount % 100 == 0) {
+        std::ostringstream oss;
+        oss << "CApi::mf_decoder_decode_and_render: call " << apiCallCount << " returned " << result;
+        DebugLog(oss.str().c_str());
+    }
+    return result;
 }
 
 SNACKA_API void* mf_decoder_get_view(MFDecoderHandle handle) {
@@ -97,6 +128,42 @@ SNACKA_API void mf_decoder_set_display_size(
 
 SNACKA_API bool mf_decoder_is_available() {
     return MediaFoundationDecoder::IsAvailable();
+}
+
+SNACKA_API int mf_decoder_get_output_count(MFDecoderHandle handle) {
+    if (!handle) return 0;
+
+    std::lock_guard<std::mutex> lock(s_mutex);
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return 0;
+
+    return it->second->GetOutputCount();
+}
+
+SNACKA_API int mf_decoder_get_need_input_count(MFDecoderHandle handle) {
+    if (!handle) return 0;
+
+    std::lock_guard<std::mutex> lock(s_mutex);
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return 0;
+
+    return it->second->GetNeedInputCount();
+}
+
+SNACKA_API bool mf_decoder_render_nv12_frame(
+    MFDecoderHandle handle,
+    const uint8_t* nv12Data,
+    int dataLength,
+    int width,
+    int height
+) {
+    if (!handle) return false;
+
+    std::lock_guard<std::mutex> lock(s_mutex);
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return false;
+
+    return it->second->RenderNV12Frame(nv12Data, dataLength, width, height);
 }
 
 } // extern "C"

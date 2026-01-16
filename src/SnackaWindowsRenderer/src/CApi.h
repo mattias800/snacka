@@ -61,6 +61,27 @@ SNACKA_API void mf_decoder_set_display_size(
 // Check if Media Foundation H264 decoding is available
 SNACKA_API bool mf_decoder_is_available();
 
+// Reparent the video window to a new parent HWND
+// This should be called after embedding in Avalonia NativeControlHost
+SNACKA_API void mf_decoder_set_parent(MFDecoderHandle decoder, void* parentHwnd);
+
+// Get decoder statistics for debugging
+// Returns: number of frames that produced output (rendered)
+SNACKA_API int mf_decoder_get_output_count(MFDecoderHandle decoder);
+
+// Get count of frames that needed more input (didn't produce output)
+SNACKA_API int mf_decoder_get_need_input_count(MFDecoderHandle decoder);
+
+// Render raw NV12 frame data directly (without decoding)
+// Use this when the capture tool outputs raw NV12 instead of H.264
+SNACKA_API bool mf_decoder_render_nv12_frame(
+    MFDecoderHandle decoder,
+    const uint8_t* nv12Data,
+    int dataLength,
+    int width,
+    int height
+);
+
 #ifdef __cplusplus
 }
 #endif

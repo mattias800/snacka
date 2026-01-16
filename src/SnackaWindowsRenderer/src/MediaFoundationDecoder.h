@@ -30,6 +30,9 @@ public:
     // Decode a NAL unit and render to the display
     bool DecodeAndRender(const uint8_t* nalData, int nalLen, bool isKeyframe);
 
+    // Render raw NV12 data directly (without decoding)
+    bool RenderNV12Frame(const uint8_t* nv12Data, int dataLen, int width, int height);
+
     // Get the window handle for embedding
     HWND GetView() const;
 
@@ -38,6 +41,10 @@ public:
 
     // Check if Media Foundation H.264 decoding is available
     static bool IsAvailable();
+
+    // Get decoder statistics
+    int GetOutputCount() const { return m_outputCount; }
+    int GetNeedInputCount() const { return m_needInputCount; }
 
 private:
     // Create D3D11 device
@@ -80,4 +87,8 @@ private:
     // State
     bool m_initialized = false;
     bool m_mfInitialized = false;
+
+    // Statistics
+    int m_outputCount = 0;
+    int m_needInputCount = 0;
 };

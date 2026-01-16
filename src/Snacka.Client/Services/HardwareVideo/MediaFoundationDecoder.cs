@@ -55,6 +55,12 @@ public class MediaFoundationDecoder : IHardwareVideoDecoder
     [return: MarshalAs(UnmanagedType.I1)]
     private static extern bool mf_decoder_is_available();
 
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int mf_decoder_get_output_count(nint decoder);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    private static extern int mf_decoder_get_need_input_count(nint decoder);
+
     #endregion
 
     public bool IsInitialized => _isInitialized;
@@ -132,14 +138,30 @@ public class MediaFoundationDecoder : IHardwareVideoDecoder
         return false;
     }
 
+    private static int _decodeCallCount = 0;
+
     public unsafe bool DecodeAndRender(ReadOnlySpan<byte> nalUnit, bool isKeyframe)
     {
+        _decodeCallCount++;
+
         if (!_isInitialized || _isDisposed || _handle == nint.Zero)
+        {
+            Console.WriteLine($"MediaFoundationDecoder.DecodeAndRender: not ready (init={_isInitialized}, disposed={_isDisposed}, handle={_handle})");
             return false;
+        }
 
         fixed (byte* nalPtr = nalUnit)
         {
-            return mf_decoder_decode_and_render(_handle, (nint)nalPtr, nalUnit.Length, isKeyframe);
+            bool result = mf_decoder_decode_and_render(_handle, (nint)nalPtr, nalUnit.Length, isKeyframe);
+
+            // Log stats to see if decoder is producing output
+            if (_decodeCallCount <= 5 || _decodeCallCount % 100 == 0)
+            {
+                int outputCount = mf_decoder_get_output_count(_handle);
+                int needInputCount = mf_decoder_get_need_input_count(_handle);
+                Console.WriteLine($"MediaFoundationDecoder: call {_decodeCallCount}, output={outputCount}, needInput={needInputCount}");
+            }
+            return result;
         }
     }
 

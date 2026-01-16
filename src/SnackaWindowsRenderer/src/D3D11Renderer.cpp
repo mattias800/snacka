@@ -85,6 +85,8 @@ D3D11Renderer::~D3D11Renderer() {
 }
 
 void D3D11Renderer::Cleanup() {
+    if (m_stagingTexture) { m_stagingTexture->Release(); m_stagingTexture = nullptr; }
+    if (m_gpuNV12Texture) { m_gpuNV12Texture->Release(); m_gpuNV12Texture = nullptr; }
     if (m_videoProcessor) { m_videoProcessor->Release(); m_videoProcessor = nullptr; }
     if (m_videoProcessorEnum) { m_videoProcessorEnum->Release(); m_videoProcessorEnum = nullptr; }
     if (m_videoContext) { m_videoContext->Release(); m_videoContext = nullptr; }
@@ -149,14 +151,13 @@ bool D3D11Renderer::CreateOverlayWindow(int width, int height) {
         s_windowClassRegistered = true;
     }
 
-    // Create borderless popup window
-    // WS_EX_NOACTIVATE: Don't activate when clicked (parent window stays focused)
-    // WS_EX_TRANSPARENT: Click-through (optional, can remove if interaction needed)
+    // Create window for video rendering
+    // Created as WS_POPUP | WS_VISIBLE - will be reparented by Avalonia NativeControlHost
     m_hwnd = CreateWindowExW(
-        WS_EX_NOACTIVATE,  // Extended style
+        0,
         L"SnackaVideoOverlay",
-        L"",
-        WS_POPUP | WS_VISIBLE,  // Style
+        L"Video Preview",
+        WS_POPUP | WS_VISIBLE,
         0, 0,
         width, height,
         nullptr,  // No parent initially
@@ -164,6 +165,11 @@ bool D3D11Renderer::CreateOverlayWindow(int width, int height) {
         hInstance,
         nullptr
     );
+
+    if (m_hwnd) {
+        std::cout << "D3D11Renderer: Created window HWND=0x" << std::hex << (uintptr_t)m_hwnd << std::dec
+                  << " size " << width << "x" << height << std::endl;
+    }
 
     if (!m_hwnd) {
         std::cerr << "D3D11Renderer: CreateWindowExW failed: " << GetLastError() << std::endl;
@@ -353,7 +359,16 @@ bool D3D11Renderer::CreateRenderResources() {
 }
 
 void D3D11Renderer::RenderNV12Texture(ID3D11Texture2D* texture) {
-    if (!m_renderTarget || !texture) return;
+    if (!m_renderTarget || !texture) {
+        std::cerr << "D3D11Renderer::RenderNV12Texture: null renderTarget or texture" << std::endl;
+        return;
+    }
+
+    static int frameCount = 0;
+    frameCount++;
+    if (frameCount <= 5 || frameCount % 100 == 0) {
+        std::cerr << "D3D11Renderer::RenderNV12Texture: frame " << frameCount << std::endl;
+    }
 
     // Get texture description
     D3D11_TEXTURE2D_DESC texDesc;
@@ -371,7 +386,13 @@ void D3D11Renderer::RenderNV12Texture(ID3D11Texture2D* texture) {
     ID3D11ShaderResourceView* yView = nullptr;
     HRESULT hr = m_device->CreateShaderResourceView(texture, &yViewDesc, &yView);
     if (FAILED(hr)) {
-        // Try video processor path instead
+        // NV12 textures from hardware decoder can't create SRVs directly - use video processor
+        // This is expected behavior, only log once
+        static bool loggedOnce = false;
+        if (!loggedOnce) {
+            std::cerr << "D3D11Renderer: Using video processor for NV12 conversion" << std::endl;
+            loggedOnce = true;
+        }
         RenderUsingVideoProcessor(texture);
         return;
     }
@@ -427,11 +448,25 @@ void D3D11Renderer::RenderNV12Texture(ID3D11Texture2D* texture) {
     yView->Release();
     uvView->Release();
 
-    // Present
-    m_swapChain->Present(1, 0);
+    // Present (no VSync to avoid blocking)
+    hr = m_swapChain->Present(0, 0);
+    if (FAILED(hr)) {
+        std::cerr << "D3D11Renderer: Present failed: 0x" << std::hex << hr << std::dec << std::endl;
+    } else if (!m_windowShown) {
+        // Show window after first successful present
+        ShowWindow(m_hwnd, SW_SHOW);
+        m_windowShown = true;
+        std::cout << "D3D11Renderer: Window shown after first frame" << std::endl;
+    }
 }
 
 void D3D11Renderer::RenderUsingVideoProcessor(ID3D11Texture2D* texture) {
+    static int vpFrameCount = 0;
+    vpFrameCount++;
+    if (vpFrameCount <= 5 || vpFrameCount % 100 == 0) {
+        std::cerr << "D3D11Renderer::RenderUsingVideoProcessor: frame " << vpFrameCount << std::endl;
+    }
+
     // Fallback: Use D3D11 video processor for NV12 to BGRA conversion
     if (!m_videoDevice || !m_videoContext) {
         std::cerr << "D3D11Renderer: Video processor not available" << std::endl;
@@ -453,6 +488,25 @@ void D3D11Renderer::RenderUsingVideoProcessor(ID3D11Texture2D* texture) {
 
         hr = m_videoDevice->CreateVideoProcessor(m_videoProcessorEnum, 0, &m_videoProcessor);
         if (FAILED(hr)) return;
+
+        // Set color space: input is NV12 with studio range (BT.601/709), output is full RGB
+        D3D11_VIDEO_PROCESSOR_COLOR_SPACE inputColorSpace = {};
+        inputColorSpace.Usage = 0;  // Playback
+        inputColorSpace.RGB_Range = 0;  // Not applicable for YCbCr input
+        inputColorSpace.YCbCr_Matrix = 1;  // BT.709
+        inputColorSpace.YCbCr_xvYCC = 0;  // Conventional YCbCr
+        inputColorSpace.Nominal_Range = 1;  // Studio range (16-235)
+        m_videoContext->VideoProcessorSetStreamColorSpace(m_videoProcessor, 0, &inputColorSpace);
+
+        D3D11_VIDEO_PROCESSOR_COLOR_SPACE outputColorSpace = {};
+        outputColorSpace.Usage = 0;  // Playback
+        outputColorSpace.RGB_Range = 0;  // Full range RGB (0-255)
+        outputColorSpace.YCbCr_Matrix = 1;  // BT.709
+        outputColorSpace.YCbCr_xvYCC = 0;
+        outputColorSpace.Nominal_Range = 2;  // Full range (0-255)
+        m_videoContext->VideoProcessorSetOutputColorSpace(m_videoProcessor, &outputColorSpace);
+
+        std::cout << "D3D11Renderer: Video processor configured with BT.709 studio->full range" << std::endl;
     }
 
     // Create input view
@@ -464,7 +518,10 @@ void D3D11Renderer::RenderUsingVideoProcessor(ID3D11Texture2D* texture) {
     ID3D11VideoProcessorInputView* inputView = nullptr;
     HRESULT hr = m_videoDevice->CreateVideoProcessorInputView(
         texture, m_videoProcessorEnum, &inputViewDesc, &inputView);
-    if (FAILED(hr)) return;
+    if (FAILED(hr)) {
+        std::cerr << "D3D11Renderer: CreateVideoProcessorInputView failed: 0x" << std::hex << hr << std::dec << std::endl;
+        return;
+    }
 
     // Get back buffer for output
     ID3D11Texture2D* backBuffer = nullptr;
@@ -479,6 +536,7 @@ void D3D11Renderer::RenderUsingVideoProcessor(ID3D11Texture2D* texture) {
     backBuffer->Release();
 
     if (FAILED(hr)) {
+        std::cerr << "D3D11Renderer: CreateVideoProcessorOutputView failed: 0x" << std::hex << hr << std::dec << std::endl;
         inputView->Release();
         return;
     }
@@ -489,12 +547,23 @@ void D3D11Renderer::RenderUsingVideoProcessor(ID3D11Texture2D* texture) {
     stream.pInputSurface = inputView;
 
     hr = m_videoContext->VideoProcessorBlt(m_videoProcessor, outputView, 0, 1, &stream);
+    if (FAILED(hr)) {
+        std::cerr << "D3D11Renderer: VideoProcessorBlt failed: 0x" << std::hex << hr << std::dec << std::endl;
+    }
 
     inputView->Release();
     outputView->Release();
 
-    // Present
-    m_swapChain->Present(1, 0);
+    // Present (no VSync to avoid blocking)
+    hr = m_swapChain->Present(0, 0);
+    if (FAILED(hr)) {
+        std::cerr << "D3D11Renderer: Present failed in VideoProcessor path: 0x" << std::hex << hr << std::dec << std::endl;
+    } else if (!m_windowShown) {
+        // Show window after first successful present
+        ShowWindow(m_hwnd, SW_SHOW);
+        m_windowShown = true;
+        std::cout << "D3D11Renderer: Window shown after first frame" << std::endl;
+    }
 }
 
 void D3D11Renderer::SetDisplaySize(int width, int height) {
@@ -527,4 +596,94 @@ void D3D11Renderer::SetDisplaySize(int width, int height) {
             }
         }
     }
+}
+
+void D3D11Renderer::RenderNV12Data(const uint8_t* data, int dataSize, int width, int height) {
+    if (!m_device || !m_context || !data) return;
+
+    // Expected NV12 size: width * height * 1.5
+    int expectedSize = width * height * 3 / 2;
+    if (dataSize < expectedSize) {
+        std::cerr << "D3D11Renderer: NV12 data too small (got " << dataSize << ", expected " << expectedSize << ")" << std::endl;
+        return;
+    }
+
+    // Create or recreate textures if dimensions changed
+    if (!m_stagingTexture || m_stagingWidth != width || m_stagingHeight != height) {
+        if (m_stagingTexture) {
+            m_stagingTexture->Release();
+            m_stagingTexture = nullptr;
+        }
+
+        // Create staging texture for CPU write
+        D3D11_TEXTURE2D_DESC stagingDesc = {};
+        stagingDesc.Width = width;
+        stagingDesc.Height = height;
+        stagingDesc.MipLevels = 1;
+        stagingDesc.ArraySize = 1;
+        stagingDesc.Format = DXGI_FORMAT_NV12;
+        stagingDesc.SampleDesc.Count = 1;
+        stagingDesc.Usage = D3D11_USAGE_STAGING;
+        stagingDesc.CPUAccessFlags = D3D11_CPU_ACCESS_WRITE;
+        stagingDesc.BindFlags = 0;
+
+        HRESULT hr = m_device->CreateTexture2D(&stagingDesc, nullptr, &m_stagingTexture);
+        if (FAILED(hr)) {
+            std::cerr << "D3D11Renderer: Failed to create staging texture: " << std::hex << hr << std::endl;
+            return;
+        }
+
+        // Create GPU texture for rendering
+        if (m_gpuNV12Texture) {
+            m_gpuNV12Texture->Release();
+            m_gpuNV12Texture = nullptr;
+        }
+
+        D3D11_TEXTURE2D_DESC gpuDesc = stagingDesc;
+        gpuDesc.Usage = D3D11_USAGE_DEFAULT;
+        gpuDesc.CPUAccessFlags = 0;
+        gpuDesc.BindFlags = D3D11_BIND_SHADER_RESOURCE;
+
+        hr = m_device->CreateTexture2D(&gpuDesc, nullptr, &m_gpuNV12Texture);
+        if (FAILED(hr)) {
+            std::cerr << "D3D11Renderer: Failed to create GPU NV12 texture: " << std::hex << hr << std::endl;
+            m_stagingTexture->Release();
+            m_stagingTexture = nullptr;
+            return;
+        }
+
+        m_stagingWidth = width;
+        m_stagingHeight = height;
+        std::cout << "D3D11Renderer: Created NV12 textures " << width << "x" << height << std::endl;
+    }
+
+    // Map staging texture and copy NV12 data
+    D3D11_MAPPED_SUBRESOURCE mapped;
+    HRESULT hr = m_context->Map(m_stagingTexture, 0, D3D11_MAP_WRITE, 0, &mapped);
+    if (FAILED(hr)) {
+        std::cerr << "D3D11Renderer: Failed to map staging texture: " << std::hex << hr << std::endl;
+        return;
+    }
+
+    // Copy Y plane
+    uint8_t* dst = static_cast<uint8_t*>(mapped.pData);
+    const uint8_t* srcY = data;
+    for (int y = 0; y < height; y++) {
+        memcpy(dst + y * mapped.RowPitch, srcY + y * width, width);
+    }
+
+    // Copy UV plane (height/2 rows after Y plane in the mapped memory)
+    uint8_t* dstUV = dst + mapped.RowPitch * height;
+    const uint8_t* srcUV = data + width * height;
+    for (int y = 0; y < height / 2; y++) {
+        memcpy(dstUV + y * mapped.RowPitch, srcUV + y * width, width);
+    }
+
+    m_context->Unmap(m_stagingTexture, 0);
+
+    // Copy staging to GPU texture
+    m_context->CopyResource(m_gpuNV12Texture, m_stagingTexture);
+
+    // Render the GPU texture
+    RenderNV12Texture(m_gpuNV12Texture);
 }
