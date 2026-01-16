@@ -76,14 +76,9 @@
 
   <!-- Windows native library for hardware video decoding (Media Foundation + D3D11) -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
-    <None Include="..\SnackaWindowsRenderer\build\Release\SnackaWindowsRenderer.dll"
-          Condition="Exists('..\SnackaWindowsRenderer\build\Release\SnackaWindowsRenderer.dll')">
-      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
-      <Link>SnackaWindowsRenderer.dll</Link>
-    </None>
-    <!-- Also check bin\Release path for CMake builds -->
-    <None Include="..\SnackaWindowsRenderer\build\bin\Release\SnackaWindowsRenderer.dll"
-          Condition="Exists('..\SnackaWindowsRenderer\build\bin\Release\SnackaWindowsRenderer.dll')">
+    <!-- CMake outputs to build\bin\ -->
+    <None Include="..\SnackaWindowsRenderer\build\bin\SnackaWindowsRenderer.dll"
+          Condition="Exists('..\SnackaWindowsRenderer\build\bin\SnackaWindowsRenderer.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>SnackaWindowsRenderer.dll</Link>
     </None>

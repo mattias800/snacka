@@ -65,6 +65,13 @@ SNACKA_API bool mf_decoder_is_available();
 // This should be called after embedding in Avalonia NativeControlHost
 SNACKA_API void mf_decoder_set_parent(MFDecoderHandle decoder, void* parentHwnd);
 
+// Recreate the swap chain (call after window is reparented)
+SNACKA_API bool mf_decoder_recreate_swap_chain(MFDecoderHandle decoder);
+
+// Create renderer with parent window (creates child window directly, no reparenting needed)
+// Call this from the UI thread with the Avalonia parent HWND
+SNACKA_API bool mf_decoder_create_renderer_with_parent(MFDecoderHandle decoder, void* parentHwnd);
+
 // Get decoder statistics for debugging
 // Returns: number of frames that produced output (rendered)
 SNACKA_API int mf_decoder_get_output_count(MFDecoderHandle decoder);

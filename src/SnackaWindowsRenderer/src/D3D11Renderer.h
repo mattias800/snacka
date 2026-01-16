@@ -15,8 +15,14 @@ public:
     D3D11Renderer(const D3D11Renderer&) = delete;
     D3D11Renderer& operator=(const D3D11Renderer&) = delete;
 
-    // Initialize the renderer with video dimensions
+    // Initialize the renderer with video dimensions (creates window but not swap chain)
     bool Initialize(int width, int height);
+
+    // Initialize with parent window (creates window as child, then swap chain)
+    bool InitializeWithParent(HWND parentHwnd, int width, int height);
+
+    // Initialize swap chain (call after window is reparented)
+    bool InitializeSwapChain();
 
     // Render an NV12 texture to the window
     void RenderNV12Texture(ID3D11Texture2D* texture);
@@ -30,9 +36,12 @@ public:
     // Set the display size
     void SetDisplaySize(int width, int height);
 
+    // Recreate swap chain (call after window is reparented)
+    bool RecreateSwapChain();
+
 private:
-    // Create the overlay window
-    bool CreateOverlayWindow(int width, int height);
+    // Create the overlay window (popup or child)
+    bool CreateOverlayWindow(int width, int height, HWND parentHwnd = nullptr);
 
     // Create swap chain
     bool CreateSwapChain();

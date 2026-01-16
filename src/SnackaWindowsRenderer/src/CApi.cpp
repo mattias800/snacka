@@ -166,4 +166,24 @@ SNACKA_API bool mf_decoder_render_nv12_frame(
     return it->second->RenderNV12Frame(nv12Data, dataLength, width, height);
 }
 
+SNACKA_API bool mf_decoder_recreate_swap_chain(MFDecoderHandle handle) {
+    if (!handle) return false;
+
+    std::lock_guard<std::mutex> lock(s_mutex);
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return false;
+
+    return it->second->RecreateSwapChain();
+}
+
+SNACKA_API bool mf_decoder_create_renderer_with_parent(MFDecoderHandle handle, void* parentHwnd) {
+    if (!handle) return false;
+
+    std::lock_guard<std::mutex> lock(s_mutex);
+    auto it = s_instances.find(handle);
+    if (it == s_instances.end()) return false;
+
+    return it->second->CreateRendererWithParent(static_cast<HWND>(parentHwnd));
+}
+
 } // extern "C"

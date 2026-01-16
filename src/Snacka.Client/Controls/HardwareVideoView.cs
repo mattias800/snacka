@@ -3,6 +3,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Platform;
 using Snacka.Client.Services.HardwareVideo;
+using Avalonia.Threading;
 
 namespace Snacka.Client.Controls;
 
@@ -149,34 +150,32 @@ public class HardwareVideoView : NativeControlHost
             {
                 try
                 {
-                    // Reparent the window to become a child of Avalonia's parent
-                    Console.WriteLine($"HardwareVideoView: Reparenting window 0x{handle:X} to parent 0x{parent.Handle:X}");
+                    // Create a child window directly with the parent (avoids reparenting issues)
+                    if (_decoder is MediaFoundationDecoder mfDecoder)
+                    {
+                        Console.WriteLine($"HardwareVideoView: Creating child window with parent 0x{parent.Handle:X}");
+                        bool success = mfDecoder.CreateRendererWithParent(parent.Handle);
+                        Console.WriteLine($"HardwareVideoView: CreateRendererWithParent result: {success}");
 
-                    // Change window style from WS_POPUP to WS_CHILD
-                    int style = GetWindowLong(handle, GWL_STYLE);
-                    Console.WriteLine($"HardwareVideoView: Original style = 0x{style:X}");
+                        if (success)
+                        {
+                            // Get the new child window handle
+                            var newHandle = mfDecoder.NativeViewHandle;
+                            Console.WriteLine($"HardwareVideoView: New child window handle = 0x{newHandle:X}");
 
-                    int newStyle = (int)(((uint)style & ~WS_POPUP) | WS_CHILD | WS_VISIBLE);
-                    int result = SetWindowLong(handle, GWL_STYLE, newStyle);
-                    int error = Marshal.GetLastWin32Error();
-                    Console.WriteLine($"HardwareVideoView: SetWindowLong returned {result}, error={error}, new style=0x{newStyle:X}");
+                            if (newHandle != nint.Zero)
+                            {
+                                return new PlatformHandle(newHandle, "HWND");
+                            }
+                        }
+                    }
 
-                    // Set the parent
-                    var oldParent = SetParent(handle, parent.Handle);
-                    error = Marshal.GetLastWin32Error();
-                    Console.WriteLine($"HardwareVideoView: SetParent returned 0x{oldParent:X}, error={error}");
-
-                    // Force window to update its frame and position at (0,0) within parent
-                    SetWindowPos(handle, IntPtr.Zero, 0, 0, 0, 0,
-                        SWP_NOSIZE | SWP_NOZORDER | SWP_FRAMECHANGED);
-
-                    // Show the window
-                    ShowWindow(handle, SW_SHOW);
-                    Console.WriteLine("HardwareVideoView: Window reparenting complete");
+                    // Fallback: use original handle if CreateRendererWithParent failed
+                    Console.WriteLine($"HardwareVideoView: Falling back to original handle 0x{handle:X}");
                 }
                 catch (Exception ex)
                 {
-                    Console.WriteLine($"HardwareVideoView: Exception during reparenting: {ex.Message}");
+                    Console.WriteLine($"HardwareVideoView: Exception: {ex.Message}");
                 }
 
                 return new PlatformHandle(handle, "HWND");

@@ -61,6 +61,14 @@ public class MediaFoundationDecoder : IHardwareVideoDecoder
     [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
     private static extern int mf_decoder_get_need_input_count(nint decoder);
 
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool mf_decoder_recreate_swap_chain(nint decoder);
+
+    [DllImport(LibraryName, CallingConvention = CallingConvention.Cdecl)]
+    [return: MarshalAs(UnmanagedType.I1)]
+    private static extern bool mf_decoder_create_renderer_with_parent(nint decoder, nint parentHwnd);
+
     #endregion
 
     public bool IsInitialized => _isInitialized;
@@ -177,6 +185,31 @@ public class MediaFoundationDecoder : IHardwareVideoDecoder
     {
         // Windows native view re-parenting is handled by the system
         // No explicit detach needed
+    }
+
+    /// <summary>
+    /// Recreates the swap chain. Call after the window is reparented.
+    /// </summary>
+    public bool RecreateSwapChain()
+    {
+        if (_handle != nint.Zero)
+        {
+            return mf_decoder_recreate_swap_chain(_handle);
+        }
+        return false;
+    }
+
+    /// <summary>
+    /// Creates the renderer with a parent window. Call from UI thread to create child window directly.
+    /// This avoids the need for window reparenting which can cause threading issues.
+    /// </summary>
+    public bool CreateRendererWithParent(nint parentHwnd)
+    {
+        if (_handle != nint.Zero)
+        {
+            return mf_decoder_create_renderer_with_parent(_handle, parentHwnd);
+        }
+        return false;
     }
 
     public void Dispose()

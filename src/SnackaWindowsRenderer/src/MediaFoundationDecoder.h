@@ -39,6 +39,12 @@ public:
     // Set the display size
     void SetDisplaySize(int width, int height);
 
+    // Recreate swap chain (call after window is reparented)
+    bool RecreateSwapChain();
+
+    // Create renderer with parent window (call from UI thread to create child window directly)
+    bool CreateRendererWithParent(HWND parentHwnd);
+
     // Check if Media Foundation H.264 decoding is available
     static bool IsAvailable();
 

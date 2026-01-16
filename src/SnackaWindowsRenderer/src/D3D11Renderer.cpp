@@ -110,9 +110,46 @@ bool D3D11Renderer::Initialize(int width, int height) {
     m_width = width;
     m_height = height;
 
-    if (!CreateOverlayWindow(width, height)) {
+    if (!CreateOverlayWindow(width, height, nullptr)) {
         std::cerr << "D3D11Renderer: Failed to create overlay window" << std::endl;
         return false;
+    }
+
+    // Don't create swap chain here - wait until window is reparented
+    // InitializeSwapChain() will be called after reparenting
+
+    std::cout << "D3D11Renderer: Initialized " << width << "x" << height << " (swap chain pending)" << std::endl;
+    return true;
+}
+
+bool D3D11Renderer::InitializeWithParent(HWND parentHwnd, int width, int height) {
+    m_width = width;
+    m_height = height;
+
+    if (!CreateOverlayWindow(width, height, parentHwnd)) {
+        std::cerr << "D3D11Renderer: Failed to create child window" << std::endl;
+        return false;
+    }
+
+    // Create swap chain immediately since window is already a child
+    if (!CreateSwapChain()) {
+        std::cerr << "D3D11Renderer: Failed to create swap chain" << std::endl;
+        return false;
+    }
+
+    if (!CreateRenderResources()) {
+        std::cerr << "D3D11Renderer: Failed to create render resources" << std::endl;
+        return false;
+    }
+
+    std::cout << "D3D11Renderer: Initialized with parent " << width << "x" << height << std::endl;
+    return true;
+}
+
+bool D3D11Renderer::InitializeSwapChain() {
+    if (m_swapChain) {
+        std::cout << "D3D11Renderer: Swap chain already exists" << std::endl;
+        return true;
     }
 
     if (!CreateSwapChain()) {
@@ -125,11 +162,11 @@ bool D3D11Renderer::Initialize(int width, int height) {
         return false;
     }
 
-    std::cout << "D3D11Renderer: Initialized " << width << "x" << height << std::endl;
+    std::cout << "D3D11Renderer: Swap chain initialized" << std::endl;
     return true;
 }
 
-bool D3D11Renderer::CreateOverlayWindow(int width, int height) {
+bool D3D11Renderer::CreateOverlayWindow(int width, int height, HWND parentHwnd) {
     HINSTANCE hInstance = GetModuleHandle(nullptr);
 
     // Register window class if not already done
@@ -152,23 +189,30 @@ bool D3D11Renderer::CreateOverlayWindow(int width, int height) {
     }
 
     // Create window for video rendering
-    // Created as WS_POPUP | WS_VISIBLE - will be reparented by Avalonia NativeControlHost
+    // If parent is provided, create as child window; otherwise create as popup
+    DWORD style = parentHwnd ? (WS_CHILD | WS_VISIBLE) : (WS_POPUP | WS_VISIBLE);
+
     m_hwnd = CreateWindowExW(
         0,
         L"SnackaVideoOverlay",
         L"Video Preview",
-        WS_POPUP | WS_VISIBLE,
+        style,
         0, 0,
         width, height,
-        nullptr,  // No parent initially
+        parentHwnd,
         nullptr,
         hInstance,
         nullptr
     );
 
     if (m_hwnd) {
-        std::cout << "D3D11Renderer: Created window HWND=0x" << std::hex << (uintptr_t)m_hwnd << std::dec
-                  << " size " << width << "x" << height << std::endl;
+        std::cout << "D3D11Renderer: Created " << (parentHwnd ? "child" : "popup")
+                  << " window HWND=0x" << std::hex << (uintptr_t)m_hwnd << std::dec
+                  << " size " << width << "x" << height;
+        if (parentHwnd) {
+            std::cout << " parent=0x" << std::hex << (uintptr_t)parentHwnd << std::dec;
+        }
+        std::cout << std::endl;
     }
 
     if (!m_hwnd) {
@@ -359,6 +403,16 @@ bool D3D11Renderer::CreateRenderResources() {
 }
 
 void D3D11Renderer::RenderNV12Texture(ID3D11Texture2D* texture) {
+    // Skip rendering until swap chain is created (after window reparenting)
+    if (!m_swapChain) {
+        static int skippedFrames = 0;
+        skippedFrames++;
+        if (skippedFrames <= 5 || skippedFrames % 100 == 0) {
+            std::cerr << "D3D11Renderer::RenderNV12Texture: skipping frame " << skippedFrames << " (no swap chain yet)" << std::endl;
+        }
+        return;
+    }
+
     if (!m_renderTarget || !texture) {
         std::cerr << "D3D11Renderer::RenderNV12Texture: null renderTarget or texture" << std::endl;
         return;
@@ -564,6 +618,40 @@ void D3D11Renderer::RenderUsingVideoProcessor(ID3D11Texture2D* texture) {
         m_windowShown = true;
         std::cout << "D3D11Renderer: Window shown after first frame" << std::endl;
     }
+    // Note: Message pump is in RenderNV12Texture, not duplicated here
+}
+
+bool D3D11Renderer::RecreateSwapChain() {
+    std::cout << "D3D11Renderer: Recreating swap chain after reparent" << std::endl;
+
+    // Release old swap chain resources
+    if (m_renderTarget) {
+        m_renderTarget->Release();
+        m_renderTarget = nullptr;
+    }
+    if (m_swapChain) {
+        m_swapChain->Release();
+        m_swapChain = nullptr;
+    }
+
+    // Release video processor (will be recreated on next use)
+    if (m_videoProcessor) {
+        m_videoProcessor->Release();
+        m_videoProcessor = nullptr;
+    }
+    if (m_videoProcessorEnum) {
+        m_videoProcessorEnum->Release();
+        m_videoProcessorEnum = nullptr;
+    }
+
+    // Recreate swap chain
+    if (!CreateSwapChain()) {
+        std::cerr << "D3D11Renderer: Failed to recreate swap chain" << std::endl;
+        return false;
+    }
+
+    std::cout << "D3D11Renderer: Swap chain recreated successfully" << std::endl;
+    return true;
 }
 
 void D3D11Renderer::SetDisplaySize(int width, int height) {

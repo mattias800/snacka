@@ -610,3 +610,35 @@ void MediaFoundationDecoder::SetDisplaySize(int width, int height) {
         m_renderer->SetDisplaySize(width, height);
     }
 }
+
+bool MediaFoundationDecoder::RecreateSwapChain() {
+    if (m_renderer) {
+        return m_renderer->RecreateSwapChain();
+    }
+    return false;
+}
+
+bool MediaFoundationDecoder::CreateRendererWithParent(HWND parentHwnd) {
+    if (!m_device || !m_context) {
+        std::cerr << "MediaFoundationDecoder::CreateRendererWithParent: No D3D11 device" << std::endl;
+        return false;
+    }
+
+    // If renderer already exists with a window, clean it up
+    if (m_renderer) {
+        std::cout << "MediaFoundationDecoder::CreateRendererWithParent: Replacing existing renderer" << std::endl;
+        m_renderer.reset();
+    }
+
+    // Create new renderer with parent window
+    m_renderer = std::make_unique<D3D11Renderer>(m_device, m_context);
+    if (!m_renderer->InitializeWithParent(parentHwnd, m_width, m_height)) {
+        std::cerr << "MediaFoundationDecoder::CreateRendererWithParent: Failed to initialize renderer" << std::endl;
+        m_renderer.reset();
+        return false;
+    }
+
+    std::cout << "MediaFoundationDecoder::CreateRendererWithParent: Created renderer with parent 0x"
+              << std::hex << (uintptr_t)parentHwnd << std::dec << std::endl;
+    return true;
+}
