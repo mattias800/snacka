@@ -333,16 +333,20 @@ Send over WebRTC DataChannel for lowest latency:
   - [x] D-pad/hat switch visualization
 - [x] Custom converters: `AxisToPositionConverter`, `BoolToButtonColorConverter`, `HatToDPadConverter`
 
+#### Network Transport ✅ COMPLETE
+- [x] Define `ControllerStateMessage` protocol (`Snacka.Shared/Models/ControllerStreaming.cs`)
+- [x] Add SignalR hub methods for controller streaming (`SnackaHub.cs`)
+- [x] Client services: `ControllerStreamingService` (guest), `ControllerHostService` (host)
+- [x] Access control: Request/Accept/Decline/Stop controller access flow
+- [x] Controller state logged to host stdout (for debugging/Phase 1)
+- [x] UI: "Share Controller" button on screen share tiles
+- [ ] UI: Accept/reject controller share request dialog on host
+
 #### Virtual Controller (Host Side) - NOT STARTED
 - [ ] Create `IVirtualControllerService` interface
 - [ ] Implement `WindowsVirtualControllerService` using ViGEm.NET
 - [ ] Implement `LinuxVirtualControllerService` using uinput P/Invoke
-
-#### Network Transport - NOT STARTED
-- [ ] Define `ControllerStateMessage` protocol
-- [ ] Add WebRTC DataChannel for controller data
-- [ ] UI: "Share Controller" button during screen share viewing
-- [ ] UI: Accept/reject controller share request on host
+- [ ] Feed received `ControllerStateMessage` to virtual controller
 
 ### Phase 2: Android Guest Support
 - [ ] Implement `AndroidControllerInputService` using Game Controller API
@@ -367,6 +371,9 @@ Send over WebRTC DataChannel for lowest latency:
 - [ ] Latency compensation and interpolation
 - [ ] Controller disconnect/reconnect handling
 - [ ] Controller type auto-detection and mapping
+- [ ] **Mute/pause controller inputs**: Allow host to temporarily disable a guest's controller
+      inputs without ending the session (e.g., host needs to go AFK). UI location TBD -
+      possibly in voice channel participant list or a dedicated controller session panel.
 
 ---
 
@@ -510,5 +517,5 @@ public record ControllerInfo(
 
 ---
 
-**Last Updated:** 2026-01-12
-**Status:** ~30% - Input capture complete (HIDSharp, settings UI, test visualization). Network transport and virtual controller creation not started.
+**Last Updated:** 2026-01-16
+**Status:** ~60% - Input capture complete, network transport complete (SignalR-based access control, state streaming, stdout logging). Virtual controller creation not started. Missing: host UI for accept/decline, virtual controller drivers (ViGEm/uinput).
