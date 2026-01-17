@@ -104,6 +104,14 @@ public interface IApiClient
 
     // WebRTC
     Task<ApiResult<IceServersResponse>> GetIceServersAsync();
+
+    // Notifications
+    Task<ApiResult<List<NotificationResponse>>> GetNotificationsAsync(int skip = 0, int take = 50, bool includeRead = true);
+    Task<ApiResult<NotificationCountResponse>> GetUnreadNotificationCountAsync();
+    Task<ApiResult<bool>> MarkNotificationAsReadAsync(Guid notificationId);
+    Task<ApiResult<bool>> MarkAllNotificationsAsReadAsync();
+    Task<ApiResult<bool>> DismissNotificationAsync(Guid notificationId);
+    Task<ApiResult<bool>> DismissAllNotificationsAsync();
 }
 
 /// <summary>

@@ -18,17 +18,24 @@ public sealed partial class AuthService : IAuthService
     private readonly JwtSettings _jwtSettings;
     private readonly IServerInviteService _inviteService;
     private readonly ICommunityService _communityService;
+    private readonly INotificationService _notificationService;
 
     // SECURITY: Password complexity regex - requires uppercase, lowercase, digit, and special character
     [GeneratedRegex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;':"",./<>?\\`~]).{8,}$")]
     private static partial Regex PasswordComplexityRegex();
 
-    public AuthService(SnackaDbContext db, IOptions<JwtSettings> jwtSettings, IServerInviteService inviteService, ICommunityService communityService)
+    public AuthService(
+        SnackaDbContext db,
+        IOptions<JwtSettings> jwtSettings,
+        IServerInviteService inviteService,
+        ICommunityService communityService,
+        INotificationService notificationService)
     {
         _db = db;
         _jwtSettings = jwtSettings.Value;
         _inviteService = inviteService;
         _communityService = communityService;
+        _notificationService = notificationService;
     }
 
     /// <summary>
@@ -85,6 +92,19 @@ public sealed partial class AuthService : IAuthService
 
         _db.Users.Add(user);
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Notify admins about new user registration (skip for first user since they become the admin)
+        if (!isFirstUser)
+        {
+            await _notificationService.CreateNotificationsForAdminsAsync(
+                NotificationType.UserJoinedServer,
+                "New user registered",
+                $"{user.Username} has joined the server",
+                payload: new { UserId = user.Id, Username = user.Username },
+                actorId: user.Id,
+                excludeUserId: user.Id,
+                cancellationToken: cancellationToken);
+        }
 
         // Create default community for first user (server setup)
         if (isFirstUser)

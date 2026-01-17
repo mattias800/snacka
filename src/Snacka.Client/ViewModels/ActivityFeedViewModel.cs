@@ -52,7 +52,8 @@ public record ActivityItem(
     string? ChannelName = null,
     Guid? MessageId = null,
     Guid? InviteId = null,
-    bool IsRead = false
+    bool IsRead = false,
+    Guid? NotificationId = null  // Server-side notification ID for API calls
 )
 {
     /// <summary>
@@ -122,16 +123,17 @@ public class ActivityFeedViewModel : ViewModelBase
         _onOpenDm = onOpenDm;
 
         // Commands
-        MarkAllAsReadCommand = ReactiveCommand.Create(MarkAllAsRead);
-        ClearAllCommand = ReactiveCommand.Create(ClearAll);
+        MarkAllAsReadCommand = ReactiveCommand.CreateFromTask(MarkAllAsReadAsync);
+        ClearAllCommand = ReactiveCommand.CreateFromTask(ClearAllAsync);
         AcceptInviteCommand = ReactiveCommand.CreateFromTask<ActivityItem>(AcceptInviteAsync);
         DeclineInviteCommand = ReactiveCommand.CreateFromTask<ActivityItem>(DeclineInviteAsync);
-        ActivityClickedCommand = ReactiveCommand.Create<ActivityItem>(OnActivityClicked);
+        ActivityClickedCommand = ReactiveCommand.CreateFromTask<ActivityItem>(OnActivityClickedAsync);
+        DismissActivityCommand = ReactiveCommand.CreateFromTask<ActivityItem>(DismissActivityAsync);
 
         SetupSignalRHandlers();
 
-        // Load pending invites on startup
-        _ = LoadPendingInvitesAsync();
+        // Load notifications and pending invites on startup
+        _ = LoadNotificationsAsync();
     }
 
     // Commands
@@ -140,6 +142,7 @@ public class ActivityFeedViewModel : ViewModelBase
     public ReactiveCommand<ActivityItem, Unit> AcceptInviteCommand { get; }
     public ReactiveCommand<ActivityItem, Unit> DeclineInviteCommand { get; }
     public ReactiveCommand<ActivityItem, Unit> ActivityClickedCommand { get; }
+    public ReactiveCommand<ActivityItem, Unit> DismissActivityCommand { get; }
 
     public ObservableCollection<ActivityItem> Activities => _activities;
 
@@ -248,10 +251,118 @@ public class ActivityFeedViewModel : ViewModelBase
                 InviteId: e.InviteId
             ));
         });
+
+        // Real-time notification received
+        _signalR.NotificationReceived += notification => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            var activity = NotificationToActivityItem(notification);
+            if (activity is not null)
+            {
+                AddActivity(activity);
+            }
+        });
+
+        // Pending notifications received on connect
+        _signalR.PendingNotificationsReceived += notifications => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        {
+            foreach (var notification in notifications)
+            {
+                // Only add if not already present
+                if (!_activities.Any(a => a.NotificationId == notification.Id))
+                {
+                    var activity = NotificationToActivityItem(notification);
+                    if (activity is not null)
+                    {
+                        AddActivity(activity);
+                    }
+                }
+            }
+        });
     }
 
     /// <summary>
-    /// Loads pending invites from the API and adds them to the activity feed.
+    /// Converts a NotificationResponse to an ActivityItem.
+    /// </summary>
+    private static ActivityItem? NotificationToActivityItem(NotificationResponse notification)
+    {
+        var activityType = notification.Type switch
+        {
+            "UserJoinedServer" => ActivityType.UserJoinedServer,
+            "UserJoinedCommunity" => ActivityType.UserJoinedCommunity,
+            "UserLeft" => ActivityType.UserLeft,
+            "Mention" => ActivityType.Mention,
+            "DirectMessage" => ActivityType.DirectMessage,
+            "ChannelMessage" => ActivityType.ChannelMessage,
+            "CommunityInvite" => ActivityType.CommunityInvite,
+            "ThreadReply" => ActivityType.ThreadReply,
+            _ => (ActivityType?)null
+        };
+
+        if (activityType is null)
+        {
+            Console.WriteLine($"Unknown notification type: {notification.Type}");
+            return null;
+        }
+
+        return new ActivityItem(
+            Guid.NewGuid(),
+            activityType.Value,
+            notification.CreatedAt,
+            notification.Title,
+            notification.Description,
+            UserId: notification.ActorId,
+            Username: notification.ActorUsername,
+            CommunityId: notification.CommunityId,
+            CommunityName: notification.CommunityName,
+            ChannelId: notification.ChannelId,
+            ChannelName: notification.ChannelName,
+            IsRead: notification.IsRead,
+            NotificationId: notification.Id
+        );
+    }
+
+    /// <summary>
+    /// Loads notifications from the API and adds them to the activity feed.
+    /// </summary>
+    private async Task LoadNotificationsAsync()
+    {
+        try
+        {
+            IsLoading = true;
+
+            // Load notifications from API
+            var result = await _apiClient.GetNotificationsAsync(skip: 0, take: 50, includeRead: false);
+            if (result.Success && result.Data is not null)
+            {
+                foreach (var notification in result.Data)
+                {
+                    // Check if this notification is already in the feed
+                    if (!_activities.Any(a => a.NotificationId == notification.Id))
+                    {
+                        var activity = NotificationToActivityItem(notification);
+                        if (activity is not null)
+                        {
+                            AddActivity(activity);
+                        }
+                    }
+                }
+            }
+
+            // Also load pending invites (they may not be in notifications yet)
+            await LoadPendingInvitesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error loading notifications: {ex.Message}");
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    /// <summary>
+    /// Loads pending community invites from the API.
     /// </summary>
     private async Task LoadPendingInvitesAsync()
     {
@@ -366,8 +477,23 @@ public class ActivityFeedViewModel : ViewModelBase
     /// <summary>
     /// Marks all activities as read.
     /// </summary>
-    public void MarkAllAsRead()
+    private async Task MarkAllAsReadAsync()
     {
+        // Mark all as read via API
+        try
+        {
+            var result = await _apiClient.MarkAllNotificationsAsReadAsync();
+            if (!result.Success)
+            {
+                Console.WriteLine($"Failed to mark all notifications as read: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error marking all notifications as read: {ex.Message}");
+        }
+
+        // Update local state
         for (int i = 0; i < _activities.Count; i++)
         {
             if (!_activities[i].IsRead)
@@ -380,10 +506,25 @@ public class ActivityFeedViewModel : ViewModelBase
     }
 
     /// <summary>
-    /// Clears all activities.
+    /// Clears all activities (dismisses all notifications).
     /// </summary>
-    public void ClearAll()
+    private async Task ClearAllAsync()
     {
+        // Dismiss all via API
+        try
+        {
+            var result = await _apiClient.DismissAllNotificationsAsync();
+            if (!result.Success)
+            {
+                Console.WriteLine($"Failed to dismiss all notifications: {result.Error}");
+            }
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Error dismissing all notifications: {ex.Message}");
+        }
+
+        // Clear local state
         _activities.Clear();
         this.RaisePropertyChanged(nameof(UnreadCount));
         this.RaisePropertyChanged(nameof(HasUnread));
@@ -392,10 +533,10 @@ public class ActivityFeedViewModel : ViewModelBase
     /// <summary>
     /// Handles clicking on an activity item.
     /// </summary>
-    private void OnActivityClicked(ActivityItem activity)
+    private async Task OnActivityClickedAsync(ActivityItem activity)
     {
         // Mark as read
-        MarkActivityAsRead(activity);
+        await MarkActivityAsReadAsync(activity);
 
         // Navigate based on activity type
         switch (activity.Type)
@@ -413,14 +554,60 @@ public class ActivityFeedViewModel : ViewModelBase
     /// <summary>
     /// Marks a specific activity as read.
     /// </summary>
-    public void MarkActivityAsRead(ActivityItem activity)
+    private async Task MarkActivityAsReadAsync(ActivityItem activity)
     {
         var index = _activities.IndexOf(activity);
         if (index >= 0 && !activity.IsRead)
         {
+            // Mark as read via API if it has a notification ID
+            if (activity.NotificationId.HasValue)
+            {
+                try
+                {
+                    var result = await _apiClient.MarkNotificationAsReadAsync(activity.NotificationId.Value);
+                    if (!result.Success)
+                    {
+                        Console.WriteLine($"Failed to mark notification as read: {result.Error}");
+                    }
+                }
+                catch (Exception ex)
+                {
+                    Console.WriteLine($"Error marking notification as read: {ex.Message}");
+                }
+            }
+
+            // Update local state
             _activities[index] = activity with { IsRead = true };
             this.RaisePropertyChanged(nameof(UnreadCount));
             this.RaisePropertyChanged(nameof(HasUnread));
         }
+    }
+
+    /// <summary>
+    /// Dismisses (removes) a specific activity.
+    /// </summary>
+    private async Task DismissActivityAsync(ActivityItem activity)
+    {
+        // Dismiss via API if it has a notification ID
+        if (activity.NotificationId.HasValue)
+        {
+            try
+            {
+                var result = await _apiClient.DismissNotificationAsync(activity.NotificationId.Value);
+                if (!result.Success)
+                {
+                    Console.WriteLine($"Failed to dismiss notification: {result.Error}");
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"Error dismissing notification: {ex.Message}");
+            }
+        }
+
+        // Remove from local state
+        _activities.Remove(activity);
+        this.RaisePropertyChanged(nameof(UnreadCount));
+        this.RaisePropertyChanged(nameof(HasUnread));
     }
 }

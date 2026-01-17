@@ -122,7 +122,7 @@ public class CommunityServiceTests
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
         var communityService = new CommunityService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
         await memberService.JoinCommunityAsync(community.Id, member.Id);
 
@@ -163,7 +163,7 @@ public class CommunityServiceTests
         var member = await CreateTestUserAsync(db, "member");
         var communityService = new CommunityService(db);
         var channelService = new ChannelService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
         await memberService.JoinCommunityAsync(community.Id, member.Id);
 
@@ -293,7 +293,7 @@ public class CommunityServiceTests
         var communityService = new CommunityService(db);
         var channelService = new ChannelService(db);
         var messageService = new MessageService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(author.Id, new CreateCommunityRequest("Test", null));
         await memberService.JoinCommunityAsync(community.Id, other.Id);
         var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
@@ -337,7 +337,7 @@ public class CommunityServiceTests
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
         var communityService = new CommunityService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
 
         // Act
@@ -357,7 +357,7 @@ public class CommunityServiceTests
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
         var communityService = new CommunityService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
         await memberService.JoinCommunityAsync(community.Id, member.Id);
 
@@ -375,7 +375,7 @@ public class CommunityServiceTests
         var owner = await CreateTestUserAsync(db, "owner");
         var member = await CreateTestUserAsync(db, "member");
         var communityService = new CommunityService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
         await memberService.JoinCommunityAsync(community.Id, member.Id);
 
@@ -393,7 +393,7 @@ public class CommunityServiceTests
         using var db = TestDbContextFactory.Create();
         var owner = await CreateTestUserAsync(db);
         var communityService = new CommunityService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
 
         // Act & Assert
@@ -411,7 +411,7 @@ public class CommunityServiceTests
         var member1 = await CreateTestUserAsync(db, "member1");
         var member2 = await CreateTestUserAsync(db, "member2");
         var communityService = new CommunityService(db);
-        var memberService = new CommunityMemberService(db);
+        var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(owner.Id, new CreateCommunityRequest("Test", null));
         await memberService.JoinCommunityAsync(community.Id, member1.Id);
         await memberService.JoinCommunityAsync(community.Id, member2.Id);

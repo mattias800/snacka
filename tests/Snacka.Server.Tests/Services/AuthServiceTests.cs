@@ -20,7 +20,8 @@ public class AuthServiceTests
     {
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService);
+        var notificationService = new NullNotificationService();
+        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
 
         // Create a test invite code
         var invite = await inviteService.CreateInviteAsync(null, maxUses: 0);
@@ -69,7 +70,8 @@ public class AuthServiceTests
         using var db = TestDbContextFactory.Create();
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService);
+        var notificationService = new NullNotificationService();
+        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
 
         var invite1 = await inviteService.CreateInviteAsync(null, maxUses: 0);
         var invite2 = await inviteService.CreateInviteAsync(null, maxUses: 0);
@@ -105,7 +107,8 @@ public class AuthServiceTests
         using var db = TestDbContextFactory.Create();
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService);
+        var notificationService = new NullNotificationService();
+        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
         var invite1 = await inviteService.CreateInviteAsync(null);
         var invite2 = await inviteService.CreateInviteAsync(null);
         await service.RegisterAsync(new RegisterRequest("user1", "duplicate@example.com", "Password123!", invite1.Code));
@@ -123,7 +126,8 @@ public class AuthServiceTests
         using var db = TestDbContextFactory.Create();
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService);
+        var notificationService = new NullNotificationService();
+        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
         var invite1 = await inviteService.CreateInviteAsync(null);
         var invite2 = await inviteService.CreateInviteAsync(null);
         await service.RegisterAsync(new RegisterRequest("duplicateuser", "user1@example.com", "Password123!", invite1.Code));
@@ -236,7 +240,8 @@ public class AuthServiceTests
         using var db = TestDbContextFactory.Create();
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService);
+        var notificationService = new NullNotificationService();
+        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
         var invite1 = await inviteService.CreateInviteAsync(null);
         var invite2 = await inviteService.CreateInviteAsync(null);
         await service.RegisterAsync(new RegisterRequest("existinguser", "existing@example.com", "Password123!", invite1.Code));

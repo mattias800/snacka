@@ -19,6 +19,7 @@ public sealed class SnackaDbContext : DbContext
     public DbSet<MessageReaction> MessageReactions => Set<MessageReaction>();
     public DbSet<MessageAttachment> MessageAttachments => Set<MessageAttachment>();
     public DbSet<CommunityInvite> CommunityInvites => Set<CommunityInvite>();
+    public DbSet<Notification> Notifications => Set<Notification>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -224,5 +225,37 @@ public sealed class SnackaDbContext : DbContext
         // Prevent duplicate pending invites for the same user to the same community
         modelBuilder.Entity<CommunityInvite>()
             .HasIndex(ci => new { ci.CommunityId, ci.InvitedUserId, ci.Status });
+
+        // Notification configuration
+        modelBuilder.Entity<Notification>()
+            .HasKey(n => n.Id);
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.Recipient)
+            .WithMany()
+            .HasForeignKey(n => n.RecipientId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.Actor)
+            .WithMany()
+            .HasForeignKey(n => n.ActorId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.Community)
+            .WithMany()
+            .HasForeignKey(n => n.CommunityId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<Notification>()
+            .HasOne(n => n.Channel)
+            .WithMany()
+            .HasForeignKey(n => n.ChannelId)
+            .OnDelete(DeleteBehavior.Cascade);
+        // Index for efficient notification queries (main query pattern)
+        modelBuilder.Entity<Notification>()
+            .HasIndex(n => new { n.RecipientId, n.IsDismissed, n.CreatedAt })
+            .HasDatabaseName("IX_Notifications_Recipient_NotDismissed_Date");
+        // Index for unread count queries
+        modelBuilder.Entity<Notification>()
+            .HasIndex(n => new { n.RecipientId, n.IsRead, n.IsDismissed })
+            .HasDatabaseName("IX_Notifications_Recipient_Unread");
     }
 }

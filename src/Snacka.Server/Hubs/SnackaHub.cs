@@ -19,17 +19,25 @@ public class SnackaHub : Hub
     private readonly IVoiceService _voiceService;
     private readonly ISfuService _sfuService;
     private readonly IHubContext<SnackaHub> _hubContext;
+    private readonly INotificationService _notificationService;
     private readonly ILogger<SnackaHub> _logger;
     private static readonly Dictionary<string, Guid> ConnectedUsers = new();
     private static readonly Dictionary<Guid, string> UserConnections = new(); // UserId -> ConnectionId
     private static readonly object Lock = new();
 
-    public SnackaHub(SnackaDbContext db, IVoiceService voiceService, ISfuService sfuService, IHubContext<SnackaHub> hubContext, ILogger<SnackaHub> logger)
+    public SnackaHub(
+        SnackaDbContext db,
+        IVoiceService voiceService,
+        ISfuService sfuService,
+        IHubContext<SnackaHub> hubContext,
+        INotificationService notificationService,
+        ILogger<SnackaHub> logger)
     {
         _db = db;
         _voiceService = voiceService;
         _sfuService = sfuService;
         _hubContext = hubContext;
+        _notificationService = notificationService;
         _logger = logger;
     }
 
@@ -73,6 +81,17 @@ public class SnackaHub : Hub
                 }
 
                 _logger.LogInformation("User {Username} connected, added to {Count} community groups", user.Username, communityIds.Count);
+
+                // Send pending notifications to the user
+                var unreadCount = await _notificationService.GetUnreadCountAsync(userId.Value);
+                if (unreadCount > 0)
+                {
+                    var notifications = await _notificationService.GetNotificationsAsync(
+                        userId.Value, skip: 0, take: 50, includeRead: false);
+                    await Clients.Caller.SendAsync("PendingNotifications", notifications);
+                    await Clients.Caller.SendAsync("UnreadNotificationCount", unreadCount);
+                    _logger.LogInformation("Sent {Count} pending notifications to user {Username}", unreadCount, user.Username);
+                }
             }
         }
         catch (Exception ex)

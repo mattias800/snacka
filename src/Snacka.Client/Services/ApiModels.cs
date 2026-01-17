@@ -424,3 +424,25 @@ public record UserSearchResult(
 );
 
 public record CreateCommunityInviteRequest(Guid UserId);
+
+// Notification Models
+public record NotificationResponse(
+    Guid Id,
+    string Type,
+    string Title,
+    string Description,
+    string PayloadJson,
+    bool IsRead,
+    bool IsDismissed,
+    Guid? ActorId,
+    string? ActorUsername,
+    string? ActorEffectiveDisplayName,
+    Guid? CommunityId,
+    string? CommunityName,
+    Guid? ChannelId,
+    string? ChannelName,
+    DateTime CreatedAt,
+    DateTime? ReadAt
+);
+
+public record NotificationCountResponse(int UnreadCount);

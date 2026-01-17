@@ -131,6 +131,11 @@ public interface ISignalRService : IAsyncDisposable
     event Action<CommunityInviteReceivedEvent>? CommunityInviteReceived;
     event Action<CommunityInviteRespondedEvent>? CommunityInviteResponded;
 
+    // Notification events
+    event Action<NotificationResponse>? NotificationReceived;
+    event Action<IEnumerable<NotificationResponse>>? PendingNotificationsReceived;
+    event Action<int>? UnreadNotificationCountChanged;
+
     // Admin user management events
     event Action<AdminUserResponse>? UserRegistered;
 
@@ -280,6 +285,11 @@ public class SignalRService : ISignalRService
     // Community invite events
     public event Action<CommunityInviteReceivedEvent>? CommunityInviteReceived;
     public event Action<CommunityInviteRespondedEvent>? CommunityInviteResponded;
+
+    // Notification events
+    public event Action<NotificationResponse>? NotificationReceived;
+    public event Action<IEnumerable<NotificationResponse>>? PendingNotificationsReceived;
+    public event Action<int>? UnreadNotificationCountChanged;
 
     // Admin user management events
     public event Action<AdminUserResponse>? UserRegistered;
@@ -872,6 +882,25 @@ public class SignalRService : ISignalRService
         {
             Console.WriteLine($"SignalR: CommunityInviteResponded - {e.InvitedUserUsername} {e.Status} invite to community {e.CommunityId}");
             CommunityInviteResponded?.Invoke(e);
+        });
+
+        // Notification events
+        _hubConnection.On<NotificationResponse>("NotificationReceived", notification =>
+        {
+            Console.WriteLine($"SignalR: NotificationReceived - {notification.Type}: {notification.Title}");
+            NotificationReceived?.Invoke(notification);
+        });
+
+        _hubConnection.On<IEnumerable<NotificationResponse>>("PendingNotifications", notifications =>
+        {
+            Console.WriteLine($"SignalR: PendingNotifications - received {notifications.Count()} notifications");
+            PendingNotificationsReceived?.Invoke(notifications);
+        });
+
+        _hubConnection.On<int>("UnreadNotificationCount", count =>
+        {
+            Console.WriteLine($"SignalR: UnreadNotificationCount - {count}");
+            UnreadNotificationCountChanged?.Invoke(count);
         });
 
         // Admin user management events

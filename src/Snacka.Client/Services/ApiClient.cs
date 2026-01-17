@@ -835,6 +835,37 @@ public class ApiClient : IApiClient
         return await GetAsync<IceServersResponse>("/api/webrtc/ice-servers");
     }
 
+    // Notification methods
+    public async Task<ApiResult<List<NotificationResponse>>> GetNotificationsAsync(int skip = 0, int take = 50, bool includeRead = true)
+    {
+        return await GetAsync<List<NotificationResponse>>($"/api/notifications?skip={skip}&take={take}&includeRead={includeRead}");
+    }
+
+    public async Task<ApiResult<NotificationCountResponse>> GetUnreadNotificationCountAsync()
+    {
+        return await GetAsync<NotificationCountResponse>("/api/notifications/unread-count");
+    }
+
+    public async Task<ApiResult<bool>> MarkNotificationAsReadAsync(Guid notificationId)
+    {
+        return await PostEmptyAsync($"/api/notifications/{notificationId}/read");
+    }
+
+    public async Task<ApiResult<bool>> MarkAllNotificationsAsReadAsync()
+    {
+        return await PostEmptyAsync("/api/notifications/read-all");
+    }
+
+    public async Task<ApiResult<bool>> DismissNotificationAsync(Guid notificationId)
+    {
+        return await PostEmptyAsync($"/api/notifications/{notificationId}/dismiss");
+    }
+
+    public async Task<ApiResult<bool>> DismissAllNotificationsAsync()
+    {
+        return await PostEmptyAsync("/api/notifications/dismiss-all");
+    }
+
     private static string TryParseError(string content, System.Net.HttpStatusCode statusCode)
     {
         try

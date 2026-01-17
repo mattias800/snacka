@@ -8,8 +8,13 @@ namespace Snacka.Server.Services;
 public sealed class CommunityMemberService : ICommunityMemberService
 {
     private readonly SnackaDbContext _db;
+    private readonly INotificationService _notificationService;
 
-    public CommunityMemberService(SnackaDbContext db) => _db = db;
+    public CommunityMemberService(SnackaDbContext db, INotificationService notificationService)
+    {
+        _db = db;
+        _notificationService = notificationService;
+    }
 
     public async Task<IEnumerable<CommunityMemberResponse>> GetMembersAsync(Guid communityId, CancellationToken cancellationToken = default)
     {
@@ -39,6 +44,9 @@ public sealed class CommunityMemberService : ICommunityMemberService
         if (exists)
             throw new InvalidOperationException("User is already a member of this community.");
 
+        // Get the user to include their username in the notification
+        var user = await _db.Users.FindAsync([userId], cancellationToken);
+
         var userCommunity = new UserCommunity
         {
             UserId = userId,
@@ -48,6 +56,17 @@ public sealed class CommunityMemberService : ICommunityMemberService
 
         _db.UserCommunities.Add(userCommunity);
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Notify other community members about the new member
+        await _notificationService.CreateNotificationsForCommunityAsync(
+            communityId,
+            NotificationType.UserJoinedCommunity,
+            "New member joined",
+            $"{user?.Username ?? "Someone"} has joined the community",
+            payload: new { UserId = userId, Username = user?.Username },
+            actorId: userId,
+            excludeUserId: userId,
+            cancellationToken: cancellationToken);
     }
 
     public async Task LeaveCommunityAsync(Guid communityId, Guid userId, CancellationToken cancellationToken = default)
