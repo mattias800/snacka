@@ -304,10 +304,27 @@ public class AudioDeviceService : IAudioDeviceService
                     _testAudioSink = new SDL2AudioEndPoint(outputDevice ?? string.Empty, audioEncoder);
 
                     // Use the same format as the source to ensure sample rates match
+                    // CRITICAL: Must set format BEFORE starting sink to prevent pitch issues
                     if (_selectedFormat.HasValue)
                     {
                         _testAudioSink.SetAudioSinkFormat(_selectedFormat.Value);
                         Console.WriteLine($"AudioDeviceService: Loopback sink using format: {_selectedFormat.Value.FormatName} ({_selectedFormat.Value.ClockRate}Hz)");
+                    }
+                    else
+                    {
+                        // Fallback: get OPUS format from encoder if _selectedFormat not set
+                        // This prevents using default 8kHz format which causes pitch-down issues
+                        var formats = audioEncoder.SupportedFormats;
+                        var opusFormat = formats.FirstOrDefault(f => f.FormatName == "OPUS");
+                        if (!string.IsNullOrEmpty(opusFormat.FormatName))
+                        {
+                            _testAudioSink.SetAudioSinkFormat(opusFormat);
+                            Console.WriteLine($"AudioDeviceService: Loopback sink fallback format: {opusFormat.FormatName} ({opusFormat.ClockRate}Hz)");
+                        }
+                        else
+                        {
+                            Console.WriteLine("AudioDeviceService: WARNING - Could not set loopback sink format, may cause pitch issues!");
+                        }
                     }
 
                     _ = _testAudioSink.StartAudioSink();

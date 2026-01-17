@@ -143,6 +143,18 @@ public class VoiceChannelCreationTests
         return mock;
     }
 
+    private Mock<IControllerStreamingService> CreateMockControllerStreamingService()
+    {
+        var mock = new Mock<IControllerStreamingService>();
+        return mock;
+    }
+
+    private Mock<IControllerHostService> CreateMockControllerHostService()
+    {
+        var mock = new Mock<IControllerHostService>();
+        return mock;
+    }
+
     private AuthResponse CreateTestAuth()
     {
         return new AuthResponse(
@@ -168,6 +180,8 @@ public class VoiceChannelCreationTests
             CreateMockScreenCapture().Object,
             CreateMockSettingsStore().Object,
             CreateMockAudioDeviceService().Object,
+            CreateMockControllerStreamingService().Object,
+            CreateMockControllerHostService().Object,
             "http://localhost:5000",
             auth,
             onLogout: () => { }

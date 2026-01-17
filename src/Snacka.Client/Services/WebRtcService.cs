@@ -761,7 +761,16 @@ public class WebRtcService : IWebRtcService
         pc.OnAudioFormatsNegotiated += (formats) =>
         {
             Console.WriteLine($"WebRTC: Audio formats negotiated with {remoteUserId}: {string.Join(", ", formats.Select(f => f.FormatName))}");
-            var format = formats.First();
+
+            // Prefer OPUS format (48kHz) over others to prevent pitch issues
+            // Using formats.First() directly could select PCMU (8kHz) causing 6x pitch-down
+            var format = formats.FirstOrDefault(f => f.FormatName == "OPUS");
+            if (format.FormatName == null)
+                format = formats.FirstOrDefault(f => f.FormatName == "PCMU");
+            if (format.FormatName == null)
+                format = formats.First();
+
+            Console.WriteLine($"WebRTC: Selected audio format: {format.FormatName} ({format.ClockRate}Hz)");
 
             _audioInputManager.SetAudioFormat(format);
             audioSink?.SetAudioSinkFormat(format);
