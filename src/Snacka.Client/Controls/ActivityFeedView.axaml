@@ -3,29 +3,101 @@
              xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:vm="using:Snacka.Client.ViewModels"
+             xmlns:sharedui="using:Snacka.Client.UI"
+             xmlns:li="using:Snacka.Client.UI.ListItems"
              xmlns:ui="using:FluentAvalonia.UI.Controls"
              mc:Ignorable="d"
              x:Class="Snacka.Client.Controls.ActivityFeedView"
-             x:DataType="vm:ActivityFeedViewModel">
+             x:DataType="vm:ActivityFeedViewModel"
+             x:CompileBindings="False">
 
-    <UserControl.Styles>
-        <!-- Activity item styles -->
-        <Style Selector="Border.activity-item">
-            <Setter Property="Background" Value="Transparent"/>
-            <Setter Property="Padding" Value="12,10"/>
-            <Setter Property="Cursor" Value="Hand"/>
-        </Style>
-        <Style Selector="Border.activity-item:pointerover">
-            <Setter Property="Background" Value="#35373c"/>
-        </Style>
-        <Style Selector="Border.activity-item.unread">
-            <Setter Property="Background" Value="#2f3136"/>
-        </Style>
-    </UserControl.Styles>
+    <UserControl.Resources>
+        <!-- Template selector for different activity types -->
+        <sharedui:ActivityItemTemplateSelector x:Key="ActivityTemplateSelector">
+            <!-- DM notifications -->
+            <sharedui:ActivityItemTemplateSelector.DirectMessageTemplate>
+                <DataTemplate x:DataType="vm:ActivityItem">
+                    <li:DmActivityItem
+                        SenderName="{Binding Title}"
+                        MessagePreview="{Binding Description}"
+                        RelativeTime="{Binding RelativeTime}"
+                        IsRead="{Binding IsRead}"
+                        Command="{Binding $parent[UserControl].DataContext.ActivityClickedCommand}"
+                        CommandParameter="{Binding}">
+                        <li:DmActivityItem.IconContent>
+                            <Border Width="32" Height="32"
+                                    CornerRadius="16"
+                                    Background="{StaticResource Content3Brush}">
+                                <ui:SymbolIcon Symbol="{Binding Icon}"
+                                               Foreground="{StaticResource Foreground2Brush}"
+                                               FontSize="14"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                            </Border>
+                        </li:DmActivityItem.IconContent>
+                    </li:DmActivityItem>
+                </DataTemplate>
+            </sharedui:ActivityItemTemplateSelector.DirectMessageTemplate>
+
+            <!-- Community invites -->
+            <sharedui:ActivityItemTemplateSelector.InviteTemplate>
+                <DataTemplate x:DataType="vm:ActivityItem">
+                    <li:InviteActivityItem
+                        Title="{Binding Title}"
+                        Description="{Binding Description}"
+                        RelativeTime="{Binding RelativeTime}"
+                        IsRead="{Binding IsRead}"
+                        AcceptCommand="{Binding $parent[UserControl].DataContext.AcceptInviteCommand}"
+                        DeclineCommand="{Binding $parent[UserControl].DataContext.DeclineInviteCommand}"
+                        CommandParameter="{Binding}">
+                        <li:InviteActivityItem.IconContent>
+                            <Border Width="32" Height="32"
+                                    CornerRadius="16"
+                                    Background="{StaticResource Content3Brush}">
+                                <ui:SymbolIcon Symbol="{Binding Icon}"
+                                               Foreground="{StaticResource Foreground2Brush}"
+                                               FontSize="14"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                            </Border>
+                        </li:InviteActivityItem.IconContent>
+                    </li:InviteActivityItem>
+                </DataTemplate>
+            </sharedui:ActivityItemTemplateSelector.InviteTemplate>
+
+            <!-- Default template for other activity types -->
+            <sharedui:ActivityItemTemplateSelector.DefaultTemplate>
+                <DataTemplate x:DataType="vm:ActivityItem">
+                    <sharedui:ListItemView
+                        PrimaryText="{Binding Title}"
+                        SecondaryText="{Binding Description}"
+                        IsClickable="False">
+                        <sharedui:ListItemView.IconContent>
+                            <Border Width="32" Height="32"
+                                    CornerRadius="16"
+                                    Background="{StaticResource Content3Brush}">
+                                <ui:SymbolIcon Symbol="{Binding Icon}"
+                                               Foreground="{StaticResource Foreground2Brush}"
+                                               FontSize="14"
+                                               HorizontalAlignment="Center"
+                                               VerticalAlignment="Center"/>
+                            </Border>
+                        </sharedui:ListItemView.IconContent>
+                        <sharedui:ListItemView.RightContent>
+                            <TextBlock Text="{Binding RelativeTime}"
+                                       Foreground="{StaticResource Foreground3Brush}"
+                                       FontSize="10"/>
+                        </sharedui:ListItemView.RightContent>
+                    </sharedui:ListItemView>
+                </DataTemplate>
+            </sharedui:ActivityItemTemplateSelector.DefaultTemplate>
+        </sharedui:ActivityItemTemplateSelector>
+    </UserControl.Resources>
 
     <DockPanel>
         <!-- Activity List -->
-        <ScrollViewer VerticalScrollBarVisibility="Auto">
+        <ScrollViewer VerticalScrollBarVisibility="Auto"
+                      Margin="0,8,0,0">
             <Panel>
                 <!-- Empty state -->
                 <StackPanel VerticalAlignment="Center"
@@ -50,85 +122,9 @@
 
                 <!-- Activities list -->
                 <ItemsControl ItemsSource="{Binding Activities}"
-                              IsVisible="{Binding Activities.Count}">
-                    <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="vm:ActivityItem">
-                            <Border Classes="activity-item"
-                                    Classes.unread="{Binding !IsRead}">
-                                <StackPanel Spacing="8">
-                                    <Grid ColumnDefinitions="Auto,*,Auto">
-                                        <!-- Icon -->
-                                        <Border Grid.Column="0"
-                                                Width="32"
-                                                Height="32"
-                                                CornerRadius="16"
-                                                Background="{StaticResource Content3Brush}"
-                                                Margin="0,0,12,0">
-                                            <ui:SymbolIcon Symbol="{Binding Icon}"
-                                                       Foreground="{StaticResource Foreground2Brush}"
-                                                       FontSize="14"
-                                                       HorizontalAlignment="Center"
-                                                       VerticalAlignment="Center"/>
-                                        </Border>
-
-                                        <!-- Content -->
-                                        <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                            <TextBlock Text="{Binding Title}"
-                                                       Classes="text-body"
-                                                       FontWeight="Medium"
-                                                       TextTrimming="CharacterEllipsis"/>
-                                            <TextBlock Text="{Binding Description}"
-                                                       Classes="text-muted"
-                                                       FontSize="12"
-                                                       TextTrimming="CharacterEllipsis"
-                                                       MaxLines="1"/>
-                                        </StackPanel>
-
-                                        <!-- Time -->
-                                        <TextBlock Grid.Column="2"
-                                                   Text="{Binding RelativeTime}"
-                                                   Classes="text-muted"
-                                                   FontSize="11"
-                                                   VerticalAlignment="Top"
-                                                   Margin="8,0,0,0"/>
-                                    </Grid>
-
-                                    <!-- Accept/Decline buttons for invites -->
-                                    <Grid ColumnDefinitions="*,*"
-                                          Margin="44,0,0,0"
-                                          IsVisible="{Binding InviteId, Converter={x:Static ObjectConverters.IsNotNull}}">
-                                        <Button Grid.Column="0"
-                                                Content="Decline"
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Center"
-                                                Background="{StaticResource Content3Brush}"
-                                                Foreground="{StaticResource Foreground2Brush}"
-                                                BorderThickness="0"
-                                                Padding="8,6"
-                                                CornerRadius="4"
-                                                FontSize="12"
-                                                Margin="0,0,4,0"
-                                                Command="{Binding $parent[UserControl].DataContext.DeclineInviteCommand}"
-                                                CommandParameter="{Binding}"/>
-                                        <Button Grid.Column="1"
-                                                Content="Accept"
-                                                HorizontalAlignment="Stretch"
-                                                HorizontalContentAlignment="Center"
-                                                Background="{StaticResource SuccessBrush}"
-                                                Foreground="White"
-                                                BorderThickness="0"
-                                                Padding="8,6"
-                                                CornerRadius="4"
-                                                FontSize="12"
-                                                Margin="4,0,0,0"
-                                                Command="{Binding $parent[UserControl].DataContext.AcceptInviteCommand}"
-                                                CommandParameter="{Binding}"/>
-                                    </Grid>
-                                </StackPanel>
-                            </Border>
-                        </DataTemplate>
-                    </ItemsControl.ItemTemplate>
-                </ItemsControl>
+                              IsVisible="{Binding Activities.Count}"
+                              Margin="8,0"
+                              ItemTemplate="{StaticResource ActivityTemplateSelector}"/>
             </Panel>
         </ScrollViewer>
     </DockPanel>

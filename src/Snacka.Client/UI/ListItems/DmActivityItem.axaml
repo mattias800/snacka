@@ -1,0 +1,40 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:li="using:Snacka.Client.UI.ListItems"
+             xmlns:conv="using:Snacka.Client.Converters"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.UI.ListItems.DmActivityItem"
+             x:DataType="li:DmActivityItem">
+
+    <Button Classes="list-item-button"
+            Command="{Binding Command, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}}"
+            CommandParameter="{Binding CommandParameter, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}}">
+        <Grid ColumnDefinitions="Auto,*,Auto">
+            <!-- Icon area (default to chat icon if not provided) -->
+            <ContentPresenter Grid.Column="0"
+                              Content="{Binding IconContent, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}}"
+                              Margin="0,0,10,0"
+                              VerticalAlignment="Center"/>
+
+            <!-- Sender name and message preview -->
+            <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0">
+                <TextBlock Text="{Binding SenderName, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}}"
+                           Foreground="{Binding IsRead, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}, Converter={x:Static conv:IsReadToForegroundConverter.Instance}}"
+                           Classes="list-item-primary-text"/>
+                <TextBlock Text="{Binding MessagePreview, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}}"
+                           Classes="list-item-secondary-text"
+                           IsVisible="{Binding MessagePreview, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+            </StackPanel>
+
+            <!-- Time -->
+            <TextBlock Grid.Column="2"
+                       Text="{Binding RelativeTime, RelativeSource={RelativeSource AncestorType=li:DmActivityItem}}"
+                       Foreground="{StaticResource Foreground3Brush}"
+                       FontSize="10"
+                       VerticalAlignment="Center"
+                       Margin="8,0,0,0"/>
+        </Grid>
+    </Button>
+</UserControl>

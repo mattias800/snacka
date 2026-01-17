@@ -1,0 +1,73 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="using:Snacka.Client.UI"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.UI.ListItemView"
+             x:DataType="ui:ListItemView">
+
+    <Button x:Name="ItemButton"
+            Command="{Binding Command, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}"
+            CommandParameter="{Binding CommandParameter, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}"
+            HorizontalAlignment="Stretch"
+            HorizontalContentAlignment="Stretch"
+            Margin="0,2"
+            Classes.not-clickable="{Binding !IsClickable, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}">
+        <Button.Styles>
+            <Style Selector="Button">
+                <Setter Property="Background" Value="Transparent"/>
+                <Setter Property="BorderThickness" Value="0"/>
+                <Setter Property="Padding" Value="10,6"/>
+                <Setter Property="CornerRadius" Value="4"/>
+                <Setter Property="Cursor" Value="Hand"/>
+            </Style>
+            <Style Selector="Button:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="#35373c"/>
+            </Style>
+            <!-- Non-clickable style -->
+            <Style Selector="Button.not-clickable">
+                <Setter Property="Cursor" Value="Arrow"/>
+            </Style>
+            <Style Selector="Button.not-clickable:pointerover /template/ ContentPresenter">
+                <Setter Property="Background" Value="Transparent"/>
+            </Style>
+        </Button.Styles>
+
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Icon/Avatar area -->
+                <ContentPresenter Grid.Column="0"
+                                  Content="{Binding IconContent, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}"
+                                  Margin="0,0,10,0"
+                                  VerticalAlignment="Center"/>
+
+                <!-- Text content -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0">
+                    <TextBlock Text="{Binding PrimaryText, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}"
+                               Foreground="{Binding PrimaryTextForeground, RelativeSource={RelativeSource AncestorType=ui:ListItemView}, FallbackValue={StaticResource ForegroundBrush}}"
+                               FontSize="14"
+                               TextTrimming="CharacterEllipsis"/>
+                    <TextBlock Text="{Binding SecondaryText, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}"
+                               Foreground="{StaticResource Foreground3Brush}"
+                               FontSize="10"
+                               TextTrimming="CharacterEllipsis"
+                               Margin="0,-2,0,0"
+                               IsVisible="{Binding SecondaryText, RelativeSource={RelativeSource AncestorType=ui:ListItemView}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
+
+                <!-- Right content area -->
+                <ContentPresenter Grid.Column="2"
+                                  Content="{Binding RightContent, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}"
+                                  Margin="4,0,0,0"
+                                  VerticalAlignment="Center"
+                                  IsVisible="{Binding RightContent, RelativeSource={RelativeSource AncestorType=ui:ListItemView}, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+            </Grid>
+
+            <!-- Additional content below main row -->
+            <ContentPresenter Content="{Binding AdditionalContent, RelativeSource={RelativeSource AncestorType=ui:ListItemView}}"
+                              Margin="42,0,0,0"
+                              IsVisible="{Binding AdditionalContent, RelativeSource={RelativeSource AncestorType=ui:ListItemView}, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+        </StackPanel>
+    </Button>
+</UserControl>

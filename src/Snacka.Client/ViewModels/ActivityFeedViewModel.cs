@@ -99,6 +99,7 @@ public class ActivityFeedViewModel : ViewModelBase
     private readonly Func<Guid?> _getCurrentCommunityId;
     private readonly Func<bool> _canManageServer;
     private readonly Func<Task> _onCommunitiesChanged;
+    private readonly Action<Guid, string>? _onOpenDm;
 
     private ObservableCollection<ActivityItem> _activities = new();
     private bool _isLoading;
@@ -109,7 +110,8 @@ public class ActivityFeedViewModel : ViewModelBase
         Guid currentUserId,
         Func<Guid?> getCurrentCommunityId,
         Func<bool> canManageServer,
-        Func<Task> onCommunitiesChanged)
+        Func<Task> onCommunitiesChanged,
+        Action<Guid, string>? onOpenDm = null)
     {
         _signalR = signalR;
         _apiClient = apiClient;
@@ -117,12 +119,14 @@ public class ActivityFeedViewModel : ViewModelBase
         _getCurrentCommunityId = getCurrentCommunityId;
         _canManageServer = canManageServer;
         _onCommunitiesChanged = onCommunitiesChanged;
+        _onOpenDm = onOpenDm;
 
         // Commands
         MarkAllAsReadCommand = ReactiveCommand.Create(MarkAllAsRead);
         ClearAllCommand = ReactiveCommand.Create(ClearAll);
         AcceptInviteCommand = ReactiveCommand.CreateFromTask<ActivityItem>(AcceptInviteAsync);
         DeclineInviteCommand = ReactiveCommand.CreateFromTask<ActivityItem>(DeclineInviteAsync);
+        ActivityClickedCommand = ReactiveCommand.Create<ActivityItem>(OnActivityClicked);
 
         SetupSignalRHandlers();
 
@@ -135,6 +139,7 @@ public class ActivityFeedViewModel : ViewModelBase
     public ReactiveCommand<Unit, Unit> ClearAllCommand { get; }
     public ReactiveCommand<ActivityItem, Unit> AcceptInviteCommand { get; }
     public ReactiveCommand<ActivityItem, Unit> DeclineInviteCommand { get; }
+    public ReactiveCommand<ActivityItem, Unit> ActivityClickedCommand { get; }
 
     public ObservableCollection<ActivityItem> Activities => _activities;
 
@@ -178,7 +183,7 @@ public class ActivityFeedViewModel : ViewModelBase
                     Guid.NewGuid(),
                     ActivityType.DirectMessage,
                     message.CreatedAt,
-                    $"DM from {message.SenderEffectiveDisplayName}",
+                    message.SenderEffectiveDisplayName,
                     message.Content.Length > 50 ? message.Content[..50] + "..." : message.Content,
                     UserId: message.SenderId,
                     Username: message.SenderUsername,
@@ -382,5 +387,40 @@ public class ActivityFeedViewModel : ViewModelBase
         _activities.Clear();
         this.RaisePropertyChanged(nameof(UnreadCount));
         this.RaisePropertyChanged(nameof(HasUnread));
+    }
+
+    /// <summary>
+    /// Handles clicking on an activity item.
+    /// </summary>
+    private void OnActivityClicked(ActivityItem activity)
+    {
+        // Mark as read
+        MarkActivityAsRead(activity);
+
+        // Navigate based on activity type
+        switch (activity.Type)
+        {
+            case ActivityType.DirectMessage:
+                if (activity.UserId.HasValue && activity.Username is not null)
+                {
+                    _onOpenDm?.Invoke(activity.UserId.Value, activity.Title);
+                }
+                break;
+            // TODO: Add navigation for other activity types (mentions, thread replies, etc.)
+        }
+    }
+
+    /// <summary>
+    /// Marks a specific activity as read.
+    /// </summary>
+    public void MarkActivityAsRead(ActivityItem activity)
+    {
+        var index = _activities.IndexOf(activity);
+        if (index >= 0 && !activity.IsRead)
+        {
+            _activities[index] = activity with { IsRead = true };
+            this.RaisePropertyChanged(nameof(UnreadCount));
+            this.RaisePropertyChanged(nameof(HasUnread));
+        }
     }
 }

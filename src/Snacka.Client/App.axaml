@@ -120,6 +120,7 @@
     <Application.Styles>
         <FluentTheme />
         <StyleInclude Source="avares://Snacka.Client/Styles/ComponentStyles.axaml"/>
+        <StyleInclude Source="avares://Snacka.Client/UI/Styles/ListItemStyles.axaml"/>
 
         <!-- Global TextBox Styles -->
         <Style Selector="TextBox">

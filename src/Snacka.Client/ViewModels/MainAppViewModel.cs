@@ -278,7 +278,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             auth.UserId,
             () => SelectedCommunity?.Id,
             () => CanManageChannels,
-            LoadCommunitiesAsync);
+            LoadCommunitiesAsync,
+            (userId, displayName) => OpenDmFromActivity(userId, displayName));
 
         // Commands
         LogoutCommand = ReactiveCommand.Create(_onLogout);
@@ -2434,6 +2435,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Note: Voice state is now independent of DM navigation
         // Voice video overlay can remain open while viewing DMs
         _dmContent?.OpenConversation(member.UserId, member.Username);
+    }
+
+    private void OpenDmFromActivity(Guid userId, string displayName)
+    {
+        // Open DM conversation from activity feed click
+        _dmContent?.OpenConversation(userId, displayName);
     }
 
     private async Task LoadCommunitiesAsync()

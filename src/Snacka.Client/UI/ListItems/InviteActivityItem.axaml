@@ -1,0 +1,70 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:li="using:Snacka.Client.UI.ListItems"
+             xmlns:conv="using:Snacka.Client.Converters"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.UI.ListItems.InviteActivityItem"
+             x:DataType="li:InviteActivityItem">
+
+    <Border Classes="list-item-border">
+        <StackPanel Spacing="8">
+            <Grid ColumnDefinitions="Auto,*,Auto">
+                <!-- Icon area -->
+                <ContentPresenter Grid.Column="0"
+                                  Content="{Binding IconContent, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"
+                                  Margin="0,0,10,0"
+                                  VerticalAlignment="Center"/>
+
+                <!-- Invite title and from -->
+                <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="0">
+                    <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"
+                               Foreground="{Binding IsRead, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}, Converter={x:Static conv:IsReadToForegroundConverter.Instance}}"
+                               Classes="list-item-primary-text"/>
+                    <TextBlock Text="{Binding Description, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"
+                               Classes="list-item-secondary-text"
+                               IsVisible="{Binding Description, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                </StackPanel>
+
+                <!-- Time -->
+                <TextBlock Grid.Column="2"
+                           Text="{Binding RelativeTime, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"
+                           Foreground="{StaticResource Foreground3Brush}"
+                           FontSize="10"
+                           VerticalAlignment="Center"
+                           Margin="8,0,0,0"/>
+            </Grid>
+
+            <!-- Accept/Decline buttons -->
+            <Grid ColumnDefinitions="*,*" Margin="42,0,0,0">
+                <Button Grid.Column="0"
+                        Content="Decline"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="{StaticResource Content3Brush}"
+                        Foreground="{StaticResource Foreground2Brush}"
+                        BorderThickness="0"
+                        Padding="8,6"
+                        CornerRadius="4"
+                        FontSize="12"
+                        Margin="0,0,4,0"
+                        Command="{Binding DeclineCommand, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"
+                        CommandParameter="{Binding CommandParameter, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"/>
+                <Button Grid.Column="1"
+                        Content="Accept"
+                        HorizontalAlignment="Stretch"
+                        HorizontalContentAlignment="Center"
+                        Background="{StaticResource SuccessBrush}"
+                        Foreground="White"
+                        BorderThickness="0"
+                        Padding="8,6"
+                        CornerRadius="4"
+                        FontSize="12"
+                        Margin="4,0,0,0"
+                        Command="{Binding AcceptCommand, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"
+                        CommandParameter="{Binding CommandParameter, RelativeSource={RelativeSource AncestorType=li:InviteActivityItem}}"/>
+            </Grid>
+        </StackPanel>
+    </Border>
+</UserControl>
