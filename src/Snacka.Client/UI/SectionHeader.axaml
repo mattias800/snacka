@@ -1,0 +1,43 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:ui="using:Snacka.Client.UI"
+             xmlns:fa="using:FluentAvalonia.UI.Controls"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.UI.SectionHeader"
+             x:DataType="ui:SectionHeader"
+             x:CompileBindings="False">
+
+    <Border Padding="12,8"
+            BorderThickness="0,0,0,1"
+            BorderBrush="{StaticResource BackgroundBrush}">
+        <Grid ColumnDefinitions="*,Auto" MinHeight="24">
+            <!-- Left side: Icon + Title + Badge -->
+            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6" VerticalAlignment="Center">
+                <fa:SymbolIcon Symbol="{Binding Icon, RelativeSource={RelativeSource AncestorType=ui:SectionHeader}}"
+                               Foreground="{StaticResource Foreground2Brush}"
+                               FontSize="14"/>
+                <TextBlock Text="{Binding Title, RelativeSource={RelativeSource AncestorType=ui:SectionHeader}}"
+                           Classes="text-caption"
+                           VerticalAlignment="Center"/>
+                <!-- Optional badge -->
+                <Border Background="{StaticResource DangerBrush}"
+                        CornerRadius="8"
+                        Padding="5,2"
+                        VerticalAlignment="Center"
+                        IsVisible="{Binding ShowBadge, RelativeSource={RelativeSource AncestorType=ui:SectionHeader}}">
+                    <TextBlock Text="{Binding BadgeCount, RelativeSource={RelativeSource AncestorType=ui:SectionHeader}}"
+                               Foreground="White"
+                               FontSize="10"
+                               FontWeight="SemiBold"/>
+                </Border>
+            </StackPanel>
+
+            <!-- Right side: Action buttons -->
+            <ContentPresenter Grid.Column="1"
+                              Content="{Binding ActionContent, RelativeSource={RelativeSource AncestorType=ui:SectionHeader}}"
+                              IsVisible="{Binding ActionContent, RelativeSource={RelativeSource AncestorType=ui:SectionHeader}, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+        </Grid>
+    </Border>
+</UserControl>

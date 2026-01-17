@@ -6,6 +6,7 @@
              xmlns:services="using:Snacka.Client.Services"
              xmlns:views="using:Snacka.Client.Views"
              xmlns:ui="using:FluentAvalonia.UI.Controls"
+             xmlns:sharedui="using:Snacka.Client.UI"
              x:Class="Snacka.Client.Views.MainAppView"
              x:DataType="vm:MainAppViewModel"
              x:CompileBindings="False">
@@ -289,19 +290,9 @@
                 <!-- Members List (top) -->
                 <DockPanel Grid.Row="0">
                     <!-- Members Header -->
-                    <Border DockPanel.Dock="Top"
-                            Padding="12,8"
-                            BorderThickness="0,0,0,1"
-                            BorderBrush="{StaticResource BackgroundBrush}">
-                        <StackPanel Orientation="Horizontal" Spacing="6">
-                            <ui:SymbolIcon Symbol="People"
-                                       Foreground="{StaticResource Foreground2Brush}"
-                                       FontSize="14"/>
-                            <TextBlock Text="MEMBERS"
-                                       Classes="text-caption"
-                                       VerticalAlignment="Center"/>
-                        </StackPanel>
-                    </Border>
+                    <sharedui:SectionHeader DockPanel.Dock="Top"
+                                            Icon="People"
+                                            Title="MEMBERS"/>
 
                     <!-- Members Content -->
                     <controls:MembersListView ViewModel="{Binding MembersList}"
@@ -330,31 +321,13 @@
                 <!-- Activity Feed (bottom) -->
                 <DockPanel Grid.Row="2">
                     <!-- Activity Header -->
-                    <Border DockPanel.Dock="Top"
-                            Padding="12,8"
-                            BorderThickness="0,0,0,1"
-                            BorderBrush="{StaticResource BackgroundBrush}">
-                        <Grid ColumnDefinitions="*,Auto">
-                            <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="6">
-                                <ui:SymbolIcon Symbol="Alert"
-                                           Foreground="{StaticResource Foreground2Brush}"
-                                           FontSize="14"/>
-                                <TextBlock Text="ACTIVITY"
-                                           Classes="text-caption"
-                                           VerticalAlignment="Center"/>
-                                <!-- Unread badge -->
-                                <Border Background="{StaticResource DangerBrush}"
-                                        CornerRadius="8"
-                                        Padding="5,2"
-                                        VerticalAlignment="Center"
-                                        IsVisible="{Binding ActivityFeed.HasUnread}">
-                                    <TextBlock Text="{Binding ActivityFeed.UnreadCount}"
-                                               Foreground="White"
-                                               FontSize="10"
-                                               FontWeight="SemiBold"/>
-                                </Border>
-                            </StackPanel>
-                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="4">
+                    <sharedui:SectionHeader DockPanel.Dock="Top"
+                                            Icon="Alert"
+                                            Title="ACTIVITY"
+                                            ShowBadge="{Binding ActivityFeed.HasUnread}"
+                                            BadgeCount="{Binding ActivityFeed.UnreadCount}">
+                        <sharedui:SectionHeader.ActionContent>
+                            <StackPanel Orientation="Horizontal" Spacing="4">
                                 <!-- Mark all as read button -->
                                 <Button Classes="btn-icon"
                                         Command="{Binding ActivityFeed.MarkAllAsReadCommand}"
@@ -379,8 +352,8 @@
                                                FontSize="14"/>
                                 </Button>
                             </StackPanel>
-                        </Grid>
-                    </Border>
+                        </sharedui:SectionHeader.ActionContent>
+                    </sharedui:SectionHeader>
 
                     <!-- Activity Content -->
                     <controls:ActivityFeedView DataContext="{Binding ActivityFeed}"/>
