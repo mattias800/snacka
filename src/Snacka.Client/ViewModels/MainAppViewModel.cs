@@ -273,6 +273,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             Members,
             () => SelectedCommunity?.Id ?? Guid.Empty,
             member => StartDMWithMember(member),
+            userId => RecentDms.FirstOrDefault(c => c.UserId == userId)?.UnreadCount ?? 0,
             error => ErrorMessage = error);
 
         // Create the activity feed ViewModel

@@ -166,20 +166,30 @@
                                                        Margin="0,-2,0,0"/>
                                         </StackPanel>
 
-                                        <!-- DM Button -->
-                                        <Button Grid.Column="2"
-                                                Classes="btn-icon"
-                                                Command="{Binding ViewModel.StartDMCommand, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
-                                                CommandParameter="{Binding}"
-                                                Padding="6"
-                                                MinWidth="28"
-                                                MinHeight="28"
+                                        <!-- Unread DM Badge -->
+                                        <Border Grid.Column="2"
+                                                Background="{StaticResource DangerBrush}"
+                                                CornerRadius="10"
+                                                Padding="6,2"
                                                 VerticalAlignment="Center"
-                                                ToolTip.Tip="Send Direct Message">
-                                            <ui:SymbolIcon Symbol="Mail"
-                                                       Foreground="{StaticResource Foreground3Brush}"
-                                                       FontSize="12"/>
-                                        </Button>
+                                                Margin="4,0,0,0">
+                                            <Border.IsVisible>
+                                                <MultiBinding Converter="{x:Static conv:DmUnreadCountConverter.Instance}" ConverterParameter="visibility">
+                                                    <Binding Path="UserId"/>
+                                                    <Binding Path="ViewModel" RelativeSource="{RelativeSource AncestorType=controls:MembersListView}"/>
+                                                </MultiBinding>
+                                            </Border.IsVisible>
+                                            <TextBlock Foreground="White"
+                                                       FontSize="11"
+                                                       FontWeight="SemiBold">
+                                                <TextBlock.Text>
+                                                    <MultiBinding Converter="{x:Static conv:DmUnreadCountConverter.Instance}">
+                                                        <Binding Path="UserId"/>
+                                                        <Binding Path="ViewModel" RelativeSource="{RelativeSource AncestorType=controls:MembersListView}"/>
+                                                    </MultiBinding>
+                                                </TextBlock.Text>
+                                            </TextBlock>
+                                        </Border>
                                     </Grid>
                                 </Border>
                             </Panel>

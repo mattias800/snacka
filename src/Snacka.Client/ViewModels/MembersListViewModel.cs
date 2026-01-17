@@ -17,6 +17,7 @@ public class MembersListViewModel : ViewModelBase
     private readonly Func<Guid> _getSelectedCommunityId;
     private readonly Action<string?> _onError;
     private readonly Action<CommunityMemberResponse> _onStartDM;
+    private readonly Func<Guid, int> _getDmUnreadCount;
 
     // Shared members collection (owned by MainAppViewModel)
     private readonly ObservableCollection<CommunityMemberResponse> _members;
@@ -35,6 +36,7 @@ public class MembersListViewModel : ViewModelBase
         ObservableCollection<CommunityMemberResponse> members,
         Func<Guid> getSelectedCommunityId,
         Action<CommunityMemberResponse> onStartDM,
+        Func<Guid, int> getDmUnreadCount,
         Action<string?> onError)
     {
         _apiClient = apiClient;
@@ -42,6 +44,7 @@ public class MembersListViewModel : ViewModelBase
         _members = members;
         _getSelectedCommunityId = getSelectedCommunityId;
         _onStartDM = onStartDM;
+        _getDmUnreadCount = getDmUnreadCount;
         _onError = onError;
 
         // Nickname commands
@@ -129,6 +132,11 @@ public class MembersListViewModel : ViewModelBase
     {
         this.RaisePropertyChanged(nameof(SortedMembers));
     }
+
+    /// <summary>
+    /// Gets the unread DM count for a specific user.
+    /// </summary>
+    public int GetDmUnreadCount(Guid userId) => _getDmUnreadCount(userId);
 
     // Nickname methods
     private void StartEditMyNickname()
