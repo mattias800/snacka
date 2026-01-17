@@ -170,6 +170,14 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
                 Dispatcher.UIThread.Post(() => ChatArea?.FocusMessageInput(), DispatcherPriority.Input);
             }
         }
+        else if (e.PropertyName == nameof(MainAppViewModel.IsViewingDM))
+        {
+            // Auto-focus message input when viewing DM conversation
+            if (ViewModel?.IsViewingDM == true)
+            {
+                Dispatcher.UIThread.Post(() => DMContentArea?.FocusMessageInput(), DispatcherPriority.Input);
+            }
+        }
         else if (e.PropertyName == nameof(MainAppViewModel.IsVideoFullscreen) ||
                  e.PropertyName == nameof(MainAppViewModel.FullscreenStream))
         {

@@ -77,6 +77,17 @@ public partial class DMContentView : UserControl
 
         // Scroll to bottom after a delay to ensure content is loaded
         ScrollToBottomAfterDelay();
+
+        // Auto-focus message input when navigating to a DM conversation
+        if (viewModel != null)
+        {
+            Dispatcher.UIThread.Post(FocusMessageInput, DispatcherPriority.Input);
+        }
+    }
+
+    public void FocusMessageInput()
+    {
+        DMMessageInputBox?.Focus();
     }
 
     private async void ScrollToBottomAfterDelay()

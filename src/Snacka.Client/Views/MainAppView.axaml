@@ -191,7 +191,8 @@
             </controls:NoCommunityView>
 
             <!-- DM Content (shown when viewing DM conversation) -->
-            <controls:DMContentView IsVisible="{Binding IsViewingDM}"
+            <controls:DMContentView x:Name="DMContentArea"
+                                    IsVisible="{Binding IsViewingDM}"
                                     ViewModel="{Binding DMContent}"/>
 
             <!-- Voice Channel Content (shown when viewing voice channel) -->
