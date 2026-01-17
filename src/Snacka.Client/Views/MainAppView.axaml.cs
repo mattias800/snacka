@@ -172,10 +172,25 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         }
         else if (e.PropertyName == nameof(MainAppViewModel.IsViewingDM))
         {
-            // Auto-focus message input when viewing DM conversation
             if (ViewModel?.IsViewingDM == true)
             {
+                // Auto-focus message input when viewing DM conversation
                 Dispatcher.UIThread.Post(() => DMContentArea?.FocusMessageInput(), DispatcherPriority.Input);
+            }
+            else if (ViewModel?.SelectedChannel != null && ViewModel?.IsViewingVoiceChannel == false)
+            {
+                // Auto-focus channel input when closing DM and returning to text channel
+                Dispatcher.UIThread.Post(() => ChatArea?.FocusMessageInput(), DispatcherPriority.Input);
+            }
+        }
+        else if (e.PropertyName == nameof(MainAppViewModel.IsViewingVoiceChannel))
+        {
+            // Auto-focus channel input when closing voice channel view and returning to text channel
+            if (ViewModel?.IsViewingVoiceChannel == false &&
+                ViewModel?.IsViewingDM == false &&
+                ViewModel?.SelectedChannel != null)
+            {
+                Dispatcher.UIThread.Post(() => ChatArea?.FocusMessageInput(), DispatcherPriority.Input);
             }
         }
         else if (e.PropertyName == nameof(MainAppViewModel.IsVideoFullscreen) ||
