@@ -1188,32 +1188,96 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Gaming Station command events (this client is a gaming station receiving commands)
         _signalR.StationCommandJoinChannel += e => Dispatcher.UIThread.Post(async () =>
         {
-            Console.WriteLine($"EVENT StationCommandJoinChannel: commanded to join channel {e.ChannelId}");
-            // TODO: Auto-join the specified voice channel
+            Console.WriteLine($"EVENT StationCommandJoinChannel: commanded to join channel {e.ChannelId} ({e.ChannelName})");
+
+            // Only execute if this client is a gaming station
+            if (!IsGamingStationEnabled) return;
+
+            // Try to find the channel in our loaded channels
+            var channel = Channels.FirstOrDefault(c => c.Id == e.ChannelId);
+            if (channel is null)
+            {
+                // Channel not in current community, create a minimal ChannelResponse for joining
+                // This allows gaming stations to join channels even if they're not viewing that community
+                channel = new ChannelResponse(
+                    Id: e.ChannelId,
+                    Name: e.ChannelName,
+                    Topic: null,
+                    CommunityId: Guid.Empty,
+                    Type: ChannelType.Voice,
+                    Position: 0,
+                    CreatedAt: DateTime.UtcNow
+                );
+            }
+
+            await JoinVoiceChannelAsync(channel);
+            Console.WriteLine($"Gaming station joined channel: {e.ChannelName}");
         });
 
-        _signalR.StationCommandLeaveChannel += e => Dispatcher.UIThread.Post(() =>
+        _signalR.StationCommandLeaveChannel += e => Dispatcher.UIThread.Post(async () =>
         {
             Console.WriteLine($"EVENT StationCommandLeaveChannel: commanded to leave channel");
-            // TODO: Leave current voice channel
+
+            // Only execute if this client is a gaming station
+            if (!IsGamingStationEnabled) return;
+
+            await LeaveVoiceChannelAsync();
+            Console.WriteLine($"Gaming station left voice channel");
         });
 
         _signalR.StationCommandStartScreenShare += e => Dispatcher.UIThread.Post(async () =>
         {
             Console.WriteLine($"EVENT StationCommandStartScreenShare: commanded to start screen share");
-            // TODO: Start screen sharing
+
+            // Only execute if this client is a gaming station and in a voice channel
+            if (!IsGamingStationEnabled || CurrentVoiceChannel is null) return;
+
+            // Get primary display
+            var displays = _screenCaptureService.GetDisplays();
+            var primaryDisplay = displays.FirstOrDefault();
+            if (primaryDisplay is null)
+            {
+                Console.WriteLine("Gaming station: No display found for screen sharing");
+                return;
+            }
+
+            // Create screen share settings with gaming-optimized defaults
+            var settings = new ScreenShareSettings(
+                Source: primaryDisplay,
+                Resolution: ScreenShareResolution.HD1080,
+                Framerate: ScreenShareFramerate.Fps60,
+                Quality: ScreenShareQuality.Gaming,
+                IncludeAudio: true
+            );
+
+            await StartScreenShareWithSettingsAsync(settings);
+            Console.WriteLine($"Gaming station started screen sharing: {primaryDisplay.Name}");
         });
 
-        _signalR.StationCommandStopScreenShare += e => Dispatcher.UIThread.Post(() =>
+        _signalR.StationCommandStopScreenShare += e => Dispatcher.UIThread.Post(async () =>
         {
             Console.WriteLine($"EVENT StationCommandStopScreenShare: commanded to stop screen share");
-            // TODO: Stop screen sharing
+
+            // Only execute if this client is a gaming station
+            if (!IsGamingStationEnabled) return;
+
+            await StopScreenShareAsync();
+            Console.WriteLine($"Gaming station stopped screen sharing");
         });
 
-        _signalR.StationCommandDisable += e => Dispatcher.UIThread.Post(() =>
+        _signalR.StationCommandDisable += e => Dispatcher.UIThread.Post(async () =>
         {
             Console.WriteLine($"EVENT StationCommandDisable: commanded to disable gaming station mode");
-            // TODO: Disable gaming station mode in settings
+
+            // Disable gaming station mode in settings
+            _settingsStore.Settings.IsGamingStationEnabled = false;
+            _settingsStore.Save();
+
+            // Report the status change to the server
+            await ReportGamingStationStatusAsync();
+
+            this.RaisePropertyChanged(nameof(IsGamingStationEnabled));
+            Console.WriteLine($"Gaming station mode disabled remotely");
         });
 
         // Set up typing cleanup timer
