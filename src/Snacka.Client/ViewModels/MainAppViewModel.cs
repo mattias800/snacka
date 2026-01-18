@@ -97,6 +97,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private ObservableCollection<GamingStationResponse> _myStations = new();
     private ObservableCollection<GamingStationResponse> _sharedStations = new();
 
+    // Station stream state
+    private bool _isViewingStationStream;
+    private bool _isConnectingToStation;
+    private Guid? _connectedStationId;
+    private string _connectedStationName = "";
+    private string _stationConnectionStatus = "Disconnected";
+    private int _stationConnectedUserCount;
+    private int _stationLatency;
+    private string _stationResolution = "—";
+    private int? _stationPlayerSlot;
+
     /// <summary>
     /// Fired when an NV12 frame should be rendered to GPU fullscreen view.
     /// Args: (width, height, nv12Data)
@@ -314,6 +325,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         RegisterStationCommand = ReactiveCommand.CreateFromTask(RegisterStationAsync);
         ConnectToStationCommand = ReactiveCommand.CreateFromTask<GamingStationResponse>(ConnectToStationAsync);
         ManageStationCommand = ReactiveCommand.Create<GamingStationResponse>(ManageStation);
+        DisconnectFromStationCommand = ReactiveCommand.CreateFromTask(DisconnectFromStationAsync);
+        ToggleStationFullscreenCommand = ReactiveCommand.Create(ToggleStationFullscreen);
         CreateCommunityCommand = ReactiveCommand.CreateFromTask(CreateCommunityAsync);
         RefreshCommunitiesCommand = ReactiveCommand.CreateFromTask(LoadCommunitiesAsync);
         SelectCommunityCommand = ReactiveCommand.Create<CommunityResponse>(community =>
@@ -329,6 +342,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             SelectedVoiceChannelForViewing = null;
             // Close gaming stations view
             IsViewingGamingStations = false;
+            // Close station stream view
+            IsViewingStationStream = false;
             SelectedChannel = channel;
         });
 
@@ -2203,6 +2218,61 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public bool HasSharedStations => _sharedStations.Count > 0;
     public bool IsCurrentMachineRegistered => _myStations.Any(s => s.IsOwner);
 
+    // Station stream properties
+    public bool IsViewingStationStream
+    {
+        get => _isViewingStationStream;
+        set => this.RaiseAndSetIfChanged(ref _isViewingStationStream, value);
+    }
+
+    public bool IsConnectingToStation
+    {
+        get => _isConnectingToStation;
+        set => this.RaiseAndSetIfChanged(ref _isConnectingToStation, value);
+    }
+
+    public Guid? ConnectedStationId
+    {
+        get => _connectedStationId;
+        set => this.RaiseAndSetIfChanged(ref _connectedStationId, value);
+    }
+
+    public string ConnectedStationName
+    {
+        get => _connectedStationName;
+        set => this.RaiseAndSetIfChanged(ref _connectedStationName, value);
+    }
+
+    public string StationConnectionStatus
+    {
+        get => _stationConnectionStatus;
+        set => this.RaiseAndSetIfChanged(ref _stationConnectionStatus, value);
+    }
+
+    public int StationConnectedUserCount
+    {
+        get => _stationConnectedUserCount;
+        set => this.RaiseAndSetIfChanged(ref _stationConnectedUserCount, value);
+    }
+
+    public int StationLatency
+    {
+        get => _stationLatency;
+        set => this.RaiseAndSetIfChanged(ref _stationLatency, value);
+    }
+
+    public string StationResolution
+    {
+        get => _stationResolution;
+        set => this.RaiseAndSetIfChanged(ref _stationResolution, value);
+    }
+
+    public int? StationPlayerSlot
+    {
+        get => _stationPlayerSlot;
+        set => this.RaiseAndSetIfChanged(ref _stationPlayerSlot, value);
+    }
+
     // Screen share picker properties
     public bool IsScreenSharePickerOpen
     {
@@ -2565,6 +2635,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> RegisterStationCommand { get; }
     public ReactiveCommand<GamingStationResponse, Unit> ConnectToStationCommand { get; }
     public ReactiveCommand<GamingStationResponse, Unit> ManageStationCommand { get; }
+    public ReactiveCommand<Unit, Unit> DisconnectFromStationCommand { get; }
+    public ReactiveCommand<Unit, Unit> ToggleStationFullscreenCommand { get; }
     public ReactiveCommand<Unit, Unit> CreateCommunityCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommunitiesCommand { get; }
     public ReactiveCommand<CommunityResponse, Unit> SelectCommunityCommand { get; }
@@ -3086,9 +3158,66 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     private async Task ConnectToStationAsync(GamingStationResponse station)
     {
-        // TODO: Implement station connection with WebRTC
         Console.WriteLine($"Connecting to station: {station.Name} (ID: {station.Id})");
+
+        // Set up connection state
+        ConnectedStationId = station.Id;
+        ConnectedStationName = station.Name;
+        StationConnectionStatus = "Connecting...";
+        IsConnectingToStation = true;
+        IsViewingGamingStations = false;
+        IsViewingStationStream = true;
+
+        try
+        {
+            // TODO: Establish WebRTC connection via SignalR
+            // For now, simulate connection
+            await Task.Delay(1000);
+
+            StationConnectionStatus = "Connected";
+            IsConnectingToStation = false;
+            StationConnectedUserCount = 1;
+            StationLatency = 25;
+            StationResolution = "1920x1080";
+
+            Console.WriteLine($"Connected to station: {station.Name}");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"Failed to connect to station: {ex.Message}");
+            StationConnectionStatus = "Connection failed";
+            IsConnectingToStation = false;
+        }
+    }
+
+    private async Task DisconnectFromStationAsync()
+    {
+        if (ConnectedStationId is null) return;
+
+        Console.WriteLine($"Disconnecting from station: {ConnectedStationName}");
+
+        // TODO: Close WebRTC connection via SignalR
         await Task.CompletedTask;
+
+        // Reset state
+        IsViewingStationStream = false;
+        IsConnectingToStation = false;
+        ConnectedStationId = null;
+        ConnectedStationName = "";
+        StationConnectionStatus = "Disconnected";
+        StationConnectedUserCount = 0;
+        StationLatency = 0;
+        StationResolution = "—";
+        StationPlayerSlot = null;
+
+        // Return to stations list
+        IsViewingGamingStations = true;
+    }
+
+    private void ToggleStationFullscreen()
+    {
+        // TODO: Implement fullscreen toggle for station stream
+        Console.WriteLine("Toggle station fullscreen");
     }
 
     private void ManageStation(GamingStationResponse station)

@@ -191,6 +191,19 @@
                 </controls:NoCommunityView.IsVisible>
             </controls:NoCommunityView>
 
+            <!-- Station Stream Viewer (shown when connected to a station) -->
+            <controls:StationStreamView IsVisible="{Binding IsViewingStationStream}"
+                                        StationId="{Binding ConnectedStationId}"
+                                        StationName="{Binding ConnectedStationName}"
+                                        ConnectionStatus="{Binding StationConnectionStatus}"
+                                        IsConnecting="{Binding IsConnectingToStation}"
+                                        ConnectedUserCount="{Binding StationConnectedUserCount}"
+                                        Latency="{Binding StationLatency}"
+                                        Resolution="{Binding StationResolution}"
+                                        PlayerSlot="{Binding StationPlayerSlot}"
+                                        DisconnectCommand="{Binding DisconnectFromStationCommand}"
+                                        ToggleFullscreenCommand="{Binding ToggleStationFullscreenCommand}"/>
+
             <!-- Gaming Stations (shown when viewing gaming stations) -->
             <controls:GamingStationsView IsVisible="{Binding IsViewingGamingStations}"
                                          IsLoading="{Binding IsLoadingStations}"
@@ -279,6 +292,7 @@
                         <Binding Path="IsViewingDM" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="IsViewingVoiceChannel" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="IsViewingGamingStations" Converter="{x:Static BoolConverters.Not}"/>
+                        <Binding Path="IsViewingStationStream" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="HasNoCommunities" Converter="{x:Static BoolConverters.Not}"/>
                     </MultiBinding>
                 </controls:ChatAreaView.IsVisible>

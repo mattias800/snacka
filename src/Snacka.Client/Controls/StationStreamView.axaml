@@ -1,0 +1,213 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Snacka.Client.Controls"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.Controls.StationStreamView"
+             x:DataType="controls:StationStreamView"
+             Focusable="True"
+             KeyDown="OnKeyDown"
+             KeyUp="OnKeyUp">
+
+    <Border Background="{StaticResource BackgroundBrush}">
+        <Grid RowDefinitions="Auto,*,Auto">
+            <!-- Header -->
+            <Border Grid.Row="0"
+                    Background="{StaticResource Content1Brush}"
+                    Padding="16,12"
+                    BorderThickness="0,0,0,1"
+                    BorderBrush="{StaticResource BackgroundBrush}">
+                <Grid ColumnDefinitions="Auto,*,Auto,Auto,Auto">
+                    <!-- Station Info -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
+                        <ui:SymbolIcon Symbol="Games"
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   FontSize="20"
+                                   VerticalAlignment="Center"/>
+                        <StackPanel Spacing="2">
+                            <TextBlock Text="{Binding StationName, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                                       Foreground="White"
+                                       FontSize="16"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="{Binding ConnectionStatus, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                                       Foreground="{StaticResource Foreground3Brush}"
+                                       FontSize="12"/>
+                        </StackPanel>
+                    </StackPanel>
+
+                    <!-- Spacer -->
+                    <Border Grid.Column="1"/>
+
+                    <!-- Input Mode Selector -->
+                    <Border Grid.Column="2"
+                            Background="{StaticResource BackgroundBrush}"
+                            CornerRadius="8"
+                            Padding="4"
+                            Margin="0,0,12,0">
+                        <StackPanel Orientation="Horizontal" Spacing="4">
+                            <ToggleButton Classes="btn-ghost"
+                                          IsChecked="{Binding IsViewOnlyMode, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                                          Padding="8,6"
+                                          ToolTip.Tip="View Only">
+                                <ui:SymbolIcon Symbol="View" FontSize="14"/>
+                            </ToggleButton>
+                            <ToggleButton Classes="btn-ghost"
+                                          IsChecked="{Binding IsControllerMode, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                                          Padding="8,6"
+                                          ToolTip.Tip="Controller Input">
+                                <ui:SymbolIcon Symbol="Games" FontSize="14"/>
+                            </ToggleButton>
+                            <ToggleButton Classes="btn-ghost"
+                                          IsChecked="{Binding IsFullInputMode, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                                          Padding="8,6"
+                                          ToolTip.Tip="Full Input (Keyboard + Mouse)">
+                                <ui:SymbolIcon Symbol="Edit" FontSize="14"/>
+                            </ToggleButton>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Fullscreen Button -->
+                    <Button Grid.Column="3"
+                            Classes="btn-ghost"
+                            Command="{Binding ToggleFullscreenCommand, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                            Padding="8"
+                            Margin="0,0,8,0"
+                            ToolTip.Tip="Toggle Fullscreen">
+                        <ui:SymbolIcon Symbol="FullScreenMaximize" FontSize="16"/>
+                    </Button>
+
+                    <!-- Disconnect Button -->
+                    <Button Grid.Column="4"
+                            Classes="btn-danger"
+                            Command="{Binding DisconnectCommand, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                            Padding="12,8">
+                        <StackPanel Orientation="Horizontal" Spacing="6">
+                            <ui:SymbolIcon Symbol="Dismiss" FontSize="12" Foreground="White"/>
+                            <TextBlock Text="Disconnect" FontSize="13" Foreground="White"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Video Stream Area -->
+            <Border Grid.Row="1"
+                    Background="{StaticResource BackgroundBrush}"
+                    ClipToBounds="True"
+                    PointerPressed="OnVideoPointerPressed"
+                    PointerMoved="OnVideoPointerMoved"
+                    PointerReleased="OnVideoPointerReleased"
+                    PointerWheelChanged="OnVideoPointerWheelChanged">
+                <Grid>
+                    <!-- Connecting State -->
+                    <StackPanel IsVisible="{Binding IsConnecting, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                                HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="16">
+                        <ui:ProgressRing IsActive="True" Width="48" Height="48"/>
+                        <TextBlock Text="Connecting to station..."
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="14"/>
+                    </StackPanel>
+
+                    <!-- Hardware-accelerated video -->
+                    <controls:HardwareVideoViewHost x:Name="HardwareVideoHost"
+                                                    Decoder="{Binding HardwareDecoder, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                                                    HorizontalAlignment="Stretch"
+                                                    VerticalAlignment="Stretch"
+                                                    IsVisible="{Binding HardwareDecoder, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}, Converter={x:Static ObjectConverters.IsNotNull}}"/>
+
+                    <!-- Software video fallback -->
+                    <Image x:Name="SoftwareVideoImage"
+                           Source="{Binding VideoBitmap, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                           Stretch="Uniform"
+                           HorizontalAlignment="Stretch"
+                           VerticalAlignment="Stretch">
+                        <Image.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="VideoBitmap" RelativeSource="{RelativeSource AncestorType=controls:StationStreamView}" Converter="{x:Static ObjectConverters.IsNotNull}"/>
+                                <Binding Path="HardwareDecoder" RelativeSource="{RelativeSource AncestorType=controls:StationStreamView}" Converter="{x:Static ObjectConverters.IsNull}"/>
+                            </MultiBinding>
+                        </Image.IsVisible>
+                    </Image>
+
+                    <!-- No Video State -->
+                    <StackPanel HorizontalAlignment="Center"
+                                VerticalAlignment="Center"
+                                Spacing="12">
+                        <StackPanel.IsVisible>
+                            <MultiBinding Converter="{x:Static BoolConverters.And}">
+                                <Binding Path="IsConnecting" RelativeSource="{RelativeSource AncestorType=controls:StationStreamView}" Converter="{x:Static BoolConverters.Not}"/>
+                                <Binding Path="HardwareDecoder" RelativeSource="{RelativeSource AncestorType=controls:StationStreamView}" Converter="{x:Static ObjectConverters.IsNull}"/>
+                                <Binding Path="VideoBitmap" RelativeSource="{RelativeSource AncestorType=controls:StationStreamView}" Converter="{x:Static ObjectConverters.IsNull}"/>
+                            </MultiBinding>
+                        </StackPanel.IsVisible>
+                        <ui:SymbolIcon Symbol="Video"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="48"/>
+                        <TextBlock Text="Waiting for video stream..."
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="14"/>
+                    </StackPanel>
+                </Grid>
+            </Border>
+
+            <!-- Status Bar -->
+            <Border Grid.Row="2"
+                    Background="{StaticResource Content1Brush}"
+                    Padding="16,8">
+                <Grid ColumnDefinitions="*,Auto,Auto,Auto">
+                    <!-- Connected Users -->
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                        <ui:SymbolIcon Symbol="People"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="14"/>
+                        <TextBlock Text="{Binding ConnectedUserCount, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}, StringFormat='{}{0} connected'}"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Latency -->
+                    <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="6" Margin="0,0,16,0">
+                        <Border Width="8" Height="8" CornerRadius="4">
+                            <Border.Background>
+                                <MultiBinding Converter="{x:Static controls:LatencyColorConverter.Instance}">
+                                    <Binding Path="Latency" RelativeSource="{RelativeSource AncestorType=controls:StationStreamView}"/>
+                                </MultiBinding>
+                            </Border.Background>
+                        </Border>
+                        <TextBlock Text="{Binding Latency, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}, StringFormat='{}{0}ms'}"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="12"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+
+                    <!-- Resolution -->
+                    <TextBlock Grid.Column="2"
+                               Text="{Binding Resolution, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}}"
+                               Foreground="{StaticResource Foreground3Brush}"
+                               FontSize="12"
+                               VerticalAlignment="Center"
+                               Margin="0,0,16,0"/>
+
+                    <!-- Player Slot -->
+                    <Border Grid.Column="3"
+                            Background="{StaticResource PrimaryBrush}"
+                            CornerRadius="4"
+                            Padding="8,4"
+                            IsVisible="{Binding PlayerSlot, RelativeSource={RelativeSource AncestorType=controls:StationStreamView}, Converter={x:Static ObjectConverters.IsNotNull}}">
+                        <TextBlock Foreground="White" FontSize="11" FontWeight="SemiBold">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="Player {0}">
+                                    <Binding Path="PlayerSlot" RelativeSource="{RelativeSource AncestorType=controls:StationStreamView}"/>
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
+                    </Border>
+                </Grid>
+            </Border>
+        </Grid>
+    </Border>
+</UserControl>
