@@ -1,0 +1,293 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Snacka.Client.Controls"
+             xmlns:services="using:Snacka.Client.Services"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.Controls.GamingStationsView"
+             x:DataType="controls:GamingStationsView">
+
+    <Border Background="{StaticResource Content2Brush}">
+        <DockPanel>
+            <!-- Header -->
+            <Border DockPanel.Dock="Top"
+                    Background="{StaticResource Content1Brush}"
+                    Padding="24,16"
+                    BorderThickness="0,0,0,1"
+                    BorderBrush="{StaticResource BackgroundBrush}">
+                <Grid ColumnDefinitions="*,Auto">
+                    <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12">
+                        <ui:SymbolIcon Symbol="Games"
+                                   Foreground="{StaticResource PrimaryBrush}"
+                                   FontSize="24"/>
+                        <TextBlock Text="Gaming Stations"
+                                   Foreground="White"
+                                   FontSize="20"
+                                   FontWeight="SemiBold"
+                                   VerticalAlignment="Center"/>
+                    </StackPanel>
+                    <Button Grid.Column="1"
+                            Classes="btn-primary"
+                            Command="{Binding RegisterStationCommand, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                            Padding="16,8"
+                            IsVisible="{Binding !IsCurrentMachineRegistered, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}">
+                        <StackPanel Orientation="Horizontal" Spacing="8">
+                            <ui:SymbolIcon Symbol="Add" FontSize="14" Foreground="White"/>
+                            <TextBlock Text="Register This PC" FontSize="13" Foreground="White"/>
+                        </StackPanel>
+                    </Button>
+                </Grid>
+            </Border>
+
+            <!-- Content -->
+            <ScrollViewer VerticalScrollBarVisibility="Auto"
+                          Padding="24">
+                <StackPanel Spacing="24">
+                    <!-- Loading State -->
+                    <Border IsVisible="{Binding IsLoading, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                            HorizontalAlignment="Center"
+                            Padding="24">
+                        <StackPanel Orientation="Horizontal" Spacing="12">
+                            <ui:ProgressRing IsActive="True" Width="24" Height="24"/>
+                            <TextBlock Text="Loading stations..."
+                                       Foreground="{StaticResource Foreground3Brush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- Empty State -->
+                    <Border IsVisible="{Binding HasNoStations, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                            HorizontalAlignment="Center"
+                            VerticalAlignment="Center"
+                            Padding="48">
+                        <StackPanel Spacing="16" HorizontalAlignment="Center">
+                            <ui:SymbolIcon Symbol="Games"
+                                       Foreground="{StaticResource Foreground3Brush}"
+                                       FontSize="64"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="No Gaming Stations"
+                                       Foreground="White"
+                                       FontSize="20"
+                                       FontWeight="SemiBold"
+                                       HorizontalAlignment="Center"/>
+                            <TextBlock Text="Register this PC as a gaming station to stream games to your other devices, or get access from a friend to connect to their station."
+                                       Foreground="{StaticResource Foreground3Brush}"
+                                       FontSize="14"
+                                       TextWrapping="Wrap"
+                                       MaxWidth="400"
+                                       TextAlignment="Center"
+                                       HorizontalAlignment="Center"/>
+                            <Button Classes="btn-primary"
+                                    Command="{Binding RegisterStationCommand, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                                    HorizontalAlignment="Center"
+                                    Margin="0,8,0,0"
+                                    Padding="24,12">
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <ui:SymbolIcon Symbol="Add" FontSize="16" Foreground="White"/>
+                                    <TextBlock Text="Register This PC as a Station" FontSize="14" Foreground="White"/>
+                                </StackPanel>
+                            </Button>
+                        </StackPanel>
+                    </Border>
+
+                    <!-- My Stations Section -->
+                    <StackPanel IsVisible="{Binding HasMyStations, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                                Spacing="12">
+                        <TextBlock Text="MY STATIONS"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,4"/>
+                        <ItemsControl ItemsSource="{Binding MyStations, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:GamingStationResponse">
+                                    <Border Background="{StaticResource Content1Brush}"
+                                            CornerRadius="12"
+                                            Padding="16"
+                                            Margin="0,0,0,8">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                            <!-- Status Indicator -->
+                                            <Border Grid.Column="0"
+                                                    Width="12" Height="12"
+                                                    CornerRadius="6"
+                                                    Margin="0,0,16,0"
+                                                    VerticalAlignment="Center">
+                                                <Border.Background>
+                                                    <MultiBinding Converter="{x:Static controls:StationStatusColorConverter.Instance}">
+                                                        <Binding Path="Status"/>
+                                                    </MultiBinding>
+                                                </Border.Background>
+                                            </Border>
+
+                                            <!-- Station Info -->
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                                    <TextBlock Text="{Binding Name}"
+                                                               Foreground="White"
+                                                               FontSize="16"
+                                                               FontWeight="SemiBold"/>
+                                                    <Border Background="{StaticResource PrimaryBrush}"
+                                                            CornerRadius="4"
+                                                            Padding="6,2"
+                                                            VerticalAlignment="Center"
+                                                            IsVisible="{Binding IsOwner}">
+                                                        <TextBlock Text="Owner"
+                                                                   Foreground="White"
+                                                                   FontSize="10"
+                                                                   FontWeight="SemiBold"/>
+                                                    </Border>
+                                                </StackPanel>
+                                                <TextBlock Text="{Binding Description}"
+                                                           Foreground="{StaticResource Foreground3Brush}"
+                                                           FontSize="13"
+                                                           IsVisible="{Binding Description, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <TextBlock Text="Status:"
+                                                                   Foreground="{StaticResource Foreground3Brush}"
+                                                                   FontSize="12"/>
+                                                        <TextBlock Foreground="White" FontSize="12">
+                                                            <TextBlock.Text>
+                                                                <MultiBinding Converter="{x:Static controls:StationStatusTextConverter.Instance}">
+                                                                    <Binding Path="Status"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="4"
+                                                                IsVisible="{Binding ConnectedUserCount}">
+                                                        <ui:SymbolIcon Symbol="People" FontSize="12" Foreground="{StaticResource Foreground3Brush}"/>
+                                                        <TextBlock Text="{Binding ConnectedUserCount}"
+                                                                   Foreground="White"
+                                                                   FontSize="12"/>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Actions -->
+                                            <StackPanel Grid.Column="2"
+                                                        Orientation="Horizontal"
+                                                        Spacing="8"
+                                                        VerticalAlignment="Center">
+                                                <Button Classes="btn-secondary"
+                                                        Command="{Binding ManageStationCommand, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="12,8"
+                                                        ToolTip.Tip="Manage station settings and access">
+                                                    <ui:SymbolIcon Symbol="Settings" FontSize="14"/>
+                                                </Button>
+                                                <Button Classes="btn-primary"
+                                                        Command="{Binding ConnectToStationCommand, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                                                        CommandParameter="{Binding}"
+                                                        Padding="16,8"
+                                                        IsEnabled="{Binding Status, Converter={x:Static controls:StationOnlineConverter.Instance}}">
+                                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                                        <ui:SymbolIcon Symbol="Play" FontSize="12" Foreground="White"/>
+                                                        <TextBlock Text="Connect" FontSize="13" Foreground="White"/>
+                                                    </StackPanel>
+                                                </Button>
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+
+                    <!-- Shared With Me Section -->
+                    <StackPanel IsVisible="{Binding HasSharedStations, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                                Spacing="12">
+                        <TextBlock Text="SHARED WITH ME"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="12"
+                                   FontWeight="SemiBold"
+                                   Margin="0,0,0,4"/>
+                        <ItemsControl ItemsSource="{Binding SharedStations, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}">
+                            <ItemsControl.ItemTemplate>
+                                <DataTemplate x:DataType="services:GamingStationResponse">
+                                    <Border Background="{StaticResource Content1Brush}"
+                                            CornerRadius="12"
+                                            Padding="16"
+                                            Margin="0,0,0,8">
+                                        <Grid ColumnDefinitions="Auto,*,Auto">
+                                            <!-- Status Indicator -->
+                                            <Border Grid.Column="0"
+                                                    Width="12" Height="12"
+                                                    CornerRadius="6"
+                                                    Margin="0,0,16,0"
+                                                    VerticalAlignment="Center">
+                                                <Border.Background>
+                                                    <MultiBinding Converter="{x:Static controls:StationStatusColorConverter.Instance}">
+                                                        <Binding Path="Status"/>
+                                                    </MultiBinding>
+                                                </Border.Background>
+                                            </Border>
+
+                                            <!-- Station Info -->
+                                            <StackPanel Grid.Column="1" Spacing="4">
+                                                <TextBlock Text="{Binding Name}"
+                                                           Foreground="White"
+                                                           FontSize="16"
+                                                           FontWeight="SemiBold"/>
+                                                <StackPanel Orientation="Horizontal" Spacing="4">
+                                                    <TextBlock Text="Owned by"
+                                                               Foreground="{StaticResource Foreground3Brush}"
+                                                               FontSize="13"/>
+                                                    <TextBlock Text="{Binding OwnerEffectiveDisplayName}"
+                                                               Foreground="White"
+                                                               FontSize="13"/>
+                                                </StackPanel>
+                                                <StackPanel Orientation="Horizontal" Spacing="16" Margin="0,4,0,0">
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <TextBlock Text="Status:"
+                                                                   Foreground="{StaticResource Foreground3Brush}"
+                                                                   FontSize="12"/>
+                                                        <TextBlock Foreground="White" FontSize="12">
+                                                            <TextBlock.Text>
+                                                                <MultiBinding Converter="{x:Static controls:StationStatusTextConverter.Instance}">
+                                                                    <Binding Path="Status"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                    <StackPanel Orientation="Horizontal" Spacing="4">
+                                                        <TextBlock Text="Permission:"
+                                                                   Foreground="{StaticResource Foreground3Brush}"
+                                                                   FontSize="12"/>
+                                                        <TextBlock Foreground="White" FontSize="12">
+                                                            <TextBlock.Text>
+                                                                <MultiBinding Converter="{x:Static controls:StationPermissionTextConverter.Instance}">
+                                                                    <Binding Path="MyPermission"/>
+                                                                </MultiBinding>
+                                                            </TextBlock.Text>
+                                                        </TextBlock>
+                                                    </StackPanel>
+                                                </StackPanel>
+                                            </StackPanel>
+
+                                            <!-- Actions -->
+                                            <Button Grid.Column="2"
+                                                    Classes="btn-primary"
+                                                    Command="{Binding ConnectToStationCommand, RelativeSource={RelativeSource AncestorType=controls:GamingStationsView}}"
+                                                    CommandParameter="{Binding}"
+                                                    Padding="16,8"
+                                                    VerticalAlignment="Center"
+                                                    IsEnabled="{Binding Status, Converter={x:Static controls:StationOnlineConverter.Instance}}">
+                                                <StackPanel Orientation="Horizontal" Spacing="6">
+                                                    <ui:SymbolIcon Symbol="Play" FontSize="12" Foreground="White"/>
+                                                    <TextBlock Text="Connect" FontSize="13" Foreground="White"/>
+                                                </StackPanel>
+                                            </Button>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ItemsControl.ItemTemplate>
+                        </ItemsControl>
+                    </StackPanel>
+                </StackPanel>
+            </ScrollViewer>
+        </DockPanel>
+    </Border>
+</UserControl>

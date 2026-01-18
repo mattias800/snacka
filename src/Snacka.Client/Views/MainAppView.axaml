@@ -65,7 +65,8 @@
                                     IsLoading="{Binding IsLoading}"
                                     SelectCommunityCommand="{Binding SelectCommunityCommand}"
                                     CreateCommunityCommand="{Binding CreateCommunityCommand}"
-                                    OpenDMsCommand="{Binding OpenDMsCommand}"/>
+                                    OpenDMsCommand="{Binding OpenDMsCommand}"
+                                    OpenGamingStationsCommand="{Binding OpenGamingStationsCommand}"/>
 
         <!-- Channel List (Second Column) -->
         <Border Grid.Column="1" Background="{StaticResource Content1Brush}">
@@ -190,6 +191,19 @@
                 </controls:NoCommunityView.IsVisible>
             </controls:NoCommunityView>
 
+            <!-- Gaming Stations (shown when viewing gaming stations) -->
+            <controls:GamingStationsView IsVisible="{Binding IsViewingGamingStations}"
+                                         IsLoading="{Binding IsLoadingStations}"
+                                         HasNoStations="{Binding HasNoStations}"
+                                         HasMyStations="{Binding HasMyStations}"
+                                         HasSharedStations="{Binding HasSharedStations}"
+                                         IsCurrentMachineRegistered="{Binding IsCurrentMachineRegistered}"
+                                         MyStations="{Binding MyStations}"
+                                         SharedStations="{Binding SharedStations}"
+                                         RegisterStationCommand="{Binding RegisterStationCommand}"
+                                         ConnectToStationCommand="{Binding ConnectToStationCommand}"
+                                         ManageStationCommand="{Binding ManageStationCommand}"/>
+
             <!-- DM Content (shown when viewing DM conversation) -->
             <controls:DMContentView x:Name="DMContentArea"
                                     IsVisible="{Binding IsViewingDM}"
@@ -264,6 +278,7 @@
                     <MultiBinding Converter="{x:Static BoolConverters.And}">
                         <Binding Path="IsViewingDM" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="IsViewingVoiceChannel" Converter="{x:Static BoolConverters.Not}"/>
+                        <Binding Path="IsViewingGamingStations" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="HasNoCommunities" Converter="{x:Static BoolConverters.Not}"/>
                     </MultiBinding>
                 </controls:ChatAreaView.IsVisible>

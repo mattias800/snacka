@@ -26,6 +26,9 @@ public partial class CommunityListView : UserControl
     public static readonly StyledProperty<ICommand?> OpenDMsCommandProperty =
         AvaloniaProperty.Register<CommunityListView, ICommand?>(nameof(OpenDMsCommand));
 
+    public static readonly StyledProperty<ICommand?> OpenGamingStationsCommandProperty =
+        AvaloniaProperty.Register<CommunityListView, ICommand?>(nameof(OpenGamingStationsCommand));
+
     public CommunityListView()
     {
         InitializeComponent();
@@ -59,5 +62,11 @@ public partial class CommunityListView : UserControl
     {
         get => GetValue(OpenDMsCommandProperty);
         set => SetValue(OpenDMsCommandProperty, value);
+    }
+
+    public ICommand? OpenGamingStationsCommand
+    {
+        get => GetValue(OpenGamingStationsCommandProperty);
+        set => SetValue(OpenGamingStationsCommandProperty, value);
     }
 }

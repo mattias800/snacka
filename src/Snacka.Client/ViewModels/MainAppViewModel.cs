@@ -91,6 +91,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isGpuFullscreenActive;
     private IHardwareVideoDecoder? _fullscreenHardwareDecoder;
 
+    // Gaming stations state
+    private bool _isViewingGamingStations;
+    private bool _isLoadingStations;
+    private ObservableCollection<GamingStationResponse> _myStations = new();
+    private ObservableCollection<GamingStationResponse> _sharedStations = new();
+
     /// <summary>
     /// Fired when an NV12 frame should be rendered to GPU fullscreen view.
     /// Args: (width, height, nv12Data)
@@ -304,15 +310,25 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         OpenSettingsCommand = _onOpenSettings is not null
             ? ReactiveCommand.Create(_onOpenSettings)
             : null;
+        OpenGamingStationsCommand = ReactiveCommand.CreateFromTask(OpenGamingStationsAsync);
+        RegisterStationCommand = ReactiveCommand.CreateFromTask(RegisterStationAsync);
+        ConnectToStationCommand = ReactiveCommand.CreateFromTask<GamingStationResponse>(ConnectToStationAsync);
+        ManageStationCommand = ReactiveCommand.Create<GamingStationResponse>(ManageStation);
         CreateCommunityCommand = ReactiveCommand.CreateFromTask(CreateCommunityAsync);
         RefreshCommunitiesCommand = ReactiveCommand.CreateFromTask(LoadCommunitiesAsync);
-        SelectCommunityCommand = ReactiveCommand.Create<CommunityResponse>(community => SelectedCommunity = community);
+        SelectCommunityCommand = ReactiveCommand.Create<CommunityResponse>(community =>
+        {
+            IsViewingGamingStations = false;
+            SelectedCommunity = community;
+        });
         SelectChannelCommand = ReactiveCommand.Create<ChannelResponse>(channel =>
         {
             // Close the DM view when selecting a text channel
             _dmContent?.Close();
             // Clear voice channel viewing when selecting a text channel
             SelectedVoiceChannelForViewing = null;
+            // Close gaming stations view
+            IsViewingGamingStations = false;
             SelectedChannel = channel;
         });
 
@@ -2157,6 +2173,36 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// </summary>
     public bool IsViewingDM => _dmContent?.IsOpen ?? false;
 
+    // Gaming Stations properties
+    public bool IsViewingGamingStations
+    {
+        get => _isViewingGamingStations;
+        set => this.RaiseAndSetIfChanged(ref _isViewingGamingStations, value);
+    }
+
+    public bool IsLoadingStations
+    {
+        get => _isLoadingStations;
+        set => this.RaiseAndSetIfChanged(ref _isLoadingStations, value);
+    }
+
+    public ObservableCollection<GamingStationResponse> MyStations
+    {
+        get => _myStations;
+        set => this.RaiseAndSetIfChanged(ref _myStations, value);
+    }
+
+    public ObservableCollection<GamingStationResponse> SharedStations
+    {
+        get => _sharedStations;
+        set => this.RaiseAndSetIfChanged(ref _sharedStations, value);
+    }
+
+    public bool HasNoStations => !IsLoadingStations && _myStations.Count == 0 && _sharedStations.Count == 0;
+    public bool HasMyStations => _myStations.Count > 0;
+    public bool HasSharedStations => _sharedStations.Count > 0;
+    public bool IsCurrentMachineRegistered => _myStations.Any(s => s.IsOwner);
+
     // Screen share picker properties
     public bool IsScreenSharePickerOpen
     {
@@ -2515,6 +2561,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit>? SwitchServerCommand { get; }
     public ReactiveCommand<Unit, Unit>? OpenDMsCommand { get; }
     public ReactiveCommand<Unit, Unit>? OpenSettingsCommand { get; }
+    public ReactiveCommand<Unit, Unit> OpenGamingStationsCommand { get; }
+    public ReactiveCommand<Unit, Unit> RegisterStationCommand { get; }
+    public ReactiveCommand<GamingStationResponse, Unit> ConnectToStationCommand { get; }
+    public ReactiveCommand<GamingStationResponse, Unit> ManageStationCommand { get; }
     public ReactiveCommand<Unit, Unit> CreateCommunityCommand { get; }
     public ReactiveCommand<Unit, Unit> RefreshCommunitiesCommand { get; }
     public ReactiveCommand<CommunityResponse, Unit> SelectCommunityCommand { get; }
@@ -2968,6 +3018,83 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         ReplyingToMessage = null;
         this.RaisePropertyChanged(nameof(IsReplying));
+    }
+
+    // Gaming Stations methods
+    private async Task OpenGamingStationsAsync()
+    {
+        // Close DM and voice channel views
+        _dmContent?.Close();
+        SelectedVoiceChannelForViewing = null;
+
+        IsViewingGamingStations = true;
+        await LoadStationsAsync();
+    }
+
+    private async Task LoadStationsAsync()
+    {
+        IsLoadingStations = true;
+        try
+        {
+            var result = await _apiClient.GetStationsAsync();
+            if (result.Success && result.Data is not null)
+            {
+                _myStations.Clear();
+                _sharedStations.Clear();
+
+                foreach (var station in result.Data)
+                {
+                    if (station.IsOwner)
+                        _myStations.Add(station);
+                    else
+                        _sharedStations.Add(station);
+                }
+
+                this.RaisePropertyChanged(nameof(HasNoStations));
+                this.RaisePropertyChanged(nameof(HasMyStations));
+                this.RaisePropertyChanged(nameof(HasSharedStations));
+                this.RaisePropertyChanged(nameof(IsCurrentMachineRegistered));
+            }
+        }
+        finally
+        {
+            IsLoadingStations = false;
+        }
+    }
+
+    private async Task RegisterStationAsync()
+    {
+        // Get a unique machine identifier
+        var machineId = Environment.MachineName + "-" + Environment.UserName;
+
+        // For now, use a simple name. In a real app, you'd show a dialog.
+        var stationName = Environment.MachineName;
+
+        var result = await _apiClient.RegisterStationAsync(stationName, "Gaming Station", machineId);
+        if (result.Success && result.Data is not null)
+        {
+            _myStations.Add(result.Data);
+            this.RaisePropertyChanged(nameof(HasNoStations));
+            this.RaisePropertyChanged(nameof(HasMyStations));
+            this.RaisePropertyChanged(nameof(IsCurrentMachineRegistered));
+        }
+        else
+        {
+            ErrorMessage = result.Error;
+        }
+    }
+
+    private async Task ConnectToStationAsync(GamingStationResponse station)
+    {
+        // TODO: Implement station connection with WebRTC
+        Console.WriteLine($"Connecting to station: {station.Name} (ID: {station.Id})");
+        await Task.CompletedTask;
+    }
+
+    private void ManageStation(GamingStationResponse station)
+    {
+        // TODO: Show station management modal
+        Console.WriteLine($"Managing station: {station.Name} (ID: {station.Id})");
     }
 
     private async Task CreateCommunityAsync()
