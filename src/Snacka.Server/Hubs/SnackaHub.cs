@@ -27,6 +27,24 @@ public class SnackaHub : Hub
     private static readonly Dictionary<Guid, string> VoiceConnections = new();  // UserId -> Voice ConnectionId (only one device in voice)
     private static readonly object Lock = new();
 
+    // Gaming Station tracking (new simplified architecture)
+    // MachineId -> GamingStationInfo
+    private static readonly Dictionary<string, GamingStationInfo> GamingStations = new();
+
+    /// <summary>
+    /// Information about a registered gaming station.
+    /// </summary>
+    public record GamingStationInfo(
+        Guid OwnerId,
+        string OwnerUsername,
+        string MachineId,
+        string DisplayName,
+        string ConnectionId,
+        bool IsAvailable,
+        Guid? CurrentChannelId = null,
+        bool IsScreenSharing = false
+    );
+
     public SnackaHub(
         SnackaDbContext db,
         IVoiceService voiceService,
@@ -1637,7 +1655,259 @@ public class SnackaHub : Hub
         return Task.FromResult(new List<(Guid, byte)>());
     }
 
-    // ==================== Gaming Station Methods ====================
+    // ==================== Gaming Station Methods (New Architecture) ====================
+
+    /// <summary>
+    /// Called by a client to set its gaming station availability.
+    /// When available=true, this device becomes a gaming station that can be remotely controlled.
+    /// </summary>
+    public async Task SetGamingStationAvailable(bool available, string? displayName, string machineId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        var user = await _db.Users.FindAsync(userId.Value);
+        if (user is null) return;
+
+        var effectiveDisplayName = string.IsNullOrWhiteSpace(displayName) ? Environment.MachineName : displayName;
+
+        lock (Lock)
+        {
+            if (available)
+            {
+                GamingStations[machineId] = new GamingStationInfo(
+                    OwnerId: userId.Value,
+                    OwnerUsername: user.Username,
+                    MachineId: machineId,
+                    DisplayName: effectiveDisplayName,
+                    ConnectionId: Context.ConnectionId,
+                    IsAvailable: true
+                );
+                _logger.LogInformation("Gaming station registered: {MachineId} ({DisplayName}) for user {Username}",
+                    machineId, effectiveDisplayName, user.Username);
+            }
+            else
+            {
+                GamingStations.Remove(machineId);
+                _logger.LogInformation("Gaming station unregistered: {MachineId} for user {Username}",
+                    machineId, user.Username);
+            }
+        }
+
+        // Notify all of this user's devices about the station status change
+        await Clients.User(userId.Value.ToString())
+            .SendAsync("GamingStationStatusChanged", new GamingStationStatusChangedEvent(
+                userId.Value,
+                user.Username,
+                machineId,
+                effectiveDisplayName,
+                available,
+                IsInVoiceChannel: false,
+                CurrentChannelId: null,
+                IsScreenSharing: false
+            ));
+    }
+
+    /// <summary>
+    /// Command a gaming station to join a voice channel.
+    /// Only the owner can send commands to their own gaming stations.
+    /// </summary>
+    public async Task CommandStationJoinChannel(string targetMachineId, Guid channelId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        GamingStationInfo? station;
+        lock (Lock)
+        {
+            GamingStations.TryGetValue(targetMachineId, out station);
+        }
+
+        if (station is null || station.OwnerId != userId.Value)
+        {
+            _logger.LogWarning("User {UserId} attempted to command station {MachineId} they don't own",
+                userId.Value, targetMachineId);
+            return;
+        }
+
+        var channel = await _db.Channels.FindAsync(channelId);
+        if (channel is null) return;
+
+        // Send command to the gaming station
+        await Clients.Client(station.ConnectionId)
+            .SendAsync("StationCommandJoinChannel", new StationCommandJoinChannelEvent(channelId, channel.Name));
+
+        _logger.LogInformation("User {UserId} commanded station {MachineId} to join channel {ChannelId}",
+            userId.Value, targetMachineId, channelId);
+    }
+
+    /// <summary>
+    /// Command a gaming station to leave its current voice channel.
+    /// </summary>
+    public async Task CommandStationLeaveChannel(string targetMachineId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        GamingStationInfo? station;
+        lock (Lock)
+        {
+            GamingStations.TryGetValue(targetMachineId, out station);
+        }
+
+        if (station is null || station.OwnerId != userId.Value) return;
+
+        await Clients.Client(station.ConnectionId)
+            .SendAsync("StationCommandLeaveChannel", new StationCommandLeaveChannelEvent());
+
+        _logger.LogInformation("User {UserId} commanded station {MachineId} to leave channel",
+            userId.Value, targetMachineId);
+    }
+
+    /// <summary>
+    /// Command a gaming station to start screen sharing.
+    /// </summary>
+    public async Task CommandStationStartScreenShare(string targetMachineId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        GamingStationInfo? station;
+        lock (Lock)
+        {
+            GamingStations.TryGetValue(targetMachineId, out station);
+        }
+
+        if (station is null || station.OwnerId != userId.Value) return;
+
+        await Clients.Client(station.ConnectionId)
+            .SendAsync("StationCommandStartScreenShare", new StationCommandStartScreenShareEvent());
+
+        _logger.LogInformation("User {UserId} commanded station {MachineId} to start screen share",
+            userId.Value, targetMachineId);
+    }
+
+    /// <summary>
+    /// Command a gaming station to stop screen sharing.
+    /// </summary>
+    public async Task CommandStationStopScreenShare(string targetMachineId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        GamingStationInfo? station;
+        lock (Lock)
+        {
+            GamingStations.TryGetValue(targetMachineId, out station);
+        }
+
+        if (station is null || station.OwnerId != userId.Value) return;
+
+        await Clients.Client(station.ConnectionId)
+            .SendAsync("StationCommandStopScreenShare", new StationCommandStopScreenShareEvent());
+
+        _logger.LogInformation("User {UserId} commanded station {MachineId} to stop screen share",
+            userId.Value, targetMachineId);
+    }
+
+    /// <summary>
+    /// Command a gaming station to disable gaming station mode.
+    /// </summary>
+    public async Task CommandStationDisable(string targetMachineId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        GamingStationInfo? station;
+        lock (Lock)
+        {
+            GamingStations.TryGetValue(targetMachineId, out station);
+        }
+
+        if (station is null || station.OwnerId != userId.Value) return;
+
+        await Clients.Client(station.ConnectionId)
+            .SendAsync("StationCommandDisable", new StationCommandDisableEvent());
+
+        // Remove from tracking
+        lock (Lock)
+        {
+            GamingStations.Remove(targetMachineId);
+        }
+
+        _logger.LogInformation("User {UserId} commanded station {MachineId} to disable gaming station mode",
+            userId.Value, targetMachineId);
+    }
+
+    /// <summary>
+    /// Send keyboard input to the gaming station in the specified voice channel.
+    /// Only the owner can send input to their own stations.
+    /// </summary>
+    public async Task SendStationKeyboardInput(Guid channelId, StationKeyboardInput input)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        // Find the gaming station in this channel that belongs to this user
+        GamingStationInfo? station;
+        lock (Lock)
+        {
+            station = GamingStations.Values
+                .FirstOrDefault(s => s.OwnerId == userId.Value && s.CurrentChannelId == channelId);
+        }
+
+        if (station is null) return;
+
+        // Forward input to the gaming station
+        await Clients.Client(station.ConnectionId)
+            .SendAsync("StationKeyboardInput", new StationKeyboardInputEvent(userId.Value, input));
+    }
+
+    /// <summary>
+    /// Send mouse input to the gaming station in the specified voice channel.
+    /// </summary>
+    public async Task SendStationMouseInput(Guid channelId, StationMouseInput input)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        // Find the gaming station in this channel that belongs to this user
+        GamingStationInfo? station;
+        lock (Lock)
+        {
+            station = GamingStations.Values
+                .FirstOrDefault(s => s.OwnerId == userId.Value && s.CurrentChannelId == channelId);
+        }
+
+        if (station is null) return;
+
+        // Forward input to the gaming station
+        await Clients.Client(station.ConnectionId)
+            .SendAsync("StationMouseInput", new StationMouseInputEvent(userId.Value, input));
+    }
+
+    // ==================== Gaming Station Event DTOs (New Architecture) ====================
+
+    public record GamingStationStatusChangedEvent(
+        Guid UserId,
+        string Username,
+        string MachineId,
+        string DisplayName,
+        bool IsAvailable,
+        bool IsInVoiceChannel,
+        Guid? CurrentChannelId,
+        bool IsScreenSharing
+    );
+
+    public record StationCommandJoinChannelEvent(Guid ChannelId, string ChannelName);
+    public record StationCommandLeaveChannelEvent();
+    public record StationCommandStartScreenShareEvent();
+    public record StationCommandStopScreenShareEvent();
+    public record StationCommandDisableEvent();
+    public record StationKeyboardInputEvent(Guid FromUserId, StationKeyboardInput Input);
+    public record StationMouseInputEvent(Guid FromUserId, StationMouseInput Input);
+
+    // ==================== Gaming Station Methods (Old Architecture - Deprecated) ====================
 
     // Track station connections: StationId -> ConnectionId
     private static readonly Dictionary<Guid, string> StationConnections = new();
@@ -1647,6 +1917,7 @@ public class SnackaHub : Hub
 
     /// <summary>
     /// Called by a gaming station when it comes online.
+    /// DEPRECATED: Use SetGamingStationAvailable instead.
     /// </summary>
     public async Task StationOnline(Guid stationId, string machineId)
     {

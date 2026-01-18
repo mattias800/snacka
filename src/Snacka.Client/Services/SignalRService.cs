@@ -159,29 +159,58 @@ public interface ISignalRService : IAsyncDisposable
     event Action<ControllerStateReceivedEvent>? ControllerStateReceived;
     event Action<ControllerRumbleReceivedEvent>? ControllerRumbleReceived;
 
-    // Gaming Station methods
-    Task<StationSessionUserResponse?> ConnectToStationAsync(Guid stationId, StationInputMode inputMode);
-    Task DisconnectFromStationAsync(Guid stationId);
-    Task SendStationAnswerAsync(Guid stationId, string sdp);
-    Task SendStationIceCandidateAsync(Guid stationId, Guid? targetUserId, string candidate, string? sdpMid, int? sdpMLineIndex);
-    Task SendStationKeyboardInputAsync(StationKeyboardInput input);
-    Task SendStationMouseInputAsync(StationMouseInput input);
-    Task SendStationControllerInputAsync(StationControllerInput input);
+    // Gaming Station status methods (report this client's gaming station availability)
+    Task SetGamingStationAvailableAsync(bool available, string? displayName, string machineId);
 
-    // Gaming Station events
-    event Action<StationOnlineEvent>? StationOnline;
-    event Action<StationOfflineEvent>? StationOffline;
-    event Action<StationWebRtcOffer>? StationOfferReceived;
-    event Action<StationIceCandidate>? StationIceCandidateReceived;
-    event Action<UserConnectedToStationEvent>? UserConnectedToStation;
-    event Action<UserDisconnectedFromStationEvent>? UserDisconnectedFromStation;
-    event Action<StationAccessGrantedEvent>? StationAccessGranted;
-    event Action<StationAccessRevokedEvent>? StationAccessRevoked;
+    // Gaming Station remote commands (owner sends to their gaming station)
+    Task CommandStationJoinChannelAsync(string targetMachineId, Guid channelId);
+    Task CommandStationLeaveChannelAsync(string targetMachineId);
+    Task CommandStationStartScreenShareAsync(string targetMachineId);
+    Task CommandStationStopScreenShareAsync(string targetMachineId);
+    Task CommandStationDisableAsync(string targetMachineId);
+
+    // Gaming Station input forwarding (viewer sends to station in same voice channel)
+    Task SendStationKeyboardInputAsync(Guid channelId, StationKeyboardInput input);
+    Task SendStationMouseInputAsync(Guid channelId, StationMouseInput input);
+
+    // Gaming Station status events (fired when any user's gaming station status changes)
+    event Action<GamingStationStatusChangedEvent>? GamingStationStatusChanged;
+
+    // Gaming Station command events (fired on the gaming station client when owner sends commands)
+    event Action<StationCommandJoinChannelEvent>? StationCommandJoinChannel;
+    event Action<StationCommandLeaveChannelEvent>? StationCommandLeaveChannel;
+    event Action<StationCommandStartScreenShareEvent>? StationCommandStartScreenShare;
+    event Action<StationCommandStopScreenShareEvent>? StationCommandStopScreenShare;
+    event Action<StationCommandDisableEvent>? StationCommandDisable;
+
+    // Gaming Station input events (fired on the gaming station when receiving input)
+    event Action<StationKeyboardInputEvent>? StationKeyboardInputReceived;
+    event Action<StationMouseInputEvent>? StationMouseInputReceived;
 }
 
 // Typing indicator event DTOs
 public record TypingEvent(Guid ChannelId, Guid UserId, string Username);
 public record DMTypingEvent(Guid UserId, string Username);
+
+// Gaming Station event DTOs
+public record GamingStationStatusChangedEvent(
+    Guid UserId,
+    string Username,
+    string MachineId,
+    string DisplayName,
+    bool IsAvailable,
+    bool IsInVoiceChannel,
+    Guid? CurrentChannelId,
+    bool IsScreenSharing
+);
+
+public record StationCommandJoinChannelEvent(Guid ChannelId, string ChannelName);
+public record StationCommandLeaveChannelEvent();
+public record StationCommandStartScreenShareEvent();
+public record StationCommandStopScreenShareEvent();
+public record StationCommandDisableEvent();
+public record StationKeyboardInputEvent(Guid FromUserId, StationKeyboardInput Input);
+public record StationMouseInputEvent(Guid FromUserId, StationMouseInput Input);
 
 /// <summary>
 /// Custom retry policy that notifies when a retry is scheduled.
@@ -657,61 +686,72 @@ public class SignalRService : ISignalRService
         // No logging for high-frequency rumble updates
     }
 
-    // Gaming Station methods
-    public async Task<StationSessionUserResponse?> ConnectToStationAsync(Guid stationId, StationInputMode inputMode)
-    {
-        if (_hubConnection is null || !IsConnected) return null;
-        var result = await _hubConnection.InvokeAsync<StationSessionUserResponse?>("ConnectToStation", stationId, inputMode);
-        Console.WriteLine($"SignalR: Connected to station {stationId} with input mode {inputMode}");
-        return result;
-    }
-
-    public async Task DisconnectFromStationAsync(Guid stationId)
+    // Gaming Station status methods
+    public async Task SetGamingStationAvailableAsync(bool available, string? displayName, string machineId)
     {
         if (_hubConnection is null || !IsConnected) return;
-        await _hubConnection.InvokeAsync("DisconnectFromStation", stationId);
-        Console.WriteLine($"SignalR: Disconnected from station {stationId}");
+        await _hubConnection.InvokeAsync("SetGamingStationAvailable", available, displayName, machineId);
+        Console.WriteLine($"SignalR: Set gaming station available={available}, name={displayName ?? "(default)"}, machineId={machineId}");
     }
 
-    public async Task SendStationAnswerAsync(Guid stationId, string sdp)
+    // Gaming Station remote commands (owner sends to their gaming station)
+    public async Task CommandStationJoinChannelAsync(string targetMachineId, Guid channelId)
     {
         if (_hubConnection is null || !IsConnected) return;
-        await _hubConnection.InvokeAsync("SendStationAnswer", stationId, sdp);
+        await _hubConnection.InvokeAsync("CommandStationJoinChannel", targetMachineId, channelId);
+        Console.WriteLine($"SignalR: Commanding station {targetMachineId} to join channel {channelId}");
     }
 
-    public async Task SendStationIceCandidateAsync(Guid stationId, Guid? targetUserId, string candidate, string? sdpMid, int? sdpMLineIndex)
+    public async Task CommandStationLeaveChannelAsync(string targetMachineId)
     {
         if (_hubConnection is null || !IsConnected) return;
-        await _hubConnection.InvokeAsync("SendStationIceCandidate", stationId, targetUserId, candidate, sdpMid, sdpMLineIndex);
+        await _hubConnection.InvokeAsync("CommandStationLeaveChannel", targetMachineId);
+        Console.WriteLine($"SignalR: Commanding station {targetMachineId} to leave channel");
     }
 
-    public async Task SendStationKeyboardInputAsync(StationKeyboardInput input)
+    public async Task CommandStationStartScreenShareAsync(string targetMachineId)
     {
         if (_hubConnection is null || !IsConnected) return;
-        await _hubConnection.InvokeAsync("SendStationKeyboardInput", input);
+        await _hubConnection.InvokeAsync("CommandStationStartScreenShare", targetMachineId);
+        Console.WriteLine($"SignalR: Commanding station {targetMachineId} to start screen share");
     }
 
-    public async Task SendStationMouseInputAsync(StationMouseInput input)
+    public async Task CommandStationStopScreenShareAsync(string targetMachineId)
     {
         if (_hubConnection is null || !IsConnected) return;
-        await _hubConnection.InvokeAsync("SendStationMouseInput", input);
+        await _hubConnection.InvokeAsync("CommandStationStopScreenShare", targetMachineId);
+        Console.WriteLine($"SignalR: Commanding station {targetMachineId} to stop screen share");
     }
 
-    public async Task SendStationControllerInputAsync(StationControllerInput input)
+    public async Task CommandStationDisableAsync(string targetMachineId)
     {
         if (_hubConnection is null || !IsConnected) return;
-        await _hubConnection.InvokeAsync("SendStationControllerInput", input);
+        await _hubConnection.InvokeAsync("CommandStationDisable", targetMachineId);
+        Console.WriteLine($"SignalR: Commanding station {targetMachineId} to disable gaming station mode");
+    }
+
+    // Gaming Station input forwarding
+    public async Task SendStationKeyboardInputAsync(Guid channelId, StationKeyboardInput input)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("SendStationKeyboardInput", channelId, input);
+    }
+
+    public async Task SendStationMouseInputAsync(Guid channelId, StationMouseInput input)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("SendStationMouseInput", channelId, input);
     }
 
     // Gaming Station events
-    public event Action<StationOnlineEvent>? StationOnline;
-    public event Action<StationOfflineEvent>? StationOffline;
-    public event Action<StationWebRtcOffer>? StationOfferReceived;
-    public event Action<StationIceCandidate>? StationIceCandidateReceived;
-    public event Action<UserConnectedToStationEvent>? UserConnectedToStation;
-    public event Action<UserDisconnectedFromStationEvent>? UserDisconnectedFromStation;
-    public event Action<StationAccessGrantedEvent>? StationAccessGranted;
-    public event Action<StationAccessRevokedEvent>? StationAccessRevoked;
+    public event Action<GamingStationStatusChangedEvent>? GamingStationStatusChanged;
+    public event Action<StationCommandJoinChannelEvent>? StationCommandJoinChannel;
+    public event Action<StationCommandLeaveChannelEvent>? StationCommandLeaveChannel;
+    public event Action<StationCommandStartScreenShareEvent>? StationCommandStartScreenShare;
+    public event Action<StationCommandStopScreenShareEvent>? StationCommandStopScreenShare;
+    public event Action<StationCommandDisableEvent>? StationCommandDisable;
+    public event Action<StationKeyboardInputEvent>? StationKeyboardInputReceived;
+    public event Action<StationMouseInputEvent>? StationMouseInputReceived;
 
     private void RegisterHandlers()
     {
@@ -1053,52 +1093,52 @@ public class SignalRService : ISignalRService
         });
 
         // Gaming Station events
-        _hubConnection.On<StationOnlineEvent>("StationOnline", e =>
+        _hubConnection.On<GamingStationStatusChangedEvent>("GamingStationStatusChanged", e =>
         {
-            Console.WriteLine($"SignalR: StationOnline - station {e.StationId} is now online");
-            StationOnline?.Invoke(e);
+            Console.WriteLine($"SignalR: GamingStationStatusChanged - user {e.Username} station {e.MachineId} available={e.IsAvailable}");
+            GamingStationStatusChanged?.Invoke(e);
         });
 
-        _hubConnection.On<StationOfflineEvent>("StationOffline", e =>
+        // Gaming Station command events (received by the gaming station client)
+        _hubConnection.On<StationCommandJoinChannelEvent>("StationCommandJoinChannel", e =>
         {
-            Console.WriteLine($"SignalR: StationOffline - station {e.StationId} is now offline");
-            StationOffline?.Invoke(e);
+            Console.WriteLine($"SignalR: StationCommandJoinChannel - commanded to join channel {e.ChannelId} ({e.ChannelName})");
+            StationCommandJoinChannel?.Invoke(e);
         });
 
-        _hubConnection.On<StationWebRtcOffer>("StationOffer", e =>
+        _hubConnection.On<StationCommandLeaveChannelEvent>("StationCommandLeaveChannel", e =>
         {
-            Console.WriteLine($"SignalR: StationOffer - received WebRTC offer from station {e.StationId}");
-            StationOfferReceived?.Invoke(e);
+            Console.WriteLine($"SignalR: StationCommandLeaveChannel - commanded to leave channel");
+            StationCommandLeaveChannel?.Invoke(e);
         });
 
-        _hubConnection.On<StationIceCandidate>("StationIceCandidate", e =>
+        _hubConnection.On<StationCommandStartScreenShareEvent>("StationCommandStartScreenShare", e =>
         {
-            Console.WriteLine($"SignalR: StationIceCandidate - received from station {e.StationId}");
-            StationIceCandidateReceived?.Invoke(e);
+            Console.WriteLine($"SignalR: StationCommandStartScreenShare - commanded to start screen share");
+            StationCommandStartScreenShare?.Invoke(e);
         });
 
-        _hubConnection.On<UserConnectedToStationEvent>("UserConnectedToStation", e =>
+        _hubConnection.On<StationCommandStopScreenShareEvent>("StationCommandStopScreenShare", e =>
         {
-            Console.WriteLine($"SignalR: UserConnectedToStation - {e.Username} connected to station {e.StationId} as player {e.PlayerSlot}");
-            UserConnectedToStation?.Invoke(e);
+            Console.WriteLine($"SignalR: StationCommandStopScreenShare - commanded to stop screen share");
+            StationCommandStopScreenShare?.Invoke(e);
         });
 
-        _hubConnection.On<UserDisconnectedFromStationEvent>("UserDisconnectedFromStation", e =>
+        _hubConnection.On<StationCommandDisableEvent>("StationCommandDisable", e =>
         {
-            Console.WriteLine($"SignalR: UserDisconnectedFromStation - user {e.UserId} left station {e.StationId}");
-            UserDisconnectedFromStation?.Invoke(e);
+            Console.WriteLine($"SignalR: StationCommandDisable - commanded to disable gaming station mode");
+            StationCommandDisable?.Invoke(e);
         });
 
-        _hubConnection.On<StationAccessGrantedEvent>("StationAccessGranted", e =>
+        // Gaming Station input events (received by the gaming station when viewer sends input)
+        _hubConnection.On<StationKeyboardInputEvent>("StationKeyboardInput", e =>
         {
-            Console.WriteLine($"SignalR: StationAccessGranted - user {e.UserId} granted {e.Permission} access to station {e.StationId}");
-            StationAccessGranted?.Invoke(e);
+            StationKeyboardInputReceived?.Invoke(e);
         });
 
-        _hubConnection.On<StationAccessRevokedEvent>("StationAccessRevoked", e =>
+        _hubConnection.On<StationMouseInputEvent>("StationMouseInput", e =>
         {
-            Console.WriteLine($"SignalR: StationAccessRevoked - user {e.UserId} access revoked from station {e.StationId}");
-            StationAccessRevoked?.Invoke(e);
+            StationMouseInputReceived?.Invoke(e);
         });
 
         _hubConnection.Reconnecting += error =>

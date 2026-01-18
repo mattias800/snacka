@@ -1126,85 +1126,42 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             UpdateRecentDmWithMessage(message);
         });
 
-        // Gaming Station events
-        _signalR.StationOnline += e => Dispatcher.UIThread.Post(() =>
+        // Gaming Station events (new simplified architecture)
+        _signalR.GamingStationStatusChanged += e => Dispatcher.UIThread.Post(() =>
         {
-            Console.WriteLine($"EVENT StationOnline: station {e.StationId} ({e.StationName}) is now online");
-            // Update station status in lists
-            var station = _myStations.FirstOrDefault(s => s.Id == e.StationId)
-                       ?? _sharedStations.FirstOrDefault(s => s.Id == e.StationId);
-            if (station is not null)
-            {
-                var index = _myStations.IndexOf(station);
-                if (index >= 0)
-                    _myStations[index] = station with { Status = Services.StationStatus.Online };
-                else
-                {
-                    index = _sharedStations.IndexOf(station);
-                    if (index >= 0)
-                        _sharedStations[index] = station with { Status = Services.StationStatus.Online };
-                }
-            }
+            Console.WriteLine($"EVENT GamingStationStatusChanged: user {e.Username} station {e.MachineId} available={e.IsAvailable}");
+            // TODO: Update member list to show/hide gaming station under user
         });
 
-        _signalR.StationOffline += e => Dispatcher.UIThread.Post(() =>
+        // Gaming Station command events (this client is a gaming station receiving commands)
+        _signalR.StationCommandJoinChannel += e => Dispatcher.UIThread.Post(async () =>
         {
-            Console.WriteLine($"EVENT StationOffline: station {e.StationId} is now offline");
-            // Update station status in lists
-            var station = _myStations.FirstOrDefault(s => s.Id == e.StationId)
-                       ?? _sharedStations.FirstOrDefault(s => s.Id == e.StationId);
-            if (station is not null)
-            {
-                var index = _myStations.IndexOf(station);
-                if (index >= 0)
-                    _myStations[index] = station with { Status = Services.StationStatus.Offline };
-                else
-                {
-                    index = _sharedStations.IndexOf(station);
-                    if (index >= 0)
-                        _sharedStations[index] = station with { Status = Services.StationStatus.Offline };
-                }
-            }
+            Console.WriteLine($"EVENT StationCommandJoinChannel: commanded to join channel {e.ChannelId}");
+            // TODO: Auto-join the specified voice channel
         });
 
-        _signalR.StationOfferReceived += e => Dispatcher.UIThread.Post(() =>
+        _signalR.StationCommandLeaveChannel += e => Dispatcher.UIThread.Post(() =>
         {
-            Console.WriteLine($"EVENT StationOfferReceived: WebRTC offer from station {e.StationId}");
-            if (ConnectedStationId == e.StationId)
-            {
-                // Handle WebRTC offer from station - TODO: integrate with video decoder
-                // For now, log and track that we got the offer
-                StationConnectionStatus = "Receiving stream...";
-            }
+            Console.WriteLine($"EVENT StationCommandLeaveChannel: commanded to leave channel");
+            // TODO: Leave current voice channel
         });
 
-        _signalR.StationIceCandidateReceived += e => Dispatcher.UIThread.Post(() =>
+        _signalR.StationCommandStartScreenShare += e => Dispatcher.UIThread.Post(async () =>
         {
-            Console.WriteLine($"EVENT StationIceCandidateReceived: ICE candidate from station {e.StationId}");
-            // TODO: Forward to WebRTC peer connection
+            Console.WriteLine($"EVENT StationCommandStartScreenShare: commanded to start screen share");
+            // TODO: Start screen sharing
         });
 
-        _signalR.UserConnectedToStation += e => Dispatcher.UIThread.Post(() =>
+        _signalR.StationCommandStopScreenShare += e => Dispatcher.UIThread.Post(() =>
         {
-            Console.WriteLine($"EVENT UserConnectedToStation: {e.Username} connected to station {e.StationId} as player {e.PlayerSlot}");
-            if (ConnectedStationId == e.StationId)
-            {
-                StationConnectedUserCount++;
-                // If this is us, update our player slot
-                if (e.UserId == _auth.UserId)
-                {
-                    StationPlayerSlot = e.PlayerSlot;
-                }
-            }
+            Console.WriteLine($"EVENT StationCommandStopScreenShare: commanded to stop screen share");
+            // TODO: Stop screen sharing
         });
 
-        _signalR.UserDisconnectedFromStation += e => Dispatcher.UIThread.Post(() =>
+        _signalR.StationCommandDisable += e => Dispatcher.UIThread.Post(() =>
         {
-            Console.WriteLine($"EVENT UserDisconnectedFromStation: user {e.UserId} left station {e.StationId}");
-            if (ConnectedStationId == e.StationId)
-            {
-                StationConnectedUserCount = Math.Max(0, StationConnectedUserCount - 1);
-            }
+            Console.WriteLine($"EVENT StationCommandDisable: commanded to disable gaming station mode");
+            // TODO: Disable gaming station mode in settings
         });
 
         // Set up typing cleanup timer
@@ -3237,79 +3194,25 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
     }
 
+    // Gaming Station methods - new architecture uses voice channels
+    // These are placeholder methods that will be replaced when Phase 3+ is implemented
+
     private async Task ConnectToStationAsync(GamingStationResponse station)
     {
-        Console.WriteLine($"Connecting to station: {station.Name} (ID: {station.Id})");
-
-        // Set up connection state
-        ConnectedStationId = station.Id;
-        ConnectedStationName = station.Name;
-        StationConnectionStatus = "Connecting...";
-        IsConnectingToStation = true;
-        IsViewingGamingStations = false;
-        IsViewingStationStream = true;
-
-        try
-        {
-            // Connect via SignalR - this will trigger WebRTC offer from the station
-            var result = await _signalR.ConnectToStationAsync(station.Id, Services.StationInputMode.Controller);
-
-            if (result is not null)
-            {
-                StationConnectionStatus = "Connected";
-                IsConnectingToStation = false;
-                StationPlayerSlot = result.PlayerSlot;
-                StationConnectedUserCount = 1; // Will be updated via SignalR events
-
-                // Resolution will be updated when we receive the video stream
-                StationResolution = "Waiting for stream...";
-
-                Console.WriteLine($"Connected to station: {station.Name}, Player slot: {result.PlayerSlot}");
-            }
-            else
-            {
-                throw new InvalidOperationException("Failed to connect to station - no response from server");
-            }
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Failed to connect to station: {ex.Message}");
-            StationConnectionStatus = "Connection failed";
-            IsConnectingToStation = false;
-            ErrorMessage = $"Failed to connect: {ex.Message}";
-        }
+        // Old architecture - keeping as placeholder for now
+        // In the new architecture, we use voice channels instead of direct station connections
+        Console.WriteLine($"ConnectToStationAsync: Old architecture method called for station {station.Name}");
+        Console.WriteLine("In the new architecture, use CommandStationJoinChannelAsync to add station to a voice channel");
+        await Task.CompletedTask;
     }
 
     private async Task DisconnectFromStationAsync()
     {
-        if (ConnectedStationId is null) return;
-
-        var stationId = ConnectedStationId.Value;
-        Console.WriteLine($"Disconnecting from station: {ConnectedStationName}");
-
-        try
-        {
-            // Disconnect via SignalR
-            await _signalR.DisconnectFromStationAsync(stationId);
-        }
-        catch (Exception ex)
-        {
-            Console.WriteLine($"Error disconnecting from station: {ex.Message}");
-        }
-
-        // Reset state
-        IsViewingStationStream = false;
-        IsConnectingToStation = false;
-        ConnectedStationId = null;
-        ConnectedStationName = "";
-        StationConnectionStatus = "Disconnected";
-        StationConnectedUserCount = 0;
-        StationLatency = 0;
-        StationResolution = "—";
-        StationPlayerSlot = null;
-
-        // Return to stations list
-        IsViewingGamingStations = true;
+        // Old architecture - keeping as placeholder for now
+        // In the new architecture, we command the station to leave the voice channel
+        Console.WriteLine("DisconnectFromStationAsync: Old architecture method called");
+        Console.WriteLine("In the new architecture, use CommandStationLeaveChannelAsync to remove station from voice channel");
+        await Task.CompletedTask;
     }
 
     private void ToggleStationFullscreen()
@@ -3325,15 +3228,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// Sends keyboard input to the connected gaming station.
+    /// Sends keyboard input to a gaming station in the current voice channel.
     /// </summary>
     public async Task SendStationKeyboardInputAsync(StationKeyboardInput input)
     {
-        if (ConnectedStationId is null) return;
+        // In the new architecture, input is sent to the gaming station in our current voice channel
+        if (CurrentVoiceChannel is null) return;
 
         try
         {
-            await _signalR.SendStationKeyboardInputAsync(input);
+            await _signalR.SendStationKeyboardInputAsync(CurrentVoiceChannel.Id, input);
         }
         catch (Exception ex)
         {
@@ -3342,15 +3246,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// Sends mouse input to the connected gaming station.
+    /// Sends mouse input to a gaming station in the current voice channel.
     /// </summary>
     public async Task SendStationMouseInputAsync(StationMouseInput input)
     {
-        if (ConnectedStationId is null) return;
+        // In the new architecture, input is sent to the gaming station in our current voice channel
+        if (CurrentVoiceChannel is null) return;
 
         try
         {
-            await _signalR.SendStationMouseInputAsync(input);
+            await _signalR.SendStationMouseInputAsync(CurrentVoiceChannel.Id, input);
         }
         catch (Exception ex)
         {

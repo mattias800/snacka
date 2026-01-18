@@ -52,6 +52,10 @@ public class UserSettings
     // Controller settings
     public bool ControllerRumbleEnabled { get; set; } = true;
 
+    // Gaming Station settings
+    public bool IsGamingStationEnabled { get; set; } = false;
+    public string GamingStationDisplayName { get; set; } = "";  // Empty = use machine name
+
     // Onboarding flags
     public bool HasSeenWelcome { get; set; } = false;
 
