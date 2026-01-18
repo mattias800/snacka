@@ -28,6 +28,10 @@ public class IntegrationTestBase : IDisposable
     {
         _dbName = Guid.NewGuid().ToString();
 
+        // Set environment variable for JWT secret BEFORE factory creation
+        // Program.cs validates this early, before ConfigureAppConfiguration runs
+        Environment.SetEnvironmentVariable("JWT_SECRET_KEY", TestSecretKey);
+
         var testConfig = new Dictionary<string, string?>
         {
             ["Jwt:SecretKey"] = TestSecretKey,
@@ -49,29 +53,27 @@ public class IntegrationTestBase : IDisposable
 
                 builder.ConfigureServices(services =>
                 {
-                    // Remove the real database registrations
-                    var dbContextDescriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions<SnackaDbContext>));
-                    if (dbContextDescriptor != null)
-                        services.Remove(dbContextDescriptor);
-
-                    var dbContextOptionsDescriptor = services.SingleOrDefault(
-                        d => d.ServiceType == typeof(DbContextOptions));
-                    if (dbContextOptionsDescriptor != null)
-                        services.Remove(dbContextOptionsDescriptor);
-
-                    // Remove all DbContext-related services
+                    // Remove all database-related registrations (may be multiple)
                     var descriptorsToRemove = services
-                        .Where(d => d.ServiceType == typeof(SnackaDbContext) ||
+                        .Where(d => d.ServiceType == typeof(DbContextOptions<SnackaDbContext>) ||
+                                    d.ServiceType == typeof(DbContextOptions<DataProtectionDbContext>) ||
+                                    d.ServiceType == typeof(DbContextOptions) ||
+                                    d.ServiceType == typeof(SnackaDbContext) ||
+                                    d.ServiceType == typeof(DataProtectionDbContext) ||
                                     d.ServiceType.FullName?.Contains("EntityFrameworkCore") == true)
                         .ToList();
                     foreach (var descriptor in descriptorsToRemove)
                         services.Remove(descriptor);
 
-                    // Add in-memory database
+                    // Add in-memory databases
                     services.AddDbContext<SnackaDbContext>(options =>
                     {
                         options.UseInMemoryDatabase(_dbName);
+                    });
+
+                    services.AddDbContext<DataProtectionDbContext>(options =>
+                    {
+                        options.UseInMemoryDatabase(_dbName + "_dataprotection");
                     });
 
                     // Reconfigure JWT Bearer authentication with test settings

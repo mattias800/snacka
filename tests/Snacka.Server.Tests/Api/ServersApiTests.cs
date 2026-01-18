@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Snacka.Server.DTOs;
+using Snacka.Shared.Models;
 
 namespace Snacka.Server.Tests.Api;
 
@@ -58,7 +59,8 @@ public class CommunitiesApiTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         var communities = await response.Content.ReadFromJsonAsync<List<CommunityResponse>>();
         Assert.IsNotNull(communities);
-        Assert.AreEqual(2, communities.Count);
+        // 3 communities: 2 created + 1 default "General" community created during first user registration
+        Assert.AreEqual(3, communities.Count);
     }
 
     [TestMethod]
@@ -121,10 +123,11 @@ public class CommunitiesApiTests
         // Assert
         Assert.AreEqual(HttpStatusCode.NoContent, response.StatusCode);
 
-        // Verify deletion
+        // Verify deletion - should still have the default "General" community from registration
         var getResponse = await test.Client.GetAsync("/api/communities");
         var communities = await getResponse.Content.ReadFromJsonAsync<List<CommunityResponse>>();
-        Assert.AreEqual(0, communities!.Count);
+        Assert.AreEqual(1, communities!.Count);
+        Assert.IsFalse(communities.Any(c => c.Name == "To Delete"));
     }
 
     [TestMethod]
@@ -145,8 +148,10 @@ public class CommunitiesApiTests
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
         var channels = await response.Content.ReadFromJsonAsync<List<ChannelResponse>>();
         Assert.IsNotNull(channels);
-        Assert.AreEqual(1, channels.Count); // Default 'general' channel
-        Assert.AreEqual("general", channels[0].Name);
+        // Default channels: text 'general' + voice 'general'
+        Assert.AreEqual(2, channels.Count);
+        Assert.IsTrue(channels.Any(c => c.Name == "general" && c.Type == ChannelType.Text));
+        Assert.IsTrue(channels.Any(c => c.Name == "general" && c.Type == ChannelType.Voice));
     }
 
     [TestMethod]

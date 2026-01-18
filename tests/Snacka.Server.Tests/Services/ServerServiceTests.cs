@@ -41,10 +41,11 @@ public class CommunityServiceTests
         Assert.AreEqual(user.Id, community.OwnerId);
         Assert.AreEqual(1, community.MemberCount);
 
-        // Verify default channel was created
-        var channels = await channelService.GetChannelsAsync(community.Id);
-        Assert.AreEqual(1, channels.Count());
-        Assert.AreEqual("general", channels.First().Name);
+        // Verify default channels were created (text and voice)
+        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        Assert.AreEqual(2, channels.Count);
+        Assert.IsTrue(channels.Any(c => c.Name == "general" && c.Type == ChannelType.Text));
+        Assert.IsTrue(channels.Any(c => c.Name == "general" && c.Type == ChannelType.Voice));
     }
 
     [TestMethod]

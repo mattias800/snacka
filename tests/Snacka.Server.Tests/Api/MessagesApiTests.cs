@@ -164,7 +164,7 @@ public class DirectMessagesApiTests
         test.SetAuthToken(sender.AccessToken);
 
         // Act
-        var response = await test.Client.PostAsJsonAsync($"/api/directmessages/{recipient.UserId}",
+        var response = await test.Client.PostAsJsonAsync($"/api/direct-messages/conversations/{recipient.UserId}",
             new SendDirectMessageRequest("Hello!"));
 
         // Assert
@@ -185,13 +185,13 @@ public class DirectMessagesApiTests
         var recipient = await test.RegisterUserAsync("recipient", "recipient@example.com", "Password123!");
         test.SetAuthToken(sender.AccessToken);
 
-        await test.Client.PostAsJsonAsync($"/api/directmessages/{recipient.UserId}",
+        await test.Client.PostAsJsonAsync($"/api/direct-messages/conversations/{recipient.UserId}",
             new SendDirectMessageRequest("Message 1"));
-        await test.Client.PostAsJsonAsync($"/api/directmessages/{recipient.UserId}",
+        await test.Client.PostAsJsonAsync($"/api/direct-messages/conversations/{recipient.UserId}",
             new SendDirectMessageRequest("Message 2"));
 
         // Act
-        var response = await test.Client.GetAsync($"/api/directmessages/{recipient.UserId}");
+        var response = await test.Client.GetAsync($"/api/direct-messages/conversations/{recipient.UserId}");
 
         // Assert
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -209,11 +209,11 @@ public class DirectMessagesApiTests
         var recipient = await test.RegisterUserAsync("recipient", "recipient@example.com", "Password123!");
         test.SetAuthToken(sender.AccessToken);
 
-        await test.Client.PostAsJsonAsync($"/api/directmessages/{recipient.UserId}",
+        await test.Client.PostAsJsonAsync($"/api/direct-messages/conversations/{recipient.UserId}",
             new SendDirectMessageRequest("Hello!"));
 
         // Act
-        var response = await test.Client.GetAsync("/api/directmessages");
+        var response = await test.Client.GetAsync("/api/direct-messages");
 
         // Assert
         Assert.AreEqual(HttpStatusCode.OK, response.StatusCode);
@@ -232,20 +232,20 @@ public class DirectMessagesApiTests
         var recipient = await test.RegisterUserAsync("recipient", "recipient@example.com", "Password123!");
         test.SetAuthToken(sender.AccessToken);
 
-        await test.Client.PostAsJsonAsync($"/api/directmessages/{recipient.UserId}",
+        await test.Client.PostAsJsonAsync($"/api/direct-messages/conversations/{recipient.UserId}",
             new SendDirectMessageRequest("Hello!"));
 
         // Switch to recipient
         test.SetAuthToken(recipient.AccessToken);
 
         // Act
-        var response = await test.Client.PostAsync($"/api/directmessages/{sender.UserId}/read", null);
+        var response = await test.Client.PostAsync($"/api/direct-messages/conversations/{sender.UserId}/read", null);
 
         // Assert
         Assert.AreEqual(HttpStatusCode.NoContent, response.StatusCode);
 
         // Verify messages are marked as read
-        var getResponse = await test.Client.GetAsync($"/api/directmessages/{sender.UserId}");
+        var getResponse = await test.Client.GetAsync($"/api/direct-messages/conversations/{sender.UserId}");
         var messages = await getResponse.Content.ReadFromJsonAsync<List<DirectMessageResponse>>();
         Assert.IsTrue(messages!.All(m => m.IsRead));
     }

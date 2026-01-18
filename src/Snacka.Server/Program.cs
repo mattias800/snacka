@@ -267,11 +267,29 @@ var app = builder.Build();
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<SnackaDbContext>();
-    db.Database.Migrate();
+
+    // Use EnsureCreated for in-memory databases (tests), Migrate for real databases
+    var isInMemory = db.Database.ProviderName?.Contains("InMemory") == true;
+    if (isInMemory)
+    {
+        db.Database.EnsureCreated();
+    }
+    else
+    {
+        db.Database.Migrate();
+    }
 
     // Migrate DataProtection keys table (ensures keys persist across container restarts)
     var dataProtectionDb = scope.ServiceProvider.GetRequiredService<DataProtectionDbContext>();
-    dataProtectionDb.Database.Migrate();
+    var isDataProtectionInMemory = dataProtectionDb.Database.ProviderName?.Contains("InMemory") == true;
+    if (isDataProtectionInMemory)
+    {
+        dataProtectionDb.Database.EnsureCreated();
+    }
+    else
+    {
+        dataProtectionDb.Database.Migrate();
+    }
 
     // In development, ensure there are unlimited bootstrap invites for easy testing
     if (app.Environment.IsDevelopment())

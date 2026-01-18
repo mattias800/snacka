@@ -84,8 +84,8 @@ public class ChannelApiTests
         var getResponse = await test.Client.GetAsync($"/api/communities/{community!.Id}/channels");
         var allChannels = await getResponse.Content.ReadFromJsonAsync<List<ChannelResponse>>();
         Assert.IsNotNull(allChannels);
-        // 5 new channels + 1 default 'general' channel
-        Assert.AreEqual(6, allChannels.Count, "All created channels should be retrievable");
+        // 5 new channels + 2 default channels (text 'general' + voice 'general')
+        Assert.AreEqual(7, allChannels.Count, "All created channels should be retrievable");
     }
 
     [TestMethod]
@@ -120,8 +120,8 @@ public class ChannelApiTests
         var getResponse = await test.Client.GetAsync($"/api/communities/{community!.Id}/channels");
         var allChannels = await getResponse.Content.ReadFromJsonAsync<List<ChannelResponse>>();
         Assert.IsNotNull(allChannels);
-        // 5 new channels + 1 default 'general' channel
-        Assert.AreEqual(6, allChannels.Count, "All concurrently created channels should be retrievable");
+        // 5 new channels + 2 default channels (text 'general' + voice 'general')
+        Assert.AreEqual(7, allChannels.Count, "All concurrently created channels should be retrievable");
     }
 
     [TestMethod]
@@ -155,7 +155,8 @@ public class ChannelApiTests
 
         // 2 new text + 1 default 'general' = 3 text channels
         Assert.AreEqual(3, textChannels.Count, "Should have 3 text channels (2 new + general)");
-        Assert.AreEqual(2, voiceChannels.Count, "Should have 2 voice channels");
+        // 2 new voice + 1 default 'general' = 3 voice channels
+        Assert.AreEqual(3, voiceChannels.Count, "Should have 3 voice channels (2 new + general)");
     }
 
     [TestMethod]
