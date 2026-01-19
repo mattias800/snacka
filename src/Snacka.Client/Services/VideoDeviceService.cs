@@ -67,32 +67,53 @@ public class VideoDeviceService : IVideoDeviceService
             return devices;
         }
 
-        Console.WriteLine("VideoDeviceService: No cameras found or native tool unavailable");
+        Console.WriteLine("VideoDeviceService: Camera enumeration completed with no devices found");
         return Array.Empty<VideoDeviceInfo>();
     }
 
     private IReadOnlyList<VideoDeviceInfo> GetCameraDevicesViaNativeTool()
     {
         string? capturePath = null;
+        string expectedTool;
 
-        if (OperatingSystem.IsMacOS() && _captureLocator.ShouldUseSnackaCaptureVideoToolbox())
+        if (OperatingSystem.IsMacOS())
         {
-            capturePath = _captureLocator.GetSnackaCaptureVideoToolboxPath();
+            expectedTool = "SnackaCaptureVideoToolbox";
+            if (_captureLocator.ShouldUseSnackaCaptureVideoToolbox())
+            {
+                capturePath = _captureLocator.GetSnackaCaptureVideoToolboxPath();
+            }
         }
-        else if (OperatingSystem.IsWindows() && _captureLocator.ShouldUseSnackaCaptureWindows())
+        else if (OperatingSystem.IsWindows())
         {
-            capturePath = _captureLocator.GetSnackaCaptureWindowsPath();
+            expectedTool = "SnackaCaptureWindows";
+            if (_captureLocator.ShouldUseSnackaCaptureWindows())
+            {
+                capturePath = _captureLocator.GetSnackaCaptureWindowsPath();
+            }
         }
-        else if (OperatingSystem.IsLinux() && _captureLocator.ShouldUseSnackaCaptureLinux())
+        else if (OperatingSystem.IsLinux())
         {
-            capturePath = _captureLocator.GetSnackaCaptureLinuxPath();
+            expectedTool = "SnackaCaptureLinux";
+            if (_captureLocator.ShouldUseSnackaCaptureLinux())
+            {
+                capturePath = _captureLocator.GetSnackaCaptureLinuxPath();
+            }
+        }
+        else
+        {
+            Console.WriteLine($"VideoDeviceService: Unsupported platform for camera enumeration");
+            return Array.Empty<VideoDeviceInfo>();
         }
 
         if (capturePath == null)
         {
-            Console.WriteLine("VideoDeviceService: No native capture tool available");
+            Console.WriteLine($"VideoDeviceService: {expectedTool} not available - camera enumeration requires the native capture tool");
+            Console.WriteLine($"VideoDeviceService: Checked app directory: {AppContext.BaseDirectory}");
             return Array.Empty<VideoDeviceInfo>();
         }
+
+        Console.WriteLine($"VideoDeviceService: Using {expectedTool} at {capturePath}");
 
         try
         {
@@ -106,8 +127,13 @@ public class VideoDeviceService : IVideoDeviceService
                 CreateNoWindow = true
             };
 
+            Console.WriteLine($"VideoDeviceService: Running '{capturePath} list --json'");
             using var process = System.Diagnostics.Process.Start(psi);
-            if (process == null) return Array.Empty<VideoDeviceInfo>();
+            if (process == null)
+            {
+                Console.WriteLine("VideoDeviceService: Failed to start native capture tool process");
+                return Array.Empty<VideoDeviceInfo>();
+            }
 
             var output = process.StandardOutput.ReadToEnd();
             var stderr = process.StandardError.ReadToEnd();
@@ -147,7 +173,7 @@ public class VideoDeviceService : IVideoDeviceService
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"VideoDeviceService: Native tool enumeration failed - {ex.Message}");
+            Console.WriteLine($"VideoDeviceService: Native tool enumeration failed - {ex.GetType().Name}: {ex.Message}");
             return Array.Empty<VideoDeviceInfo>();
         }
     }

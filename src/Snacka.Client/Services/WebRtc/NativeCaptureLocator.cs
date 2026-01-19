@@ -123,7 +123,7 @@ public class NativeCaptureLocator
             }
         }
 
-        Console.WriteLine("NativeCaptureLocator: SnackaCaptureVideoToolbox not found, will use ffmpeg");
+        Console.WriteLine("NativeCaptureLocator: SnackaCaptureVideoToolbox not found");
         return null;
     }
 
@@ -161,7 +161,7 @@ public class NativeCaptureLocator
             }
         }
 
-        Console.WriteLine("NativeCaptureLocator: SnackaCaptureWindows not found, will use ffmpeg");
+        Console.WriteLine("NativeCaptureLocator: SnackaCaptureWindows not found");
         return null;
     }
 
@@ -199,7 +199,7 @@ public class NativeCaptureLocator
             }
         }
 
-        Console.WriteLine("NativeCaptureLocator: SnackaCaptureLinux not found, will use ffmpeg");
+        Console.WriteLine("NativeCaptureLocator: SnackaCaptureLinux not found");
         return null;
     }
 
