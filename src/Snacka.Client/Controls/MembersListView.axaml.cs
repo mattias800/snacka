@@ -4,6 +4,7 @@ using Avalonia;
 using Avalonia.Controls;
 using Avalonia.Input;
 using Avalonia.Interactivity;
+using Snacka.Client.Models;
 using Snacka.Client.Services;
 using Snacka.Client.ViewModels;
 using ReactiveUI;

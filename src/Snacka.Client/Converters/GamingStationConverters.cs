@@ -1,5 +1,6 @@
 using System.Globalization;
 using Avalonia.Data.Converters;
+using Snacka.Client.Models;
 using Snacka.Client.ViewModels;
 
 namespace Snacka.Client.Converters;

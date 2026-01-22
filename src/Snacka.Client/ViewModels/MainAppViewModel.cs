@@ -4,6 +4,7 @@ using System.Reactive.Linq;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Snacka.Client.Controls;
+using Snacka.Client.Models;
 using Snacka.Client.Services;
 using Snacka.Client.Services.Autocomplete;
 using Snacka.Client.Services.HardwareVideo;
@@ -4757,40 +4758,3 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 /// Represents a user who is currently typing.
 /// </summary>
 public record TypingUser(Guid UserId, string Username, DateTime LastTypingAt);
-
-/// <summary>
-/// Represents a gaming station owned by the current user.
-/// </summary>
-public record MyGamingStationInfo(
-    string MachineId,
-    string DisplayName,
-    bool IsAvailable,
-    bool IsInVoiceChannel,
-    Guid? CurrentChannelId,
-    bool IsScreenSharing,
-    bool IsCurrentMachine  // True if this is the machine we're running on
-);
-
-/// <summary>
-/// Represents a file pending upload with a message.
-/// </summary>
-public class PendingAttachment : IDisposable
-{
-    public required string FileName { get; init; }
-    public required Stream Stream { get; init; }
-    public required long Size { get; init; }
-    public required string ContentType { get; init; }
-
-    public string FormattedSize => Size switch
-    {
-        < 1024 => $"{Size} B",
-        < 1024 * 1024 => $"{Size / 1024.0:F1} KB",
-        _ => $"{Size / (1024.0 * 1024.0):F1} MB"
-    };
-
-    public void Dispose()
-    {
-        Stream.Dispose();
-        GC.SuppressFinalize(this);
-    }
-}

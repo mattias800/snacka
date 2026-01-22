@@ -12,6 +12,7 @@ using Avalonia.Input;
 using Avalonia.Interactivity;
 using Avalonia.Platform.Storage;
 using Avalonia.Threading;
+using Snacka.Client.Models;
 using Snacka.Client.Services;
 using Snacka.Client.Services.Autocomplete;
 using Snacka.Client.ViewModels;

@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Snacka.Client.Models;
 using Snacka.Client.Services;
 using Snacka.Shared.Models;
 using ReactiveUI;

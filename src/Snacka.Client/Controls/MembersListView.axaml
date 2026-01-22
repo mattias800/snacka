@@ -4,6 +4,7 @@
              xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
              xmlns:conv="using:Snacka.Client.Converters"
              xmlns:controls="using:Snacka.Client.Controls"
+             xmlns:models="using:Snacka.Client.Models"
              xmlns:services="using:Snacka.Client.Services"
              xmlns:vm="using:Snacka.Client.ViewModels"
              xmlns:ui="using:FluentAvalonia.UI.Controls"
@@ -98,7 +99,7 @@
                                               IsVisible="{Binding ViewModel.HasGamingStations, RelativeSource={RelativeSource AncestorType=controls:MembersListView}}"
                                               Margin="20,0,0,0">
                                     <ItemsControl.ItemTemplate>
-                                        <DataTemplate x:DataType="vm:MyGamingStationInfo">
+                                        <DataTemplate x:DataType="models:MyGamingStationInfo">
                                             <Border Classes="member-item"
                                                     Padding="8,4"
                                                     Margin="0,1"

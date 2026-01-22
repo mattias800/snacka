@@ -11,6 +11,7 @@ using Avalonia.Platform.Storage;
 using Avalonia.ReactiveUI;
 using Avalonia.Threading;
 using Snacka.Client.Controls;
+using Snacka.Client.Models;
 using Snacka.Client.Services;
 using Snacka.Client.ViewModels;
 using Snacka.Shared.Models;
