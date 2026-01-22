@@ -401,6 +401,13 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         ViewModel?.MembersList?.StartDMCommand.Execute(member).Subscribe();
     }
 
+    // Called when clicking the "Create Group DM" button in the DMs section
+    private void OnCreateGroupDmRequested(object? sender, RoutedEventArgs e)
+    {
+        if (ViewModel?.ApiClient == null || ViewModel.DMContent == null) return;
+        CreateGroupDMModalControl?.Open(ViewModel.ApiClient, ViewModel.DMContent);
+    }
+
     // Called when clicking a voice channel to join it
     private void OnVoiceChannelClicked(object? sender, Services.ChannelResponse channel)
     {

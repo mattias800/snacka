@@ -2,24 +2,21 @@ using Snacka.Server.DTOs;
 
 namespace Snacka.Server.Services;
 
+/// <summary>
+/// Service for direct message operations. This is a convenience wrapper around
+/// ConversationService for 1:1 DM use cases.
+/// </summary>
 public interface IDirectMessageService
 {
-    Task<IEnumerable<DirectMessageResponse>> GetConversationAsync(
-        Guid currentUserId, Guid otherUserId, int skip = 0, int take = 50,
-        CancellationToken cancellationToken = default);
-
-    Task<DirectMessageResponse> SendMessageAsync(
-        Guid senderId, Guid recipientId, string content,
-        CancellationToken cancellationToken = default);
-
-    Task<DirectMessageResponse> UpdateMessageAsync(
-        Guid messageId, Guid userId, string content,
-        CancellationToken cancellationToken = default);
-
-    Task DeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default);
-
-    Task<IEnumerable<ConversationSummary>> GetConversationsAsync(
+    /// <summary>
+    /// Get all conversations for a user (both 1:1 and group).
+    /// </summary>
+    Task<IEnumerable<ConversationSummaryResponse>> GetConversationsAsync(
         Guid userId, CancellationToken cancellationToken = default);
 
-    Task MarkAsReadAsync(Guid currentUserId, Guid otherUserId, CancellationToken cancellationToken = default);
+    /// <summary>
+    /// Get or create a 1:1 conversation with another user.
+    /// </summary>
+    Task<ConversationResponse> GetOrCreateConversationAsync(
+        Guid userId, Guid otherUserId, CancellationToken cancellationToken = default);
 }

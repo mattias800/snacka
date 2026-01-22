@@ -534,12 +534,7 @@ public class MainWindowViewModel : ViewModelBase
             _connectionStore.Save(updatedServer);
         }
 
-        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, _settingsStore, _audioDeviceService, _controllerStreamingService, _controllerHostService, CurrentServer!.Url, auth, OnLogout, OnSwitchServer, OnOpenDirectMessages, OnOpenDirectMessagesWithUser, OnOpenSettings, gifsEnabled: _currentServerInfo?.GifsEnabled ?? false);
-    }
-
-    private void OnOpenDirectMessages()
-    {
-        OnOpenDirectMessagesWithUser(null, null);
+        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, _settingsStore, _audioDeviceService, _controllerStreamingService, _controllerHostService, CurrentServer!.Url, auth, OnLogout, OnSwitchServer, OnOpenSettings, gifsEnabled: _currentServerInfo?.GifsEnabled ?? false);
     }
 
     private void OnOpenSettings()
@@ -559,29 +554,6 @@ public class MainWindowViewModel : ViewModelBase
             selectImageFile: ImageFilePickerProvider,
             gifsEnabled: _currentServerInfo?.GifsEnabled ?? false
         );
-    }
-
-    private void OnOpenDirectMessagesWithUser(Guid? userId, string? username)
-    {
-        if (CurrentUser is null || CurrentServer is null) return;
-
-        try
-        {
-            CurrentView = new DirectMessagesViewModel(
-                _apiClient,
-                _signalR,
-                CurrentUser,
-                onBack: () => OnAuthSuccess(CurrentUser),
-                initialUserId: userId,
-                initialUsername: username
-            );
-        }
-        catch (Exception ex)
-        {
-            System.Diagnostics.Debug.WriteLine($"Error creating DirectMessagesViewModel: {ex}");
-            Console.WriteLine($"Error creating DirectMessagesViewModel: {ex}");
-            throw;
-        }
     }
 
     private void OnLogout()

@@ -1,161 +1,105 @@
 using Microsoft.EntityFrameworkCore;
 using Snacka.Server.Data;
 using Snacka.Server.DTOs;
-using Snacka.Shared.Models;
 
 namespace Snacka.Server.Services;
 
+/// <summary>
+/// Service for direct message operations. Wraps ConversationService for DM-specific operations.
+/// </summary>
 public sealed class DirectMessageService : IDirectMessageService
 {
     private readonly SnackaDbContext _db;
+    private readonly IConversationService _conversationService;
 
-    public DirectMessageService(SnackaDbContext db) => _db = db;
-
-    public async Task<IEnumerable<DirectMessageResponse>> GetConversationAsync(
-        Guid currentUserId, Guid otherUserId, int skip = 0, int take = 50,
-        CancellationToken cancellationToken = default)
+    public DirectMessageService(SnackaDbContext db, IConversationService conversationService)
     {
-        var messages = await _db.DirectMessages
-            .Include(dm => dm.Sender)
-            .Include(dm => dm.Recipient)
-            .Where(dm =>
-                (dm.SenderId == currentUserId && dm.RecipientId == otherUserId) ||
-                (dm.SenderId == otherUserId && dm.RecipientId == currentUserId))
-            .OrderByDescending(dm => dm.CreatedAt)
-            .Skip(skip)
-            .Take(take)
-            .ToListAsync(cancellationToken);
-
-        return messages.Select(ToResponse).Reverse();
+        _db = db;
+        _conversationService = conversationService;
     }
 
-    public async Task<DirectMessageResponse> SendMessageAsync(
-        Guid senderId, Guid recipientId, string content,
-        CancellationToken cancellationToken = default)
-    {
-        var sender = await _db.Users.FindAsync([senderId], cancellationToken)
-            ?? throw new InvalidOperationException("Sender not found.");
-
-        var recipient = await _db.Users.FindAsync([recipientId], cancellationToken)
-            ?? throw new InvalidOperationException("Recipient not found.");
-
-        var message = new DirectMessage
-        {
-            Content = content,
-            SenderId = senderId,
-            RecipientId = recipientId,
-            IsRead = false
-        };
-
-        _db.DirectMessages.Add(message);
-        await _db.SaveChangesAsync(cancellationToken);
-
-        message.Sender = sender;
-        message.Recipient = recipient;
-
-        return ToResponse(message);
-    }
-
-    public async Task<DirectMessageResponse> UpdateMessageAsync(
-        Guid messageId, Guid userId, string content,
-        CancellationToken cancellationToken = default)
-    {
-        var message = await _db.DirectMessages
-            .Include(dm => dm.Sender)
-            .Include(dm => dm.Recipient)
-            .FirstOrDefaultAsync(dm => dm.Id == messageId, cancellationToken)
-            ?? throw new InvalidOperationException("Message not found.");
-
-        if (message.SenderId != userId)
-            throw new UnauthorizedAccessException("You can only edit your own messages.");
-
-        message.Content = content;
-        await _db.SaveChangesAsync(cancellationToken);
-
-        return ToResponse(message);
-    }
-
-    public async Task DeleteMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
-    {
-        var message = await _db.DirectMessages.FindAsync([messageId], cancellationToken)
-            ?? throw new InvalidOperationException("Message not found.");
-
-        if (message.SenderId != userId)
-            throw new UnauthorizedAccessException("You can only delete your own messages.");
-
-        _db.DirectMessages.Remove(message);
-        await _db.SaveChangesAsync(cancellationToken);
-    }
-
-    public async Task<IEnumerable<ConversationSummary>> GetConversationsAsync(
+    public async Task<IEnumerable<ConversationSummaryResponse>> GetConversationsAsync(
         Guid userId, CancellationToken cancellationToken = default)
     {
-        var messages = await _db.DirectMessages
-            .Include(dm => dm.Sender)
-            .Include(dm => dm.Recipient)
-            .Where(dm => dm.SenderId == userId || dm.RecipientId == userId)
+        var conversations = await _db.Conversations
+            .Include(c => c.Participants)
+                .ThenInclude(p => p.User)
+            .Include(c => c.Messages.OrderByDescending(m => m.CreatedAt).Take(1))
+                .ThenInclude(m => m.Sender)
+            .Include(c => c.ReadStates)
+            .Where(c => c.Participants.Any(p => p.UserId == userId))
+            .OrderByDescending(c => c.Messages.Max(m => (DateTime?)m.CreatedAt) ?? c.CreatedAt)
             .ToListAsync(cancellationToken);
 
-        var conversations = messages
-            .GroupBy(dm => dm.SenderId == userId ? dm.RecipientId : dm.SenderId)
-            .Select(g =>
-            {
-                var otherUserId = g.Key;
-                var lastMessage = g.OrderByDescending(m => m.CreatedAt).First();
-                var otherUser = lastMessage.SenderId == userId ? lastMessage.Recipient : lastMessage.Sender;
-                var unreadCount = g.Count(m => m.RecipientId == userId && !m.IsRead);
-
-                var otherUsername = otherUser?.Username ?? "Unknown";
-                var otherEffectiveDisplayName = otherUser?.EffectiveDisplayName ?? otherUsername;
-
-                return new ConversationSummary(
-                    otherUserId,
-                    otherUsername,
-                    otherEffectiveDisplayName,
-                    otherUser?.AvatarFileName,
-                    otherUser?.IsOnline ?? false,
-                    ToResponse(lastMessage),
-                    unreadCount
-                );
-            })
-            .OrderByDescending(c => c.LastMessage?.CreatedAt)
-            .ToList();
-
-        return conversations;
-    }
-
-    public async Task MarkAsReadAsync(Guid currentUserId, Guid otherUserId, CancellationToken cancellationToken = default)
-    {
-        var unreadMessages = await _db.DirectMessages
-            .Where(dm => dm.SenderId == otherUserId && dm.RecipientId == currentUserId && !dm.IsRead)
-            .ToListAsync(cancellationToken);
-
-        foreach (var message in unreadMessages)
+        return conversations.Select(conv =>
         {
-            message.IsRead = true;
-        }
+            var lastMessage = conv.Messages.FirstOrDefault();
+            ConversationMessageResponse? lastMessageResponse = null;
 
-        await _db.SaveChangesAsync(cancellationToken);
+            if (lastMessage != null)
+            {
+                lastMessageResponse = new ConversationMessageResponse(
+                    lastMessage.Id,
+                    lastMessage.ConversationId,
+                    lastMessage.Content,
+                    lastMessage.SenderId,
+                    lastMessage.Sender?.Username ?? "Unknown",
+                    lastMessage.Sender?.EffectiveDisplayName ?? "Unknown",
+                    lastMessage.Sender?.AvatarFileName,
+                    lastMessage.CreatedAt,
+                    lastMessage.UpdatedAt
+                );
+            }
+
+            // Calculate unread count
+            var readState = conv.ReadStates.FirstOrDefault(rs => rs.UserId == userId);
+            var unreadCount = 0;
+            if (lastMessage != null && lastMessage.SenderId != userId)
+            {
+                if (readState?.LastReadMessageId == null || readState.LastReadMessageId != lastMessage.Id)
+                {
+                    unreadCount = conv.Messages.Count(m =>
+                        m.SenderId != userId &&
+                        (readState?.LastReadAt == null || m.CreatedAt > readState.LastReadAt));
+                }
+            }
+
+            // Determine display name and online status
+            string displayName;
+            bool isOnline;
+
+            if (conv.IsGroup)
+            {
+                displayName = conv.Name ?? string.Join(", ",
+                    conv.Participants
+                        .Where(p => p.UserId != userId)
+                        .Take(3)
+                        .Select(p => p.User?.EffectiveDisplayName ?? "Unknown"));
+                isOnline = true; // Groups are always "online"
+            }
+            else
+            {
+                var otherParticipant = conv.Participants.FirstOrDefault(p => p.UserId != userId);
+                displayName = otherParticipant?.User?.EffectiveDisplayName ?? "Unknown";
+                isOnline = otherParticipant?.User?.IsOnline ?? false;
+            }
+
+            return new ConversationSummaryResponse(
+                conv.Id,
+                displayName,
+                conv.IconFileName,
+                conv.IsGroup,
+                isOnline,
+                lastMessageResponse,
+                unreadCount
+            );
+        }).ToList();
     }
 
-    private static DirectMessageResponse ToResponse(DirectMessage dm)
+    public async Task<ConversationResponse> GetOrCreateConversationAsync(
+        Guid userId, Guid otherUserId, CancellationToken cancellationToken = default)
     {
-        var senderUsername = dm.Sender?.Username ?? "Unknown";
-        var senderEffectiveDisplayName = dm.Sender?.EffectiveDisplayName ?? senderUsername;
-        var recipientUsername = dm.Recipient?.Username ?? "Unknown";
-        var recipientEffectiveDisplayName = dm.Recipient?.EffectiveDisplayName ?? recipientUsername;
-
-        return new DirectMessageResponse(
-            dm.Id,
-            dm.Content,
-            dm.SenderId,
-            senderUsername,
-            senderEffectiveDisplayName,
-            dm.RecipientId,
-            recipientUsername,
-            recipientEffectiveDisplayName,
-            dm.CreatedAt,
-            dm.IsRead
-        );
+        return await _conversationService.GetOrCreateDirectConversationAsync(
+            userId, otherUserId, cancellationToken);
     }
 }

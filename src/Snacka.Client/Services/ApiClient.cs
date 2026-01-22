@@ -512,39 +512,85 @@ public class ApiClient : IApiClient
             new TransferOwnershipRequest(newOwnerId));
     }
 
-    // Direct Message methods
-    public async Task<ApiResult<List<ConversationSummary>>> GetConversationsAsync()
+    // Conversation methods
+    public async Task<ApiResult<List<ConversationSummaryResponse>>> GetConversationSummariesAsync()
     {
-        return await GetAsync<List<ConversationSummary>>("/api/direct-messages");
+        return await GetAsync<List<ConversationSummaryResponse>>("/api/direct-messages");
     }
 
-    public async Task<ApiResult<List<DirectMessageResponse>>> GetDirectMessagesAsync(Guid userId, int skip = 0, int take = 50)
+    public async Task<ApiResult<List<ConversationResponse>>> GetAllConversationsAsync()
     {
-        return await GetAsync<List<DirectMessageResponse>>($"/api/direct-messages/conversations/{userId}?skip={skip}&take={take}");
+        return await GetAsync<List<ConversationResponse>>("/api/conversations");
     }
 
-    public async Task<ApiResult<DirectMessageResponse>> SendDirectMessageAsync(Guid userId, string content)
+    public async Task<ApiResult<ConversationResponse>> CreateConversationAsync(List<Guid> participantIds, string? name = null)
     {
-        return await PostAsync<SendDirectMessageRequest, DirectMessageResponse>(
-            $"/api/direct-messages/conversations/{userId}",
-            new SendDirectMessageRequest(content));
+        return await PostAsync<CreateConversationRequest, ConversationResponse>(
+            "/api/conversations",
+            new CreateConversationRequest(participantIds, name));
     }
 
-    public async Task<ApiResult<DirectMessageResponse>> UpdateDirectMessageAsync(Guid messageId, string content)
+    public async Task<ApiResult<ConversationResponse>> GetConversationAsync(Guid conversationId)
     {
-        return await PutAsync<SendDirectMessageRequest, DirectMessageResponse>(
-            $"/api/direct-messages/messages/{messageId}",
-            new SendDirectMessageRequest(content));
+        return await GetAsync<ConversationResponse>($"/api/conversations/{conversationId}");
     }
 
-    public async Task<ApiResult<bool>> DeleteDirectMessageAsync(Guid messageId)
+    public async Task<ApiResult<ConversationResponse>> GetOrCreateDirectConversationAsync(Guid otherUserId)
     {
-        return await DeleteAsync($"/api/direct-messages/messages/{messageId}");
+        return await GetAsync<ConversationResponse>($"/api/conversations/direct/{otherUserId}");
     }
 
-    public async Task<ApiResult<bool>> MarkConversationAsReadAsync(Guid userId)
+    public async Task<ApiResult<List<ConversationMessageResponse>>> GetConversationMessagesAsync(Guid conversationId, int skip = 0, int take = 50)
     {
-        return await PostEmptyAsync($"/api/direct-messages/conversations/{userId}/read");
+        return await GetAsync<List<ConversationMessageResponse>>($"/api/conversations/{conversationId}/messages?skip={skip}&take={take}");
+    }
+
+    public async Task<ApiResult<ConversationMessageResponse>> SendConversationMessageAsync(Guid conversationId, string content)
+    {
+        return await PostAsync<SendConversationMessageRequest, ConversationMessageResponse>(
+            $"/api/conversations/{conversationId}/messages",
+            new SendConversationMessageRequest(content));
+    }
+
+    public async Task<ApiResult<ConversationMessageResponse>> UpdateConversationMessageAsync(Guid conversationId, Guid messageId, string content)
+    {
+        return await PutAsync<SendConversationMessageRequest, ConversationMessageResponse>(
+            $"/api/conversations/{conversationId}/messages/{messageId}",
+            new SendConversationMessageRequest(content));
+    }
+
+    public async Task<ApiResult<bool>> DeleteConversationMessageAsync(Guid conversationId, Guid messageId)
+    {
+        return await DeleteAsync($"/api/conversations/{conversationId}/messages/{messageId}");
+    }
+
+    public async Task<ApiResult<ConversationResponse>> UpdateConversationAsync(Guid conversationId, string? name, string? iconFileName = null)
+    {
+        return await PutAsync<UpdateConversationRequest, ConversationResponse>(
+            $"/api/conversations/{conversationId}",
+            new UpdateConversationRequest(name, iconFileName));
+    }
+
+    public async Task<ApiResult<ParticipantInfo>> AddConversationParticipantAsync(Guid conversationId, Guid userId)
+    {
+        return await PostAsync<AddParticipantRequest, ParticipantInfo>(
+            $"/api/conversations/{conversationId}/participants",
+            new AddParticipantRequest(userId));
+    }
+
+    public async Task<ApiResult<bool>> RemoveConversationParticipantAsync(Guid conversationId, Guid userId)
+    {
+        return await DeleteAsync($"/api/conversations/{conversationId}/participants/{userId}");
+    }
+
+    public async Task<ApiResult<bool>> MarkConversationReadByIdAsync(Guid conversationId, Guid? messageId = null)
+    {
+        var url = $"/api/conversations/{conversationId}/read";
+        if (messageId.HasValue)
+        {
+            url += $"?messageId={messageId.Value}";
+        }
+        return await PostEmptyAsync(url);
     }
 
     // Link Preview methods
@@ -572,6 +618,12 @@ public class ApiClient : IApiClient
             url += $"&pos={Uri.EscapeDataString(pos)}";
         }
         return await GetAsync<GifSearchResponse>(url);
+    }
+
+    // Global user search (for DMs)
+    public async Task<ApiResult<List<UserSearchResult>>> SearchUsersAsync(string query)
+    {
+        return await GetAsync<List<UserSearchResult>>($"/api/users/search?q={Uri.EscapeDataString(query)}");
     }
 
     // Community Invite methods

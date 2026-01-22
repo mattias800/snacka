@@ -160,6 +160,14 @@ public partial class DMContentView : UserControl
         }
     }
 
+    // View group members (placeholder - could open a flyout or dialog)
+    private void OnMembersButtonClick(object? sender, RoutedEventArgs e)
+    {
+        // TODO: Implement member list flyout or dialog
+        // For now, this is a placeholder that could show a popup with participant list
+        System.Diagnostics.Debug.WriteLine($"Members button clicked. Participants: {ViewModel?.Participants.Count}");
+    }
+
     // Enter saves edit, Shift+Enter inserts newline, Escape cancels
     private void OnEditDMMessageKeyDown(object? sender, KeyEventArgs e)
     {

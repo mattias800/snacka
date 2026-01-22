@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Snacka.Server.Data;
@@ -11,9 +12,11 @@ using Snacka.Server.Data;
 namespace Snacka.Server.Migrations
 {
     [DbContext(typeof(SnackaDbContext))]
-    partial class SnackaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260120150518_AddConversations")]
+    partial class AddConversations
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -254,11 +257,17 @@ namespace Snacka.Server.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<Guid>("ConversationId")
+                    b.Property<Guid?>("ConversationId")
                         .HasColumnType("uuid");
 
                     b.Property<DateTime>("CreatedAt")
                         .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsRead")
+                        .HasColumnType("boolean");
+
+                    b.Property<Guid?>("RecipientId")
+                        .HasColumnType("uuid");
 
                     b.Property<Guid>("SenderId")
                         .HasColumnType("uuid");
@@ -269,6 +278,8 @@ namespace Snacka.Server.Migrations
                     b.HasKey("Id");
 
                     b.HasIndex("ConversationId");
+
+                    b.HasIndex("RecipientId");
 
                     b.HasIndex("SenderId");
 
@@ -937,16 +948,22 @@ namespace Snacka.Server.Migrations
                     b.HasOne("Snacka.Shared.Models.Conversation", "Conversation")
                         .WithMany("Messages")
                         .HasForeignKey("ConversationId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
+                        .OnDelete(DeleteBehavior.Cascade);
+
+                    b.HasOne("Snacka.Shared.Models.User", "Recipient")
+                        .WithMany("ReceivedMessages")
+                        .HasForeignKey("RecipientId")
+                        .OnDelete(DeleteBehavior.SetNull);
 
                     b.HasOne("Snacka.Shared.Models.User", "Sender")
-                        .WithMany("DirectMessages")
+                        .WithMany("SentMessages")
                         .HasForeignKey("SenderId")
                         .OnDelete(DeleteBehavior.Cascade)
                         .IsRequired();
 
                     b.Navigation("Conversation");
+
+                    b.Navigation("Recipient");
 
                     b.Navigation("Sender");
                 });
@@ -1232,13 +1249,15 @@ namespace Snacka.Server.Migrations
 
                     b.Navigation("ConversationReadStates");
 
-                    b.Navigation("DirectMessages");
-
                     b.Navigation("Messages");
 
                     b.Navigation("OwnedCommunities");
 
                     b.Navigation("Reactions");
+
+                    b.Navigation("ReceivedMessages");
+
+                    b.Navigation("SentMessages");
 
                     b.Navigation("UserCommunities");
 

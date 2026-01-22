@@ -18,13 +18,13 @@ public class IsSelectedConversationConverter : IMultiValueConverter
         if (values.Count < 2)
             return "conversation-btn";
 
-        if (values[0] is not ConversationSummary current)
+        if (values[0] is not ConversationSummaryResponse current)
             return "conversation-btn";
 
-        if (values[1] is not ConversationSummary selected)
+        if (values[1] is not ConversationSummaryResponse selected)
             return "conversation-btn";
 
-        return current.UserId == selected.UserId ? "conversation-btn selected" : "conversation-btn";
+        return current.Id == selected.Id ? "conversation-btn selected" : "conversation-btn";
     }
 }
 
@@ -44,12 +44,12 @@ public class IsSelectedBackgroundConverter : IMultiValueConverter
         if (values.Count < 2)
             return TransparentBrush;
 
-        if (values[0] is not ConversationSummary current)
+        if (values[0] is not ConversationSummaryResponse current)
             return TransparentBrush;
 
-        if (values[1] is not ConversationSummary selected)
+        if (values[1] is not ConversationSummaryResponse selected)
             return TransparentBrush;
 
-        return current.UserId == selected.UserId ? SelectedBrush : TransparentBrush;
+        return current.Id == selected.Id ? SelectedBrush : TransparentBrush;
     }
 }

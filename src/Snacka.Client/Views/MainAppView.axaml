@@ -254,7 +254,8 @@
                                         IsExpanded="{Binding IsRecentDmsExpanded, Mode=TwoWay}"
                                         TotalUnreadCount="{Binding TotalDmUnreadCount}"
                                         SelectConversationCommand="{Binding SelectRecentDmCommand}"
-                                        ViewAllCommand="{Binding OpenDMsCommand}"/>
+                                        ViewAllCommand="{Binding OpenDMsCommand}"
+                                        CreateGroupDmRequested="OnCreateGroupDmRequested"/>
 
                 <!-- Channel List -->
                 <controls:ChannelListView Margin="8,8,0,0"
@@ -1150,6 +1151,12 @@
                                CreateCommunityCommand="{Binding WelcomeCreateCommunityCommand}"
                                HorizontalAlignment="Stretch"
                                VerticalAlignment="Stretch"/>
+
+        <!-- Create Group DM Modal Overlay -->
+        <controls:CreateGroupDMModal x:Name="CreateGroupDMModalControl"
+                                     Grid.ColumnSpan="6"
+                                     HorizontalAlignment="Stretch"
+                                     VerticalAlignment="Stretch"/>
 
         <!-- Capability Details Modal (hardware encoding info) -->
         <Border Grid.ColumnSpan="6"

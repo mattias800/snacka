@@ -1,0 +1,216 @@
+<UserControl xmlns="https://github.com/avaloniaui"
+             xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+             xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+             xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
+             xmlns:controls="using:Snacka.Client.Controls"
+             xmlns:services="using:Snacka.Client.Services"
+             xmlns:ui="using:FluentAvalonia.UI.Controls"
+             mc:Ignorable="d"
+             x:Class="Snacka.Client.Controls.CreateGroupDMModal">
+
+    <Border Background="#80000000"
+            IsVisible="{Binding IsOpen, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}"
+            HorizontalAlignment="Stretch"
+            VerticalAlignment="Stretch">
+        <!-- Centered Content Panel -->
+        <Border Background="#18181b"
+                CornerRadius="16"
+                MaxWidth="500"
+                MaxHeight="600"
+                MinWidth="400"
+                Margin="40"
+                HorizontalAlignment="Center"
+                VerticalAlignment="Center"
+                BoxShadow="0 25 50 -12 #40000000">
+            <Grid RowDefinitions="Auto,*,Auto">
+                <!-- Header -->
+                <Border Grid.Row="0"
+                        Background="#27272a"
+                        CornerRadius="16,16,0,0"
+                        Padding="20,16">
+                    <Grid ColumnDefinitions="*,Auto">
+                        <StackPanel Grid.Column="0" Spacing="4">
+                            <TextBlock Text="Create Group DM"
+                                       Foreground="#fafafa"
+                                       FontSize="20"
+                                       FontWeight="SemiBold"/>
+                            <TextBlock Text="Select users to start a group conversation"
+                                       Foreground="#71717a"
+                                       FontSize="13"/>
+                        </StackPanel>
+                        <Button Grid.Column="1"
+                                Command="{Binding CloseCommand, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}"
+                                ToolTip.Tip="Close"
+                                Background="Transparent"
+                                BorderThickness="0"
+                                Padding="8"
+                                CornerRadius="8"
+                                VerticalAlignment="Top">
+                            <ui:SymbolIcon Symbol="Dismiss"
+                                       Foreground="#71717a"
+                                       FontSize="16"/>
+                        </Button>
+                    </Grid>
+                </Border>
+
+                <!-- Content -->
+                <Border Grid.Row="1" Padding="20">
+                    <StackPanel Spacing="16">
+                        <!-- Group Name (Optional) -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="GROUP NAME (OPTIONAL)"
+                                       Foreground="#71717a"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       LetterSpacing="0.5"/>
+                            <TextBox x:Name="GroupNameInput"
+                                     Text="{Binding GroupName, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}, Mode=TwoWay}"
+                                     Watermark="My Group"
+                                     Background="#27272a"
+                                     BorderThickness="0"
+                                     CornerRadius="8"
+                                     Padding="12,10"
+                                     Foreground="#fafafa"/>
+                        </StackPanel>
+
+                        <!-- User Search -->
+                        <StackPanel Spacing="4">
+                            <TextBlock Text="ADD MEMBERS"
+                                       Foreground="#71717a"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       LetterSpacing="0.5"/>
+                            <TextBox x:Name="UserSearchInput"
+                                     Text="{Binding SearchQuery, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}, Mode=TwoWay}"
+                                     Watermark="Search users..."
+                                     Background="#27272a"
+                                     BorderThickness="0"
+                                     CornerRadius="8"
+                                     Padding="12,10"
+                                     Foreground="#fafafa"/>
+                        </StackPanel>
+
+                        <!-- Selected Users -->
+                        <StackPanel Spacing="8"
+                                    IsVisible="{Binding SelectedUsers.Count, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <TextBlock Text="SELECTED"
+                                       Foreground="#71717a"
+                                       FontSize="11"
+                                       FontWeight="SemiBold"
+                                       LetterSpacing="0.5"/>
+                            <ItemsControl ItemsSource="{Binding SelectedUsers, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <WrapPanel Orientation="Horizontal"/>
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="services:UserSearchResult">
+                                        <Border Background="#27272a"
+                                                CornerRadius="16"
+                                                Padding="8,4"
+                                                Margin="0,0,4,4">
+                                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                                <TextBlock Text="{Binding EffectiveDisplayName}"
+                                                           Foreground="#fafafa"
+                                                           FontSize="13"
+                                                           VerticalAlignment="Center"/>
+                                                <Button Background="Transparent"
+                                                        BorderThickness="0"
+                                                        Padding="2"
+                                                        CornerRadius="10"
+                                                        Cursor="Hand"
+                                                        Command="{Binding RemoveUserCommand, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}"
+                                                        CommandParameter="{Binding}">
+                                                    <ui:SymbolIcon Symbol="Dismiss"
+                                                               Foreground="#71717a"
+                                                               FontSize="10"/>
+                                                </Button>
+                                            </StackPanel>
+                                        </Border>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </StackPanel>
+
+                        <!-- Search Results -->
+                        <ScrollViewer MaxHeight="200"
+                                      IsVisible="{Binding SearchResults.Count, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}, Converter={x:Static ObjectConverters.IsNotNull}}">
+                            <ItemsControl ItemsSource="{Binding SearchResults, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}">
+                                <ItemsControl.ItemTemplate>
+                                    <DataTemplate x:DataType="services:UserSearchResult">
+                                        <Button Background="Transparent"
+                                                BorderThickness="0"
+                                                Padding="8"
+                                                CornerRadius="8"
+                                                HorizontalContentAlignment="Left"
+                                                Cursor="Hand"
+                                                Command="{Binding AddUserCommand, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}"
+                                                CommandParameter="{Binding}">
+                                            <StackPanel Orientation="Horizontal" Spacing="12">
+                                                <Border Width="32" Height="32"
+                                                        CornerRadius="16"
+                                                        Background="#27272a">
+                                                    <TextBlock Text="{Binding Username[0]}"
+                                                               Foreground="#fafafa"
+                                                               FontSize="14"
+                                                               FontWeight="SemiBold"
+                                                               HorizontalAlignment="Center"
+                                                               VerticalAlignment="Center"/>
+                                                </Border>
+                                                <StackPanel VerticalAlignment="Center">
+                                                    <TextBlock Text="{Binding EffectiveDisplayName}"
+                                                               Foreground="#fafafa"
+                                                               FontSize="14"/>
+                                                    <TextBlock Text="{Binding Username, StringFormat='@{0}'}"
+                                                               Foreground="#71717a"
+                                                               FontSize="12"/>
+                                                </StackPanel>
+                                            </StackPanel>
+                                        </Button>
+                                    </DataTemplate>
+                                </ItemsControl.ItemTemplate>
+                            </ItemsControl>
+                        </ScrollViewer>
+                    </StackPanel>
+                </Border>
+
+                <!-- Footer -->
+                <Border Grid.Row="2"
+                        Background="#27272a"
+                        CornerRadius="0,0,16,16"
+                        Padding="20,16">
+                    <Grid ColumnDefinitions="*,Auto,Auto">
+                        <TextBlock Grid.Column="0"
+                                   Text="{Binding SelectedUsers.Count, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}, StringFormat='{}{0} user(s) selected'}"
+                                   Foreground="#71717a"
+                                   FontSize="13"
+                                   VerticalAlignment="Center"/>
+                        <Button Grid.Column="1"
+                                Content="Cancel"
+                                Command="{Binding CloseCommand, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}"
+                                Background="Transparent"
+                                Foreground="#fafafa"
+                                BorderThickness="0"
+                                Padding="16,10"
+                                CornerRadius="8"
+                                Margin="0,0,8,0"/>
+                        <Button Grid.Column="2"
+                                Command="{Binding CreateCommand, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}"
+                                Background="#5865f2"
+                                Foreground="#fafafa"
+                                BorderThickness="0"
+                                Padding="16,10"
+                                CornerRadius="8"
+                                IsEnabled="{Binding CanCreate, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}">
+                            <Panel>
+                                <TextBlock Text="Create Group" IsVisible="{Binding IsCreating, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}, Converter={x:Static BoolConverters.Not}}"/>
+                                <TextBlock Text="Creating..." IsVisible="{Binding IsCreating, RelativeSource={RelativeSource AncestorType=controls:CreateGroupDMModal}}"/>
+                            </Panel>
+                        </Button>
+                    </Grid>
+                </Border>
+            </Grid>
+        </Border>
+    </Border>
+</UserControl>

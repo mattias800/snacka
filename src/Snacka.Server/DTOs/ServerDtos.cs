@@ -151,6 +151,8 @@ public record TypingEvent(Guid ChannelId, Guid UserId, string Username, string E
 
 public record DMTypingEvent(Guid UserId, string Username, string EffectiveDisplayName);
 
+public record ConversationTypingEvent(Guid ConversationId, Guid UserId, string Username, string EffectiveDisplayName);
+
 // Reaction DTOs
 /// <summary>
 /// Summary of reactions for a specific emoji on a message

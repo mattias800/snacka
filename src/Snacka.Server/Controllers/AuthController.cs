@@ -127,11 +127,16 @@ public class UsersController : ControllerBase
 {
     private readonly IAuthService _authService;
     private readonly IImageProcessingService _imageService;
+    private readonly SnackaDbContext _db;
 
-    public UsersController(IAuthService authService, IImageProcessingService imageService)
+    public UsersController(
+        IAuthService authService,
+        IImageProcessingService imageService,
+        SnackaDbContext db)
     {
         _authService = authService;
         _imageService = imageService;
+        _db = db;
     }
 
     [HttpGet("me")]
@@ -311,6 +316,39 @@ public class UsersController : ControllerBase
         {
             return NotFound();
         }
+    }
+
+    /// <summary>
+    /// Search for users by username. Returns users that match the search query.
+    /// Excludes the current user from results.
+    /// </summary>
+    [HttpGet("search")]
+    public async Task<ActionResult<IEnumerable<UserSearchResult>>> SearchUsers(
+        [FromQuery] string q,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+
+        if (string.IsNullOrWhiteSpace(q) || q.Length < 2)
+            return Ok(Array.Empty<UserSearchResult>());
+
+        var queryLower = q.ToLowerInvariant();
+
+        var users = await _db.Users
+            .Where(u => u.Id != userId.Value && u.Username.ToLower().Contains(queryLower))
+            .OrderBy(u => u.Username)
+            .Take(20)
+            .Select(u => new UserSearchResult(
+                u.Id,
+                u.Username,
+                u.DisplayName ?? u.Username,
+                u.AvatarFileName,
+                u.IsOnline
+            ))
+            .ToListAsync(cancellationToken);
+
+        return Ok(users);
     }
 
     private Guid? GetCurrentUserId()

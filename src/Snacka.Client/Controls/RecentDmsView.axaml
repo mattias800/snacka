@@ -67,18 +67,31 @@
                 </StackPanel>
             </Button>
 
-            <!-- View All Button -->
-            <Button Grid.Column="1"
-                    Classes="btn-icon"
-                    Command="{Binding ViewAllCommand, RelativeSource={RelativeSource AncestorType=controls:RecentDmsView}}"
-                    ToolTip.Tip="View All DMs"
-                    Padding="4"
-                    MinWidth="24"
-                    MinHeight="24">
-                <ui:SymbolIcon Symbol="OpenFolder"
-                           Foreground="{StaticResource Foreground3Brush}"
-                           FontSize="14"/>
-            </Button>
+            <!-- Action Buttons -->
+            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="2">
+                <!-- Create Group DM Button -->
+                <Button Classes="btn-icon"
+                        Command="{Binding CreateGroupDmCommand, RelativeSource={RelativeSource AncestorType=controls:RecentDmsView}}"
+                        ToolTip.Tip="Create Group DM"
+                        Padding="4"
+                        MinWidth="24"
+                        MinHeight="24">
+                    <ui:SymbolIcon Symbol="Add"
+                               Foreground="{StaticResource Foreground3Brush}"
+                               FontSize="14"/>
+                </Button>
+                <!-- View All Button -->
+                <Button Classes="btn-icon"
+                        Command="{Binding ViewAllCommand, RelativeSource={RelativeSource AncestorType=controls:RecentDmsView}}"
+                        ToolTip.Tip="View All DMs"
+                        Padding="4"
+                        MinWidth="24"
+                        MinHeight="24">
+                    <ui:SymbolIcon Symbol="OpenFolder"
+                               Foreground="{StaticResource Foreground3Brush}"
+                               FontSize="14"/>
+                </Button>
+            </StackPanel>
         </Grid>
 
         <!-- DM List (visible when expanded) -->
@@ -86,9 +99,8 @@
                       Margin="4,0"
                       IsVisible="{Binding IsExpanded, RelativeSource={RelativeSource AncestorType=controls:RecentDmsView}}">
             <ItemsControl.ItemTemplate>
-                <DataTemplate x:DataType="services:ConversationSummary">
+                <DataTemplate x:DataType="services:ConversationSummaryResponse">
                     <Button Classes="dm-item"
-                            Classes.selected="{Binding IsSelected}"
                             Command="{Binding SelectConversationCommand, RelativeSource={RelativeSource AncestorType=controls:RecentDmsView}}"
                             CommandParameter="{Binding}"
                             Cursor="Hand">
@@ -108,7 +120,7 @@
 
                             <!-- Name and last message preview -->
                             <StackPanel Grid.Column="1" VerticalAlignment="Center" Spacing="2">
-                                <TextBlock Text="{Binding EffectiveDisplayName}"
+                                <TextBlock Text="{Binding DisplayName}"
                                            Foreground="{Binding UnreadCount, Converter={x:Static conv:UnreadToForegroundConverter.Instance}}"
                                            FontSize="14"
                                            FontWeight="Medium"

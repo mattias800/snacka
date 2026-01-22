@@ -20,6 +20,7 @@ public class SnackaHub : Hub
     private readonly ISfuService _sfuService;
     private readonly IHubContext<SnackaHub> _hubContext;
     private readonly INotificationService _notificationService;
+    private readonly IConversationService _conversationService;
     private readonly ILogger<SnackaHub> _logger;
     // Multi-device support: one user can have multiple connections
     private static readonly Dictionary<string, Guid> ConnectedUsers = new();  // ConnectionId -> UserId
@@ -51,6 +52,7 @@ public class SnackaHub : Hub
         ISfuService sfuService,
         IHubContext<SnackaHub> hubContext,
         INotificationService notificationService,
+        IConversationService conversationService,
         ILogger<SnackaHub> logger)
     {
         _db = db;
@@ -58,6 +60,7 @@ public class SnackaHub : Hub
         _sfuService = sfuService;
         _hubContext = hubContext;
         _notificationService = notificationService;
+        _conversationService = conversationService;
         _logger = logger;
     }
 
@@ -113,6 +116,14 @@ public class SnackaHub : Hub
                 }
 
                 _logger.LogInformation("User {Username} connected, added to {Count} community groups", user.Username, communityIds.Count);
+
+                // Add user to their conversation groups
+                var conversationIds = await _conversationService.GetUserConversationIdsAsync(userId.Value);
+                foreach (var conversationId in conversationIds)
+                {
+                    await Groups.AddToGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
+                }
+                _logger.LogInformation("User {Username} added to {Count} conversation groups", user.Username, conversationIds.Count);
 
                 // Send pending notifications to the user
                 var unreadCount = await _notificationService.GetUnreadCountAsync(userId.Value);
@@ -491,6 +502,60 @@ public class SnackaHub : Hub
         // Send to all of the recipient's connected devices
         await Clients.User(recipientUserId.ToString())
             .SendAsync("DMUserTyping", new DMTypingEvent(userId.Value, user.Username, user.EffectiveDisplayName));
+    }
+
+    /// <summary>
+    /// Notifies other participants in a conversation that the current user is typing.
+    /// </summary>
+    public async Task SendConversationTyping(Guid conversationId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        // Verify user is a participant
+        if (!await _conversationService.IsParticipantAsync(conversationId, userId.Value))
+        {
+            _logger.LogWarning("User {UserId} attempted to send typing to conversation {ConversationId} without being a participant",
+                userId.Value, conversationId);
+            return;
+        }
+
+        var user = await _db.Users.FindAsync(userId.Value);
+        if (user is null) return;
+
+        // Send to all participants in the conversation group (except sender)
+        await Clients.OthersInGroup($"conv:{conversationId}")
+            .SendAsync("ConversationUserTyping", new ConversationTypingEvent(conversationId, userId.Value, user.Username, user.EffectiveDisplayName));
+    }
+
+    /// <summary>
+    /// Joins a conversation group. Called when a user is added to a conversation.
+    /// </summary>
+    public async Task JoinConversationGroup(Guid conversationId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        // Verify user is a participant
+        if (!await _conversationService.IsParticipantAsync(conversationId, userId.Value))
+        {
+            _logger.LogWarning("User {UserId} attempted to join conversation group {ConversationId} without being a participant",
+                userId.Value, conversationId);
+            return;
+        }
+
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
+        _logger.LogInformation("User {UserId} joined conversation group {ConversationId}", userId.Value, conversationId);
+    }
+
+    /// <summary>
+    /// Leaves a conversation group. Called when a user is removed from a conversation.
+    /// </summary>
+    public async Task LeaveConversationGroup(Guid conversationId)
+    {
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, $"conv:{conversationId}");
+        var userId = GetUserId();
+        _logger.LogInformation("User {UserId} left conversation group {ConversationId}", userId, conversationId);
     }
 
     // ==================== Voice Channel Methods ====================

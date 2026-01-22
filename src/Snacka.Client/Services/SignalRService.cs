@@ -62,6 +62,11 @@ public interface ISignalRService : IAsyncDisposable
     // Typing indicator methods
     Task SendTypingAsync(Guid channelId);
     Task SendDMTypingAsync(Guid recipientUserId);
+    Task SendConversationTypingAsync(Guid conversationId);
+
+    // Conversation group management
+    Task JoinConversationGroupAsync(Guid conversationId);
+    Task LeaveConversationGroupAsync(Guid conversationId);
 
     // Channel events
     event Action<ChannelResponse>? ChannelCreated;
@@ -74,10 +79,17 @@ public interface ISignalRService : IAsyncDisposable
     event Action<ReactionUpdatedEvent>? ReactionUpdated;
     event Action<MessagePinnedEvent>? MessagePinned;
 
-    // Direct message events
-    event Action<DirectMessageResponse>? DirectMessageReceived;
-    event Action<DirectMessageResponse>? DirectMessageEdited;
-    event Action<DirectMessageDeletedEvent>? DirectMessageDeleted;
+    // Conversation events
+    event Action<ConversationResponse>? ConversationCreated;
+    event Action<ConversationMessageResponse>? ConversationMessageReceived;
+    event Action<ConversationMessageResponse>? ConversationMessageUpdated;
+    event Action<ConversationMessageDeletedEvent>? ConversationMessageDeleted;
+    event Action<ConversationParticipantAddedEvent>? ConversationParticipantAdded;
+    event Action<ConversationParticipantRemovedEvent>? ConversationParticipantRemoved;
+    event Action<ConversationResponse>? ConversationUpdated;
+    event Action<ConversationTypingEvent>? ConversationUserTyping;
+    event Action<Guid>? AddedToConversation;
+    event Action<Guid>? RemovedFromConversation;
 
     // User presence events
     event Action<UserPresenceEvent>? UserOnline;
@@ -281,10 +293,17 @@ public class SignalRService : ISignalRService
     public event Action<ReactionUpdatedEvent>? ReactionUpdated;
     public event Action<MessagePinnedEvent>? MessagePinned;
 
-    // Direct message events
-    public event Action<DirectMessageResponse>? DirectMessageReceived;
-    public event Action<DirectMessageResponse>? DirectMessageEdited;
-    public event Action<DirectMessageDeletedEvent>? DirectMessageDeleted;
+    // Conversation events
+    public event Action<ConversationResponse>? ConversationCreated;
+    public event Action<ConversationMessageResponse>? ConversationMessageReceived;
+    public event Action<ConversationMessageResponse>? ConversationMessageUpdated;
+    public event Action<ConversationMessageDeletedEvent>? ConversationMessageDeleted;
+    public event Action<ConversationParticipantAddedEvent>? ConversationParticipantAdded;
+    public event Action<ConversationParticipantRemovedEvent>? ConversationParticipantRemoved;
+    public event Action<ConversationResponse>? ConversationUpdated;
+    public event Action<ConversationTypingEvent>? ConversationUserTyping;
+    public event Action<Guid>? AddedToConversation;
+    public event Action<Guid>? RemovedFromConversation;
 
     // User presence events
     public event Action<UserPresenceEvent>? UserOnline;
@@ -643,6 +662,24 @@ public class SignalRService : ISignalRService
         await _hubConnection.InvokeAsync("SendDMTyping", recipientUserId);
     }
 
+    public async Task SendConversationTypingAsync(Guid conversationId)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("SendConversationTyping", conversationId);
+    }
+
+    public async Task JoinConversationGroupAsync(Guid conversationId)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("JoinConversationGroup", conversationId);
+    }
+
+    public async Task LeaveConversationGroupAsync(Guid conversationId)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("LeaveConversationGroup", conversationId);
+    }
+
     // Controller streaming methods
     public async Task RequestControllerAccessAsync(Guid channelId, Guid hostUserId)
     {
@@ -811,23 +848,64 @@ public class SignalRService : ISignalRService
             MessagePinned?.Invoke(e);
         });
 
-        // Direct message events
-        _hubConnection.On<DirectMessageResponse>("ReceiveDirectMessage", message =>
+        // Conversation events
+        _hubConnection.On<ConversationResponse>("ConversationCreated", conversation =>
         {
-            Console.WriteLine($"SignalR: ReceiveDirectMessage from {message.SenderUsername}");
-            DirectMessageReceived?.Invoke(message);
+            Console.WriteLine($"SignalR: ConversationCreated - {conversation.Id}");
+            ConversationCreated?.Invoke(conversation);
         });
 
-        _hubConnection.On<DirectMessageResponse>("DirectMessageEdited", message =>
+        _hubConnection.On<ConversationMessageResponse>("ConversationMessageReceived", message =>
         {
-            Console.WriteLine($"SignalR: DirectMessageEdited - {message.Id}");
-            DirectMessageEdited?.Invoke(message);
+            Console.WriteLine($"SignalR: ConversationMessageReceived - {message.Id} in conversation {message.ConversationId}");
+            ConversationMessageReceived?.Invoke(message);
         });
 
-        _hubConnection.On<Guid>("DirectMessageDeleted", messageId =>
+        _hubConnection.On<ConversationMessageResponse>("ConversationMessageUpdated", message =>
         {
-            Console.WriteLine($"SignalR: DirectMessageDeleted - {messageId}");
-            DirectMessageDeleted?.Invoke(new DirectMessageDeletedEvent(messageId));
+            Console.WriteLine($"SignalR: ConversationMessageUpdated - {message.Id}");
+            ConversationMessageUpdated?.Invoke(message);
+        });
+
+        _hubConnection.On<ConversationMessageDeletedEvent>("ConversationMessageDeleted", e =>
+        {
+            Console.WriteLine($"SignalR: ConversationMessageDeleted - {e.MessageId} in conversation {e.ConversationId}");
+            ConversationMessageDeleted?.Invoke(e);
+        });
+
+        _hubConnection.On<ConversationParticipantAddedEvent>("ConversationParticipantAdded", e =>
+        {
+            Console.WriteLine($"SignalR: ConversationParticipantAdded - {e.Participant.Username} to conversation {e.ConversationId}");
+            ConversationParticipantAdded?.Invoke(e);
+        });
+
+        _hubConnection.On<ConversationParticipantRemovedEvent>("ConversationParticipantRemoved", e =>
+        {
+            Console.WriteLine($"SignalR: ConversationParticipantRemoved - {e.UserId} from conversation {e.ConversationId}");
+            ConversationParticipantRemoved?.Invoke(e);
+        });
+
+        _hubConnection.On<ConversationResponse>("ConversationUpdated", conversation =>
+        {
+            Console.WriteLine($"SignalR: ConversationUpdated - {conversation.Id}");
+            ConversationUpdated?.Invoke(conversation);
+        });
+
+        _hubConnection.On<ConversationTypingEvent>("ConversationUserTyping", e =>
+        {
+            ConversationUserTyping?.Invoke(e);
+        });
+
+        _hubConnection.On<Guid>("AddedToConversation", conversationId =>
+        {
+            Console.WriteLine($"SignalR: AddedToConversation - {conversationId}");
+            AddedToConversation?.Invoke(conversationId);
+        });
+
+        _hubConnection.On<Guid>("RemovedFromConversation", conversationId =>
+        {
+            Console.WriteLine($"SignalR: RemovedFromConversation - {conversationId}");
+            RemovedFromConversation?.Invoke(conversationId);
         });
 
         // User presence events

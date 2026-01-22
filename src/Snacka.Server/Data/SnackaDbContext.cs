@@ -24,6 +24,9 @@ public sealed class SnackaDbContext : DbContext
     public DbSet<StationAccessGrant> StationAccessGrants => Set<StationAccessGrant>();
     public DbSet<StationSession> StationSessions => Set<StationSession>();
     public DbSet<StationSessionUser> StationSessionUsers => Set<StationSessionUser>();
+    public DbSet<Conversation> Conversations => Set<Conversation>();
+    public DbSet<ConversationParticipant> ConversationParticipants => Set<ConversationParticipant>();
+    public DbSet<ConversationReadState> ConversationReadStates => Set<ConversationReadState>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -95,14 +98,16 @@ public sealed class SnackaDbContext : DbContext
             .HasKey(dm => dm.Id);
         modelBuilder.Entity<DirectMessage>()
             .HasOne(dm => dm.Sender)
-            .WithMany(u => u.SentMessages)
+            .WithMany(u => u.DirectMessages)
             .HasForeignKey(dm => dm.SenderId)
             .OnDelete(DeleteBehavior.Cascade);
         modelBuilder.Entity<DirectMessage>()
-            .HasOne(dm => dm.Recipient)
-            .WithMany(u => u.ReceivedMessages)
-            .HasForeignKey(dm => dm.RecipientId)
+            .HasOne(dm => dm.Conversation)
+            .WithMany(c => c.Messages)
+            .HasForeignKey(dm => dm.ConversationId)
             .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<DirectMessage>()
+            .HasIndex(dm => dm.ConversationId);
 
         // UserCommunity configuration
         modelBuilder.Entity<UserCommunity>()
@@ -328,6 +333,62 @@ public sealed class SnackaDbContext : DbContext
             .HasIndex(ssu => ssu.ConnectionId);
         modelBuilder.Entity<StationSessionUser>()
             .HasIndex(ssu => new { ssu.SessionId, ssu.UserId })
+            .IsUnique();
+
+        // Conversation configuration
+        modelBuilder.Entity<Conversation>()
+            .HasKey(c => c.Id);
+        modelBuilder.Entity<Conversation>()
+            .HasOne(c => c.CreatedBy)
+            .WithMany()
+            .HasForeignKey(c => c.CreatedById)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<Conversation>()
+            .HasIndex(c => c.CreatedAt);
+
+        // ConversationParticipant configuration
+        modelBuilder.Entity<ConversationParticipant>()
+            .HasKey(cp => cp.Id);
+        modelBuilder.Entity<ConversationParticipant>()
+            .HasOne(cp => cp.Conversation)
+            .WithMany(c => c.Participants)
+            .HasForeignKey(cp => cp.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ConversationParticipant>()
+            .HasOne(cp => cp.User)
+            .WithMany(u => u.ConversationParticipants)
+            .HasForeignKey(cp => cp.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ConversationParticipant>()
+            .HasOne(cp => cp.AddedBy)
+            .WithMany()
+            .HasForeignKey(cp => cp.AddedById)
+            .OnDelete(DeleteBehavior.SetNull);
+        // Ensure a user can only be in a conversation once
+        modelBuilder.Entity<ConversationParticipant>()
+            .HasIndex(cp => new { cp.ConversationId, cp.UserId })
+            .IsUnique();
+
+        // ConversationReadState configuration
+        modelBuilder.Entity<ConversationReadState>()
+            .HasKey(crs => crs.Id);
+        modelBuilder.Entity<ConversationReadState>()
+            .HasOne(crs => crs.Conversation)
+            .WithMany(c => c.ReadStates)
+            .HasForeignKey(crs => crs.ConversationId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ConversationReadState>()
+            .HasOne(crs => crs.User)
+            .WithMany(u => u.ConversationReadStates)
+            .HasForeignKey(crs => crs.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<ConversationReadState>()
+            .HasOne(crs => crs.LastReadMessage)
+            .WithMany()
+            .HasForeignKey(crs => crs.LastReadMessageId)
+            .OnDelete(DeleteBehavior.SetNull);
+        modelBuilder.Entity<ConversationReadState>()
+            .HasIndex(crs => new { crs.ConversationId, crs.UserId })
             .IsUnique();
     }
 }

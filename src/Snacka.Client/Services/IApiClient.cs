@@ -78,13 +78,20 @@ public interface IApiClient
     Task<ApiResult<CommunityMemberResponse>> UpdateMemberNicknameAsync(Guid communityId, Guid memberId, string? nickname);
     Task<ApiResult<bool>> TransferOwnershipAsync(Guid communityId, Guid newOwnerId);
 
-    // Direct Messages
-    Task<ApiResult<List<ConversationSummary>>> GetConversationsAsync();
-    Task<ApiResult<List<DirectMessageResponse>>> GetDirectMessagesAsync(Guid userId, int skip = 0, int take = 50);
-    Task<ApiResult<DirectMessageResponse>> SendDirectMessageAsync(Guid userId, string content);
-    Task<ApiResult<DirectMessageResponse>> UpdateDirectMessageAsync(Guid messageId, string content);
-    Task<ApiResult<bool>> DeleteDirectMessageAsync(Guid messageId);
-    Task<ApiResult<bool>> MarkConversationAsReadAsync(Guid userId);
+    // Conversations
+    Task<ApiResult<List<ConversationSummaryResponse>>> GetConversationSummariesAsync();
+    Task<ApiResult<List<ConversationResponse>>> GetAllConversationsAsync();
+    Task<ApiResult<ConversationResponse>> CreateConversationAsync(List<Guid> participantIds, string? name = null);
+    Task<ApiResult<ConversationResponse>> GetConversationAsync(Guid conversationId);
+    Task<ApiResult<ConversationResponse>> GetOrCreateDirectConversationAsync(Guid otherUserId);
+    Task<ApiResult<List<ConversationMessageResponse>>> GetConversationMessagesAsync(Guid conversationId, int skip = 0, int take = 50);
+    Task<ApiResult<ConversationMessageResponse>> SendConversationMessageAsync(Guid conversationId, string content);
+    Task<ApiResult<ConversationMessageResponse>> UpdateConversationMessageAsync(Guid conversationId, Guid messageId, string content);
+    Task<ApiResult<bool>> DeleteConversationMessageAsync(Guid conversationId, Guid messageId);
+    Task<ApiResult<ConversationResponse>> UpdateConversationAsync(Guid conversationId, string? name, string? iconFileName = null);
+    Task<ApiResult<ParticipantInfo>> AddConversationParticipantAsync(Guid conversationId, Guid userId);
+    Task<ApiResult<bool>> RemoveConversationParticipantAsync(Guid conversationId, Guid userId);
+    Task<ApiResult<bool>> MarkConversationReadByIdAsync(Guid conversationId, Guid? messageId = null);
 
     // Link Previews
     Task<ApiResult<LinkPreview>> GetLinkPreviewAsync(string url);
@@ -92,6 +99,9 @@ public interface IApiClient
     // GIF Search
     Task<ApiResult<GifSearchResponse>> SearchGifsAsync(string query, int limit = 20, string? pos = null);
     Task<ApiResult<GifSearchResponse>> GetTrendingGifsAsync(int limit = 20, string? pos = null);
+
+    // User search (global)
+    Task<ApiResult<List<UserSearchResult>>> SearchUsersAsync(string query);
 
     // Community Invites
     Task<ApiResult<List<UserSearchResult>>> SearchUsersToInviteAsync(Guid communityId, string query);

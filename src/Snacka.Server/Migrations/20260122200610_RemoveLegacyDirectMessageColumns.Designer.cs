@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using Snacka.Server.Data;
@@ -11,9 +12,11 @@ using Snacka.Server.Data;
 namespace Snacka.Server.Migrations
 {
     [DbContext(typeof(SnackaDbContext))]
-    partial class SnackaDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260122200610_RemoveLegacyDirectMessageColumns")]
+    partial class RemoveLegacyDirectMessageColumns
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder

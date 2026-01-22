@@ -253,31 +253,66 @@ public record UpdateMemberRoleRequest(UserRole Role);
 public record UpdateNicknameRequest(string? Nickname);
 public record TransferOwnershipRequest(Guid NewOwnerId);
 
-// Direct Message Models
-public record DirectMessageResponse(
+// Conversation Models
+public record ConversationResponse(
     Guid Id,
-    string Content,
-    Guid SenderId,
-    string SenderUsername,
-    string SenderEffectiveDisplayName,
-    Guid RecipientId,
-    string RecipientUsername,
-    string RecipientEffectiveDisplayName,
+    string? Name,
+    string? IconFileName,
+    bool IsGroup,
     DateTime CreatedAt,
-    bool IsRead
+    List<ParticipantInfo> Participants,
+    ConversationMessageResponse? LastMessage,
+    int UnreadCount
 );
 
-public record SendDirectMessageRequest(string Content);
+/// <summary>
+/// Summary of a conversation for list views.
+/// </summary>
+public record ConversationSummaryResponse(
+    Guid Id,
+    string DisplayName,
+    string? IconFileName,
+    bool IsGroup,
+    bool IsOnline,
+    ConversationMessageResponse? LastMessage,
+    int UnreadCount
+);
 
-public record ConversationSummary(
+public record ParticipantInfo(
     Guid UserId,
     string Username,
     string EffectiveDisplayName,
     string? Avatar,
     bool IsOnline,
-    DirectMessageResponse? LastMessage,
-    int UnreadCount
+    DateTime JoinedAt
 );
+
+public record ConversationMessageResponse(
+    Guid Id,
+    Guid ConversationId,
+    string Content,
+    Guid SenderId,
+    string SenderUsername,
+    string SenderEffectiveDisplayName,
+    string? SenderAvatar,
+    DateTime CreatedAt,
+    DateTime? UpdatedAt
+);
+
+public record CreateConversationRequest(List<Guid> ParticipantIds, string? Name);
+public record AddParticipantRequest(Guid UserId);
+public record UpdateConversationRequest(string? Name, string? IconFileName);
+public record SendConversationMessageRequest(string Content);
+
+// Conversation SignalR Events
+public record ConversationCreatedEvent(ConversationResponse Conversation);
+public record ConversationMessageReceivedEvent(ConversationMessageResponse Message);
+public record ConversationMessageUpdatedEvent(ConversationMessageResponse Message);
+public record ConversationMessageDeletedEvent(Guid ConversationId, Guid MessageId);
+public record ConversationParticipantAddedEvent(Guid ConversationId, ParticipantInfo Participant);
+public record ConversationParticipantRemovedEvent(Guid ConversationId, Guid UserId);
+public record ConversationUpdatedEvent(ConversationResponse Conversation);
+public record ConversationTypingEvent(Guid ConversationId, Guid UserId, string Username, string EffectiveDisplayName);
 
 // Error
 public record ApiError(string Error);
@@ -287,7 +322,6 @@ public record ChannelDeletedEvent(Guid ChannelId);
 public record ChannelsReorderedEvent(Guid CommunityId, List<ChannelResponse> Channels);
 public record MessageDeletedEvent(Guid ChannelId, Guid MessageId);
 public record UserPresenceEvent(Guid UserId, string Username, bool IsOnline);
-public record DirectMessageDeletedEvent(Guid MessageId);
 public record CommunityMemberAddedEvent(Guid CommunityId, Guid UserId);
 public record CommunityMemberRemovedEvent(Guid CommunityId, Guid UserId);
 

@@ -176,8 +176,8 @@ public class ActivityFeedViewModel : ViewModelBase
             }
         });
 
-        // Direct message received
-        _signalR.DirectMessageReceived += message => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
+        // Conversation message received
+        _signalR.ConversationMessageReceived += message => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
             // Only show notification if it's from someone else
             if (message.SenderId != _currentUserId)

@@ -48,10 +48,11 @@ public class User
 
     public ICollection<Community> OwnedCommunities { get; set; } = new List<Community>();
     public ICollection<UserCommunity> UserCommunities { get; set; } = new List<UserCommunity>();
-    public ICollection<DirectMessage> SentMessages { get; set; } = new List<DirectMessage>();
-    public ICollection<DirectMessage> ReceivedMessages { get; set; } = new List<DirectMessage>();
+    public ICollection<DirectMessage> DirectMessages { get; set; } = new List<DirectMessage>();
     public ICollection<Message> Messages { get; set; } = new List<Message>();
     public ICollection<VoiceParticipant> VoiceParticipants { get; set; } = new List<VoiceParticipant>();
     public ICollection<ChannelReadState> ChannelReadStates { get; set; } = new List<ChannelReadState>();
     public ICollection<MessageReaction> Reactions { get; set; } = new List<MessageReaction>();
+    public ICollection<ConversationParticipant> ConversationParticipants { get; set; } = new List<ConversationParticipant>();
+    public ICollection<ConversationReadState> ConversationReadStates { get; set; } = new List<ConversationReadState>();
 }

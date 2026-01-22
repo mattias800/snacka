@@ -19,17 +19,47 @@
                     <Grid.ColumnDefinitions>
                         <ColumnDefinition Width="*"/>
                         <ColumnDefinition Width="Auto"/>
+                        <ColumnDefinition Width="Auto"/>
                     </Grid.ColumnDefinitions>
                     <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="8">
+                        <!-- Group icon for group conversations -->
+                        <ui:SymbolIcon Symbol="People"
+                                       IsVisible="{Binding ViewModel.IsGroup, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                                       Foreground="{StaticResource Foreground3Brush}"
+                                       FontSize="20"
+                                       VerticalAlignment="Center"/>
+                        <!-- @ symbol for 1:1 conversations -->
                         <TextBlock Text="@"
+                                   IsVisible="{Binding ViewModel.IsGroup, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Converter={x:Static BoolConverters.Not}}"
                                    Foreground="{StaticResource Foreground3Brush}"
                                    FontSize="22"
                                    VerticalAlignment="Center"/>
-                        <TextBlock Text="{Binding ViewModel.RecipientName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, FallbackValue='User'}"
+                        <TextBlock Text="{Binding ViewModel.ConversationDisplayName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, FallbackValue='User'}"
                                    Classes="heading-3"
                                    VerticalAlignment="Center"/>
+                        <!-- Participant count for groups -->
+                        <TextBlock IsVisible="{Binding ViewModel.IsGroup, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                                   Classes="text-muted"
+                                   VerticalAlignment="Center"
+                                   FontSize="12">
+                            <TextBlock.Text>
+                                <MultiBinding StringFormat="({0} members)">
+                                    <Binding Path="ViewModel.Participants.Count" RelativeSource="{RelativeSource AncestorType=controls:DMContentView}" />
+                                </MultiBinding>
+                            </TextBlock.Text>
+                        </TextBlock>
                     </StackPanel>
+                    <!-- Members button for groups (to show participant list) -->
                     <Button Grid.Column="1"
+                            Classes="btn-icon"
+                            IsVisible="{Binding ViewModel.IsGroup, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
+                            ToolTip.Tip="View Members"
+                            Click="OnMembersButtonClick">
+                        <ui:SymbolIcon Symbol="People"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   FontSize="16"/>
+                    </Button>
+                    <Button Grid.Column="2"
                             Classes="btn-icon"
                             Command="{Binding ViewModel.CloseCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
                             ToolTip.Tip="Close DM">
@@ -60,7 +90,7 @@
                                  Grid.Column="0"
                                  Classes="input-chat"
                                  Text="{Binding ViewModel.MessageInput, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, Mode=TwoWay}"
-                                 Watermark="{Binding ViewModel.RecipientName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, StringFormat='Message @{0}'}"
+                                 Watermark="{Binding ViewModel.ConversationDisplayName, RelativeSource={RelativeSource AncestorType=controls:DMContentView}, StringFormat='Message {0}'}"
                                  AcceptsReturn="True"
                                  TextWrapping="Wrap"
                                  MaxHeight="200"/>
@@ -125,10 +155,10 @@
                               ItemsSource="{Binding ViewModel.Messages, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"
                               Margin="16,0">
                     <ItemsControl.ItemTemplate>
-                        <DataTemplate x:DataType="services:DirectMessageResponse">
+                        <DataTemplate x:DataType="services:ConversationMessageResponse">
                             <controls:MessageItemView
                                 Message="{Binding}"
-                                AuthorUsername="{Binding SenderUsername}"
+                                AuthorUsername="{Binding SenderEffectiveDisplayName}"
                                 MessageContent="{Binding Content}"
                                 CreatedAt="{Binding CreatedAt}"
                                 StartEditMessageCommand="{Binding ViewModel.StartEditMessageCommand, RelativeSource={RelativeSource AncestorType=controls:DMContentView}}"

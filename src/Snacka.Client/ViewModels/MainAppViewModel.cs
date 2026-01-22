@@ -25,8 +25,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private readonly AuthResponse _auth;
     private readonly Action _onLogout;
     private readonly Action? _onSwitchServer;
-    private readonly Action? _onOpenDMs;
-    private readonly Action<Guid?, string?>? _onOpenDMsWithUser;
     private readonly Action? _onOpenSettings;
     private readonly string _baseUrl;
 
@@ -168,7 +166,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isInviteStatusError;
 
     // Recent DMs state (shown in channel list sidebar)
-    private ObservableCollection<ConversationSummary> _recentDms = new();
+    private ObservableCollection<ConversationSummaryResponse> _recentDms = new();
     private bool _isRecentDmsExpanded = true;
 
     // Activity feed state (right panel)
@@ -199,7 +197,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private string? _discoveryError;
     private Guid? _joiningCommunityId;
 
-    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenDMs = null, Action<Guid?, string?>? onOpenDMsWithUser = null, Action? onOpenSettings = null, bool gifsEnabled = false)
+    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
         _isGifsEnabled = gifsEnabled;
@@ -214,8 +212,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _auth = auth;
         _onLogout = onLogout;
         _onSwitchServer = onSwitchServer;
-        _onOpenDMs = onOpenDMs;
-        _onOpenDMsWithUser = onOpenDMsWithUser;
         _onOpenSettings = onOpenSettings;
 
         // Load persisted mute/deafen state
@@ -355,7 +351,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _myGamingStations,
             () => SelectedCommunity?.Id ?? Guid.Empty,
             member => StartDMWithMember(member),
-            userId => RecentDms.FirstOrDefault(c => c.UserId == userId)?.UnreadCount ?? 0,
+            _ => 0, // Unread count per user not available in new conversation model
             () => Task.FromResult(_currentVoiceChannel is not null),
             machineId => CommandStationJoinCurrentChannelAsync(machineId),
             error => ErrorMessage = error);
@@ -374,9 +370,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         LogoutCommand = ReactiveCommand.Create(_onLogout);
         SwitchServerCommand = _onSwitchServer is not null
             ? ReactiveCommand.Create(_onSwitchServer)
-            : null;
-        OpenDMsCommand = _onOpenDMs is not null
-            ? ReactiveCommand.Create(_onOpenDMs)
             : null;
         OpenSettingsCommand = _onOpenSettings is not null
             ? ReactiveCommand.Create(_onOpenSettings)
@@ -448,7 +441,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         InviteUserCommand = ReactiveCommand.CreateFromTask<UserSearchResult>(InviteUserAsync);
 
         // Recent DMs commands (sidebar section)
-        SelectRecentDmCommand = ReactiveCommand.Create<ConversationSummary>(SelectRecentDm);
+        SelectRecentDmCommand = ReactiveCommand.Create<ConversationSummaryResponse>(SelectRecentDm);
         ToggleRecentDmsExpandedCommand = ReactiveCommand.Create(() => { IsRecentDmsExpanded = !IsRecentDmsExpanded; });
 
         // Community discovery commands
@@ -1199,8 +1192,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         });
 
-        // Direct message received - update recent DMs list
-        _signalR.DirectMessageReceived += message => Dispatcher.UIThread.Post(() =>
+        // Conversation message received - update recent DMs list
+        _signalR.ConversationMessageReceived += message => Dispatcher.UIThread.Post(() =>
         {
             UpdateRecentDmWithMessage(message);
         });
@@ -1479,7 +1472,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// Recent DM conversations for the sidebar, sorted by last message time.
     /// </summary>
-    public ObservableCollection<ConversationSummary> RecentDms => _recentDms;
+    public ObservableCollection<ConversationSummaryResponse> RecentDms => _recentDms;
 
     /// <summary>
     /// Whether the Recent DMs section in the sidebar is expanded.
@@ -2991,7 +2984,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     public ReactiveCommand<Unit, Unit> LogoutCommand { get; }
     public ReactiveCommand<Unit, Unit>? SwitchServerCommand { get; }
-    public ReactiveCommand<Unit, Unit>? OpenDMsCommand { get; }
     public ReactiveCommand<Unit, Unit>? OpenSettingsCommand { get; }
     public ReactiveCommand<Unit, Unit> OpenGamingStationsCommand { get; }
     public ReactiveCommand<Unit, Unit> RegisterStationCommand { get; }
@@ -3037,7 +3029,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<UserSearchResult, Unit> InviteUserCommand { get; }
 
     // Recent DMs sidebar commands
-    public ReactiveCommand<ConversationSummary, Unit> SelectRecentDmCommand { get; }
+    public ReactiveCommand<ConversationSummaryResponse, Unit> SelectRecentDmCommand { get; }
     public ReactiveCommand<Unit, Unit> ToggleRecentDmsExpandedCommand { get; }
 
     // Community discovery commands
@@ -4846,7 +4838,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         try
         {
-            var result = await _apiClient.GetConversationsAsync();
+            var result = await _apiClient.GetConversationSummariesAsync();
             if (result.Success && result.Data is not null)
             {
                 _recentDms.Clear();
@@ -4867,10 +4859,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
     }
 
-    private void UpdateRecentDmWithMessage(DirectMessageResponse message)
+    private void UpdateRecentDmWithMessage(ConversationMessageResponse message)
     {
-        var otherUserId = message.SenderId == _auth.UserId ? message.RecipientId : message.SenderId;
-        var existing = _recentDms.FirstOrDefault(c => c.UserId == otherUserId);
+        var existing = _recentDms.FirstOrDefault(c => c.Id == message.ConversationId);
 
         if (existing is not null)
         {
@@ -4878,7 +4869,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             var updated = existing with
             {
                 LastMessage = message,
-                UnreadCount = message.SenderId != _auth.UserId && !message.IsRead
+                UnreadCount = message.SenderId != _auth.UserId
                     ? existing.UnreadCount + 1
                     : existing.UnreadCount
             };
@@ -4887,41 +4878,21 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
         else
         {
-            // New conversation - add to the list
-            var otherUsername = message.SenderId == _auth.UserId
-                ? message.RecipientUsername
-                : message.SenderUsername;
-            var otherEffectiveDisplayName = message.SenderId == _auth.UserId
-                ? message.RecipientEffectiveDisplayName
-                : message.SenderEffectiveDisplayName;
-
-            var newConv = new ConversationSummary(
-                otherUserId,
-                otherUsername,
-                otherEffectiveDisplayName,
-                null, // Avatar
-                true, // Assume online for now
-                message,
-                message.SenderId != _auth.UserId ? 1 : 0
-            );
-            _recentDms.Insert(0, newConv);
-
-            // Trim list if it exceeds limit
-            while (_recentDms.Count > 10)
-                _recentDms.RemoveAt(_recentDms.Count - 1);
+            // New conversation - reload the list from server to get full info
+            _ = LoadRecentDmsAsync();
         }
 
         this.RaisePropertyChanged(nameof(TotalDmUnreadCount));
     }
 
-    private void SelectRecentDm(ConversationSummary conversation)
+    private void SelectRecentDm(ConversationSummaryResponse conversation)
     {
         // Close voice channel view and clear channel selection
         SelectedVoiceChannelForViewing = null;
         SelectedChannel = null;
 
         // Open the DM content view for this conversation
-        _dmContent?.OpenConversation(conversation.UserId, conversation.EffectiveDisplayName);
+        _dmContent?.OpenConversationById(conversation.Id, conversation.DisplayName);
 
         // Mark conversation as read in the list
         var index = _recentDms.IndexOf(conversation);
