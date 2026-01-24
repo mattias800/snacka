@@ -50,7 +50,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private MessageResponse? _editingMessage;
     private string _editingMessageContent = string.Empty;
     private MessageResponse? _replyingToMessage;
-    private Guid? _previousChannelId;
 
     // Voice channel state
     private ChannelResponse? _currentVoiceChannel;
@@ -1477,42 +1476,71 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         if (SelectedCommunity is null) return;
 
-        // Join SignalR group for this community
-        await _signalR.JoinServerAsync(SelectedCommunity.Id);
-        await LoadChannelsAsync();
+        IsLoading = true;
+        try
+        {
+            // Delegate community selection to coordinator (handles SignalR, channels, members)
+            await _communityCoordinator.SelectCommunityAsync(SelectedCommunity.Id);
+
+            // ViewModel-specific: Create VoiceChannelViewModels from store data
+            await SetupVoiceChannelViewModelsAsync();
+
+            // ViewModel-specific: Set current user role
+            var currentMember = _stores.CommunityStore.GetMember(_auth.UserId);
+            CurrentUserRole = currentMember?.Role;
+            _membersListViewModel?.UpdateCurrentUserRole(currentMember?.Role);
+
+            // Select first text channel if none selected or belongs to different community
+            var firstTextChannel = TextChannels.FirstOrDefault();
+            if (firstTextChannel is not null && (SelectedChannel is null || SelectedChannel.CommunityId != SelectedCommunity.Id))
+                SelectedChannel = firstTextChannel;
+        }
+        finally
+        {
+            IsLoading = false;
+        }
+    }
+
+    private async Task SetupVoiceChannelViewModelsAsync()
+    {
+        var voiceChannels = _storeVoiceChannels.ToList();
+        Console.WriteLine($"SetupVoiceChannelViewModelsAsync: Found {voiceChannels.Count} voice channels");
+
+        VoiceChannelViewModels.Clear();
+        foreach (var voiceChannel in voiceChannels)
+        {
+            var vm = CreateVoiceChannelViewModel(voiceChannel);
+
+            // Load participants for this voice channel into VoiceStore
+            Console.WriteLine($"SetupVoiceChannelViewModelsAsync: Loading participants for voice channel {voiceChannel.Name} ({voiceChannel.Id})");
+            var participants = await _signalR.GetVoiceParticipantsAsync(voiceChannel.Id);
+            Console.WriteLine($"SetupVoiceChannelViewModelsAsync: Got {participants.Count()} participants for {voiceChannel.Name}");
+            _stores.VoiceStore.SetParticipants(voiceChannel.Id, participants);
+
+            VoiceChannelViewModels.Add(vm);
+        }
+        Console.WriteLine($"SetupVoiceChannelViewModelsAsync: Created {VoiceChannelViewModels.Count} VoiceChannelViewModels");
     }
 
     private async Task OnChannelSelectedAsync()
     {
-        // Leave previous channel group
-        if (_previousChannelId.HasValue)
-            await _signalR.LeaveChannelAsync(_previousChannelId.Value);
-
         if (SelectedChannel is not null && SelectedCommunity is not null)
         {
-            _previousChannelId = SelectedChannel.Id;
+            // Delegate channel selection to coordinator (handles SignalR, API, store updates, messages)
+            await _channelCoordinator.SelectTextChannelAsync(SelectedCommunity.Id, SelectedChannel.Id);
 
-            await _signalR.JoinChannelAsync(SelectedChannel.Id);
-
-            // Mark channel as read and update the local unread count
-            await _apiClient.MarkChannelAsReadAsync(SelectedCommunity.Id, SelectedChannel.Id);
-
-            // Update unread count in the store (DynamicData binding auto-updates _storeAllChannels)
-            _stores.ChannelStore.UpdateUnreadCount(SelectedChannel.Id, 0);
-
-            // Update SelectedChannel with zero unread count
+            // Update SelectedChannel with zero unread count (for UI binding)
             SelectedChannel = SelectedChannel with { UnreadCount = 0 };
 
-            // Subscribe to typing indicators for this channel
+            // Subscribe to typing indicators for this channel (ViewModel-specific)
             SubscribeToTypingStore(SelectedChannel.Id);
         }
         else
         {
-            // No channel selected, clear typing state
+            // No channel selected, clear typing state and coordinator selection
             ClearTypingSubscription();
+            _channelCoordinator.ClearSelection();
         }
-
-        await LoadMessagesAsync();
     }
 
     public string Username => _auth.Username;
@@ -3207,88 +3235,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         CloseWelcomeModal();
         await CreateCommunityAsync();
-    }
-
-
-    private async Task LoadChannelsAsync()
-    {
-        if (SelectedCommunity is null) return;
-
-        IsLoading = true;
-        try
-        {
-            Console.WriteLine($"LoadChannelsAsync: Loading channels for community {SelectedCommunity.Id}");
-            var channelsResult = await _apiClient.GetChannelsAsync(SelectedCommunity.Id);
-            var membersResult = await _apiClient.GetMembersAsync(SelectedCommunity.Id);
-
-            if (channelsResult.Success && channelsResult.Data is not null)
-            {
-                _stores.ChannelStore.SetChannels(channelsResult.Data);
-
-                // Notify computed properties
-                // TextChannels is now store-backed - auto-updates via ReadOnlyObservableCollection
-
-                // Create VoiceChannelViewModels for all voice channels
-                var voiceChannels = channelsResult.Data.Where(c => c.Type == ChannelType.Voice).ToList();
-                Console.WriteLine($"LoadChannelsAsync: Found {voiceChannels.Count} voice channels");
-
-                VoiceChannelViewModels.Clear();
-                foreach (var voiceChannel in voiceChannels)
-                {
-                    var vm = CreateVoiceChannelViewModel(voiceChannel);
-
-                    // Load participants for this voice channel into VoiceStore
-                    // VoiceChannelViewModel will receive updates via its subscription
-                    Console.WriteLine($"LoadChannelsAsync: Loading participants for voice channel {voiceChannel.Name} ({voiceChannel.Id})");
-                    var participants = await _signalR.GetVoiceParticipantsAsync(voiceChannel.Id);
-                    Console.WriteLine($"LoadChannelsAsync: Got {participants.Count()} participants for {voiceChannel.Name}");
-                    _stores.VoiceStore.SetParticipants(voiceChannel.Id, participants);
-
-                    VoiceChannelViewModels.Add(vm);
-                }
-                Console.WriteLine($"LoadChannelsAsync: Created {VoiceChannelViewModels.Count} VoiceChannelViewModels");
-
-                // Select first text channel if none selected or if it belongs to a different community
-                var firstTextChannel = TextChannels.FirstOrDefault();
-                if (firstTextChannel is not null && (SelectedChannel is null || SelectedChannel.CommunityId != SelectedCommunity.Id))
-                    SelectedChannel = firstTextChannel;
-            }
-
-            if (membersResult.Success && membersResult.Data is not null)
-            {
-                // Update store - StoreMembers will auto-update via DynamicData binding
-                _stores.CommunityStore.SetMembers(SelectedCommunity.Id, membersResult.Data);
-
-                // Set current user's role
-                var currentMember = membersResult.Data.FirstOrDefault(m => m.UserId == _auth.UserId);
-                CurrentUserRole = currentMember?.Role;
-                _membersListViewModel?.UpdateCurrentUserRole(currentMember?.Role);
-            }
-        }
-        finally
-        {
-            IsLoading = false;
-        }
-    }
-
-    private async Task LoadMessagesAsync()
-    {
-        if (SelectedChannel is null) return;
-
-        IsMessagesLoading = true;
-        try
-        {
-            var result = await _apiClient.GetMessagesAsync(SelectedChannel.Id);
-            if (result.Success && result.Data is not null)
-            {
-                _stores.MessageStore.SetMessages(SelectedChannel.Id, result.Data);
-                _stores.MessageStore.SetCurrentChannel(SelectedChannel.Id);
-            }
-        }
-        finally
-        {
-            IsMessagesLoading = false;
-        }
     }
 
     private async Task SendMessageAsync()
