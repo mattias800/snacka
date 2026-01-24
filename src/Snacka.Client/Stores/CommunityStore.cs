@@ -1,3 +1,4 @@
+using System.Reactive;
 using System.Reactive.Linq;
 using System.Reactive.Subjects;
 using DynamicData;
@@ -131,66 +132,83 @@ public sealed class CommunityStore : ICommunityStore, IDisposable
 
     public IObservable<CommunityState?> SelectedCommunity =>
         _selectedCommunityId
-            .CombineLatest(
-                _communityCache.Connect().QueryWhenChanged(),
-                (selectedId, cache) =>
-                {
-                    if (selectedId is null) return null;
-                    var lookup = cache.Lookup(selectedId.Value);
-                    return lookup.HasValue ? lookup.Value : null;
-                })
+            .Select(selectedId =>
+            {
+                if (selectedId is null) return null;
+                var lookup = _communityCache.Lookup(selectedId.Value);
+                return lookup.HasValue ? lookup.Value : null;
+            })
+            .Merge(
+                _communityCache.Connect()
+                    .QueryWhenChanged()
+                    .Select(_ =>
+                    {
+                        var selectedId = _selectedCommunityId.Value;
+                        if (selectedId is null) return null;
+                        var lookup = _communityCache.Lookup(selectedId.Value);
+                        return lookup.HasValue ? lookup.Value : null;
+                    }))
             .DistinctUntilChanged();
 
     public IObservable<IReadOnlyCollection<CommunityMemberState>> CurrentCommunityMembers =>
         _selectedCommunityId
-            .CombineLatest(
-                _memberCache.Connect().QueryWhenChanged(),
-                (communityId, cache) =>
-                {
-                    if (communityId is null)
-                        return Array.Empty<CommunityMemberState>() as IReadOnlyCollection<CommunityMemberState>;
+            .Select(_ => Unit.Default)
+            .Merge(_memberCache.Connect().Select(_ => Unit.Default))
+            .Select(_ => GetCurrentCommunityMembersInternal());
 
-                    return cache.Items
-                        .Where(m => m.CommunityId == communityId.Value)
-                        .OrderBy(m => m.Role)
-                        .ThenBy(m => m.EffectiveDisplayName)
-                        .ToList()
-                        .AsReadOnly() as IReadOnlyCollection<CommunityMemberState>;
-                });
+    private IReadOnlyCollection<CommunityMemberState> GetCurrentCommunityMembersInternal()
+    {
+        var communityId = _selectedCommunityId.Value;
+        if (communityId is null)
+            return Array.Empty<CommunityMemberState>();
+
+        return _memberCache.Items
+            .Where(m => m.CommunityId == communityId.Value)
+            .OrderBy(m => m.Role)
+            .ThenBy(m => m.EffectiveDisplayName)
+            .ToList()
+            .AsReadOnly();
+    }
 
     public IObservable<IReadOnlyCollection<CommunityMemberState>> OnlineMembers =>
         _selectedCommunityId
-            .CombineLatest(
-                _memberCache.Connect().QueryWhenChanged(),
-                (communityId, cache) =>
-                {
-                    if (communityId is null)
-                        return Array.Empty<CommunityMemberState>() as IReadOnlyCollection<CommunityMemberState>;
+            .Select(_ => Unit.Default)
+            .Merge(_memberCache.Connect().Select(_ => Unit.Default))
+            .Select(_ => GetOnlineMembersInternal());
 
-                    return cache.Items
-                        .Where(m => m.CommunityId == communityId.Value && m.IsOnline)
-                        .OrderBy(m => m.Role)
-                        .ThenBy(m => m.EffectiveDisplayName)
-                        .ToList()
-                        .AsReadOnly() as IReadOnlyCollection<CommunityMemberState>;
-                });
+    private IReadOnlyCollection<CommunityMemberState> GetOnlineMembersInternal()
+    {
+        var communityId = _selectedCommunityId.Value;
+        if (communityId is null)
+            return Array.Empty<CommunityMemberState>();
+
+        return _memberCache.Items
+            .Where(m => m.CommunityId == communityId.Value && m.IsOnline)
+            .OrderBy(m => m.Role)
+            .ThenBy(m => m.EffectiveDisplayName)
+            .ToList()
+            .AsReadOnly();
+    }
 
     public IObservable<IReadOnlyCollection<CommunityMemberState>> OfflineMembers =>
         _selectedCommunityId
-            .CombineLatest(
-                _memberCache.Connect().QueryWhenChanged(),
-                (communityId, cache) =>
-                {
-                    if (communityId is null)
-                        return Array.Empty<CommunityMemberState>() as IReadOnlyCollection<CommunityMemberState>;
+            .Select(_ => Unit.Default)
+            .Merge(_memberCache.Connect().Select(_ => Unit.Default))
+            .Select(_ => GetOfflineMembersInternal());
 
-                    return cache.Items
-                        .Where(m => m.CommunityId == communityId.Value && !m.IsOnline)
-                        .OrderBy(m => m.Role)
-                        .ThenBy(m => m.EffectiveDisplayName)
-                        .ToList()
-                        .AsReadOnly() as IReadOnlyCollection<CommunityMemberState>;
-                });
+    private IReadOnlyCollection<CommunityMemberState> GetOfflineMembersInternal()
+    {
+        var communityId = _selectedCommunityId.Value;
+        if (communityId is null)
+            return Array.Empty<CommunityMemberState>();
+
+        return _memberCache.Items
+            .Where(m => m.CommunityId == communityId.Value && !m.IsOnline)
+            .OrderBy(m => m.Role)
+            .ThenBy(m => m.EffectiveDisplayName)
+            .ToList()
+            .AsReadOnly();
+    }
 
     public CommunityState? GetCommunity(Guid communityId)
     {
