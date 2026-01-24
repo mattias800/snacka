@@ -143,9 +143,14 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
     {
         _messageStore?.AddMessage(message);
 
-        // Increment unread count if not viewing this channel
-        var currentChannelId = _channelStore?.GetChannel(message.ChannelId)?.Id;
-        // Note: Unread logic will be handled by coordinator to check if channel is selected
+        // Increment unread count if:
+        // 1. Not viewing this channel (different from selected)
+        // 2. Not our own message
+        var selectedChannelId = _channelStore?.GetSelectedChannelId();
+        if (selectedChannelId != message.ChannelId && message.AuthorId != _currentUserId)
+        {
+            _channelStore?.IncrementUnreadCount(message.ChannelId);
+        }
     }
 
     private void OnMessageEdited(MessageResponse message)

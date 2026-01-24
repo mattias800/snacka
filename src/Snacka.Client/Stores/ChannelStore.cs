@@ -63,6 +63,11 @@ public interface IChannelStore : IStore<ChannelState, Guid>
     /// </summary>
     ChannelState? GetChannel(Guid channelId);
 
+    /// <summary>
+    /// Gets the currently selected channel ID synchronously.
+    /// </summary>
+    Guid? GetSelectedChannelId();
+
     // Actions
     void SetChannels(IEnumerable<ChannelResponse> channels);
     void SelectChannel(Guid? channelId);
@@ -138,6 +143,8 @@ public sealed class ChannelStore : IChannelStore, IDisposable
         var lookup = _channelCache.Lookup(channelId);
         return lookup.HasValue ? lookup.Value : null;
     }
+
+    public Guid? GetSelectedChannelId() => _selectedChannelId.Value;
 
     public void SetChannels(IEnumerable<ChannelResponse> channels)
     {
