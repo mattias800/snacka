@@ -214,8 +214,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             webRtcService.SetLocalUserId(auth.UserId);
         }
 
-        // Create voice channel content view model for video grid (handles its own SignalR subscriptions)
-        _voiceChannelContent = new VoiceChannelContentViewModel(_webRtc, _signalR, auth.UserId);
+        // Create voice channel content view model for video grid
+        // Uses VoiceStore and ChannelStore for reactive state (Redux-style)
+        _voiceChannelContent = new VoiceChannelContentViewModel(
+            _webRtc,
+            _stores.VoiceStore,
+            _stores.ChannelStore,
+            _signalR,
+            auth.UserId);
         _voiceChannelContent.ParticipantLeft += (channelId, userId) =>
         {
             // Close fullscreen if viewing this user's stream
@@ -529,6 +535,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _gamingStation.ErrorOccurred += error => ErrorMessage = error;
 
         // Create voice control ViewModel
+        // Note: VoiceChannelContentViewModel now updates reactively from VoiceStore, so no callback needed
         _voiceControl = new VoiceControlViewModel(
             _stores.VoiceStore,
             settingsStore,
@@ -536,7 +543,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             signalR,
             auth.UserId,
             () => CurrentVoiceChannel?.Id,
-            (userId, state) => _voiceChannelContent?.UpdateParticipantState(userId, state));
+            (_, _) => { } /* VoiceChannelContentViewModel subscribes to VoiceStore directly */);
 
         // Sync VoiceControlViewModel state with local fields (for backwards compatibility)
         _voiceControl.PropertyChanged += (_, e) =>
@@ -574,6 +581,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         };
 
         // Create screen share ViewModel
+        // Note: VoiceChannelContentViewModel now updates reactively from VoiceStore, so no callback needed
         _screenShare = new ScreenShareViewModel(
             screenCaptureService,
             signalR,
@@ -582,7 +590,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             auth.UserId,
             auth.Username,
             () => CurrentVoiceChannel?.Id,
-            (userId, state) => _voiceChannelContent?.UpdateParticipantState(userId, state));
+            (_, _) => { } /* VoiceChannelContentViewModel subscribes to VoiceStore directly */);
 
         // Sync ScreenShareViewModel state with local fields
         _screenShare.PropertyChanged += (_, e) =>
@@ -1017,12 +1025,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 var voiceChannelVm = VoiceChannelViewModels.FirstOrDefault(v => v.Id == e.ChannelId);
 
                 // Clear local state
+                // VoiceChannelContentViewModel clears reactively when VoiceStore.CurrentChannelId becomes null
                 CurrentVoiceChannel = null;
                 IsCameraOn = false;
                 IsScreenSharing = false;
                 IsVoiceVideoOverlayOpen = false;
                 SelectedVoiceChannelForViewing = null;
-                _voiceChannelContent?.SetParticipants(Enumerable.Empty<VoiceParticipantResponse>());
 
                 // Track that we're now in voice on another device
                 VoiceOnOtherDeviceChannelId = e.ChannelId;
@@ -1043,10 +1051,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 // Broadcast to others - VoiceStore will be updated via SignalR event response
                 await _signalR.UpdateSpeakingStateAsync(currentChannel.Id, isSpeaking);
 
-                // VoiceChannelViewModel auto-updates via VoiceStore subscription
-
-                // Update video grid
-                _voiceChannelContent?.UpdateSpeakingState(_auth.UserId, isSpeaking);
+                // VoiceChannelViewModel and VoiceChannelContentViewModel auto-update via VoiceStore subscription
             }
         });
 
@@ -2124,10 +2129,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             this.RaiseAndSetIfChanged(ref _selectedVoiceChannelForViewing, value);
             this.RaisePropertyChanged(nameof(IsViewingVoiceChannel));
-            if (_voiceChannelContent != null)
-            {
-                _voiceChannelContent.Channel = value;
-            }
+            // VoiceChannelContentViewModel now reads from VoiceStore directly
         }
     }
 
@@ -2651,8 +2653,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 await _voiceControl.ApplyPersistedStateAsync(channel.Id);
             }
 
-            // Update VoiceChannelContent for video grid display
-            _voiceChannelContent?.SetParticipants(result.Participants);
+            // VoiceChannelContentViewModel now updates reactively from VoiceStore
         }
         else
         {
@@ -2679,10 +2680,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Note: IsMuted and IsDeafened are persisted and NOT reset when leaving
         _voiceControl?.ResetTransientState();
 
-        // Close voice video overlay and clear content view
+        // Close voice video overlay
+        // VoiceChannelContentViewModel clears reactively when VoiceStore.CurrentChannelId becomes null
         IsVoiceVideoOverlayOpen = false;
         SelectedVoiceChannelForViewing = null;
-        _voiceChannelContent?.SetParticipants(Enumerable.Empty<VoiceParticipantResponse>());
     }
 
     // Note: ToggleMuteAsync, ToggleDeafenAsync, and ToggleCameraAsync are now handled by VoiceControlViewModel

@@ -1,4 +1,6 @@
 using System.Collections.ObjectModel;
+using System.Reactive.Disposables;
+using System.Reactive.Linq;
 using System.Threading.Tasks;
 using Avalonia;
 using Avalonia.Media.Imaging;
@@ -6,6 +8,7 @@ using Avalonia.Platform;
 using Avalonia.Threading;
 using Snacka.Client.Services;
 using Snacka.Client.Services.HardwareVideo;
+using Snacka.Client.Stores;
 using Snacka.Shared.Models;
 using ReactiveUI;
 
@@ -343,16 +346,18 @@ public class ParticipantInfo
 /// <summary>
 /// ViewModel for the voice channel content view.
 /// Displays a grid of video streams (one tile per camera or screen share).
-/// Subscribes to SignalR events for real-time participant updates.
+/// Subscribes to VoiceStore for reactive state management (Redux-style).
 /// </summary>
 public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
 {
     private readonly IWebRtcService _webRtc;
-    private readonly ISignalRService _signalR;
+    private readonly IVoiceStore _voiceStore;
+    private readonly IChannelStore _channelStore;
     private readonly Guid _localUserId;
-    private ChannelResponse? _channel;
+    private Guid? _currentChannelId;
     private ObservableCollection<VideoStreamViewModel> _videoStreams = new();
     private readonly Dictionary<Guid, ParticipantInfo> _participants = new();
+    private readonly CompositeDisposable _subscriptions = new();
 
     /// <summary>
     /// Callback for when a gaming station's "Share Screen" button is clicked.
@@ -372,9 +377,18 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     /// </summary>
     public event Action<Guid, Guid>? ParticipantLeft;
 
-    public VoiceChannelContentViewModel(IWebRtcService webRtc, ISignalRService signalR, Guid localUserId)
+    private readonly ISignalRService _signalR;
+
+    public VoiceChannelContentViewModel(
+        IWebRtcService webRtc,
+        IVoiceStore voiceStore,
+        IChannelStore channelStore,
+        ISignalRService signalR,
+        Guid localUserId)
     {
         _webRtc = webRtc;
+        _voiceStore = voiceStore;
+        _channelStore = channelStore;
         _signalR = signalR;
         _localUserId = localUserId;
 
@@ -384,46 +398,185 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         _webRtc.HardwareDecoderReady += OnHardwareDecoderReady;
         _webRtc.LocalHardwarePreviewReady += OnLocalHardwarePreviewReady;
 
-        // Subscribe to SignalR events for participant updates
-        SetupSignalRHandlers();
+        // Subscribe to VoiceStore for reactive updates (like useSelector in Redux)
+        SubscribeToStore();
     }
 
-    private void SetupSignalRHandlers()
+    /// <summary>
+    /// Subscribe to VoiceStore observables for reactive state management.
+    /// This replaces the prop drilling from MainAppViewModel.
+    /// </summary>
+    private void SubscribeToStore()
     {
-        _signalR.VoiceParticipantJoined += e => Dispatcher.UIThread.Post(() =>
-        {
-            if (_channel is not null && e.ChannelId == _channel.Id)
+        // Subscribe to current channel changes
+        _voiceStore.CurrentChannelId
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(channelId =>
             {
-                AddParticipant(e.Participant);
-            }
-        });
+                var previousChannelId = _currentChannelId;
+                _currentChannelId = channelId;
 
-        _signalR.VoiceParticipantLeft += e => Dispatcher.UIThread.Post(() =>
+                this.RaisePropertyChanged(nameof(HasChannel));
+                this.RaisePropertyChanged(nameof(ChannelName));
+
+                // Clear video streams when leaving a channel
+                if (channelId is null && previousChannelId is not null)
+                {
+                    ClearAllStreams();
+                }
+            })
+            .DisposeWith(_subscriptions);
+
+        // Subscribe to participant changes in the current channel
+        _voiceStore.CurrentChannelParticipants
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(participants => SyncParticipants(participants))
+            .DisposeWith(_subscriptions);
+    }
+
+    /// <summary>
+    /// Syncs VideoStreamViewModels with the current participant state from the store.
+    /// Handles additions, removals, and updates.
+    /// </summary>
+    private void SyncParticipants(IReadOnlyCollection<VoiceParticipantState> storeParticipants)
+    {
+        var storeUserIds = storeParticipants.Select(p => p.UserId).ToHashSet();
+        var localUserIds = _participants.Keys.ToHashSet();
+
+        // Find participants to remove (in local but not in store)
+        var toRemove = localUserIds.Except(storeUserIds).ToList();
+        foreach (var userId in toRemove)
         {
-            if (_channel is not null && e.ChannelId == _channel.Id)
+            RemoveParticipantInternal(userId);
+            if (_currentChannelId.HasValue)
             {
-                RemoveParticipant(e.UserId);
-
-                // Notify parent ViewModel (for fullscreen handling)
-                ParticipantLeft?.Invoke(e.ChannelId, e.UserId);
+                ParticipantLeft?.Invoke(_currentChannelId.Value, userId);
             }
-        });
+        }
 
-        _signalR.VoiceStateChanged += e => Dispatcher.UIThread.Post(() =>
+        // Find participants to add (in store but not in local)
+        var toAdd = storeParticipants.Where(p => !localUserIds.Contains(p.UserId)).ToList();
+        foreach (var participant in toAdd)
         {
-            if (_channel is not null && e.ChannelId == _channel.Id)
-            {
-                UpdateParticipantState(e.UserId, e.State);
-            }
-        });
+            AddParticipantFromState(participant);
+        }
 
-        _signalR.SpeakingStateChanged += e => Dispatcher.UIThread.Post(() =>
+        // Update existing participants
+        foreach (var participant in storeParticipants.Where(p => localUserIds.Contains(p.UserId)))
         {
-            if (_channel is not null && e.ChannelId == _channel.Id)
+            UpdateParticipantFromState(participant);
+        }
+    }
+
+    private void AddParticipantFromState(VoiceParticipantState participant)
+    {
+        if (_participants.ContainsKey(participant.UserId))
+            return;
+
+        var info = new ParticipantInfo
+        {
+            UserId = participant.UserId,
+            Username = participant.Username,
+            IsMuted = participant.IsMuted,
+            IsDeafened = participant.IsDeafened,
+            IsCameraOn = participant.IsCameraOn,
+            IsScreenSharing = participant.IsScreenSharing,
+            ScreenShareHasAudio = participant.ScreenShareHasAudio,
+            IsGamingStation = participant.IsGamingStation,
+            GamingStationMachineId = participant.GamingStationMachineId
+        };
+        _participants[participant.UserId] = info;
+
+        // Every participant always has a camera stream
+        VideoStreams.Add(CreateVideoStream(
+            participant.UserId,
+            participant.Username,
+            VideoStreamType.Camera,
+            participant.IsGamingStation,
+            participant.GamingStationMachineId));
+
+        // Screen share adds a second stream
+        if (participant.IsScreenSharing)
+        {
+            var screenStream = CreateVideoStream(
+                participant.UserId,
+                participant.Username,
+                VideoStreamType.ScreenShare,
+                participant.IsGamingStation,
+                participant.GamingStationMachineId);
+            screenStream.HasAudio = participant.ScreenShareHasAudio;
+            VideoStreams.Add(screenStream);
+        }
+    }
+
+    private void UpdateParticipantFromState(VoiceParticipantState participant)
+    {
+        if (!_participants.TryGetValue(participant.UserId, out var info))
+            return;
+
+        // Update speaking state
+        var cameraStream = VideoStreams.FirstOrDefault(s => s.UserId == participant.UserId && s.StreamType == VideoStreamType.Camera);
+        if (cameraStream != null)
+        {
+            cameraStream.IsSpeaking = participant.IsSpeaking;
+        }
+
+        // Handle screen sharing state change
+        var wasScreenSharing = info.IsScreenSharing;
+        info.IsScreenSharing = participant.IsScreenSharing;
+        info.ScreenShareHasAudio = participant.ScreenShareHasAudio;
+        info.IsSpeaking = participant.IsSpeaking;
+
+        if (participant.IsScreenSharing && !wasScreenSharing)
+        {
+            // Screen share started - add stream
+            if (!VideoStreams.Any(s => s.UserId == participant.UserId && s.StreamType == VideoStreamType.ScreenShare))
             {
-                UpdateSpeakingState(e.UserId, e.IsSpeaking);
+                var screenStream = CreateVideoStream(participant.UserId, participant.Username, VideoStreamType.ScreenShare);
+                screenStream.HasAudio = participant.ScreenShareHasAudio;
+                VideoStreams.Add(screenStream);
             }
-        });
+        }
+        else if (!participant.IsScreenSharing && wasScreenSharing)
+        {
+            // Screen share stopped - remove stream
+            var stream = VideoStreams.FirstOrDefault(s => s.UserId == participant.UserId && s.StreamType == VideoStreamType.ScreenShare);
+            if (stream != null)
+            {
+                VideoStreams.Remove(stream);
+            }
+        }
+
+        // Update HasAudio on existing screen share stream
+        var existingScreenStream = VideoStreams.FirstOrDefault(s => s.UserId == participant.UserId && s.StreamType == VideoStreamType.ScreenShare);
+        if (existingScreenStream != null)
+        {
+            existingScreenStream.HasAudio = participant.ScreenShareHasAudio;
+        }
+
+        // Handle camera state - clear bitmap when camera turns off
+        if (!participant.IsCameraOn && cameraStream != null)
+        {
+            cameraStream.VideoBitmap = null;
+        }
+    }
+
+    private void RemoveParticipantInternal(Guid userId)
+    {
+        _participants.Remove(userId);
+
+        // Remove all streams for this user
+        var toRemove = VideoStreams.Where(s => s.UserId == userId).ToList();
+        foreach (var stream in toRemove)
+        {
+            VideoStreams.Remove(stream);
+        }
+    }
+
+    private void ClearAllStreams()
+    {
+        _participants.Clear();
+        VideoStreams.Clear();
     }
 
     /// <summary>
@@ -464,19 +617,23 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         return stream;
     }
 
-    public ChannelResponse? Channel
+    /// <summary>
+    /// Gets the channel name from the store. Returns empty string if not in a voice channel.
+    /// </summary>
+    public string ChannelName
     {
-        get => _channel;
-        set
+        get
         {
-            this.RaiseAndSetIfChanged(ref _channel, value);
-            this.RaisePropertyChanged(nameof(ChannelName));
-            this.RaisePropertyChanged(nameof(HasChannel));
+            if (_currentChannelId is null) return "";
+            var channel = _channelStore.GetChannel(_currentChannelId.Value);
+            return channel?.Name ?? "";
         }
     }
 
-    public string ChannelName => Channel?.Name ?? "";
-    public bool HasChannel => Channel != null;
+    /// <summary>
+    /// Whether currently in a voice channel. Derived from VoiceStore.
+    /// </summary>
+    public bool HasChannel => _currentChannelId != null;
 
     /// <summary>
     /// Collection of video streams to display. Each user may have 0, 1, or 2 streams
@@ -488,203 +645,8 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         set => this.RaiseAndSetIfChanged(ref _videoStreams, value);
     }
 
-    public void SetParticipants(IEnumerable<VoiceParticipantResponse> participants)
-    {
-        Dispatcher.UIThread.Post(() =>
-        {
-            _participants.Clear();
-            VideoStreams.Clear();
-
-            foreach (var p in participants)
-            {
-                var info = new ParticipantInfo
-                {
-                    UserId = p.UserId,
-                    Username = p.Username,
-                    IsMuted = p.IsMuted,
-                    IsDeafened = p.IsDeafened,
-                    IsCameraOn = p.IsCameraOn,
-                    IsScreenSharing = p.IsScreenSharing,
-                    ScreenShareHasAudio = p.ScreenShareHasAudio,
-                    IsGamingStation = p.IsGamingStation,
-                    GamingStationMachineId = p.GamingStationMachineId
-                };
-                _participants[p.UserId] = info;
-
-                // Every participant always has a camera stream (shows avatar when camera off, video when on)
-                VideoStreams.Add(CreateVideoStream(
-                    p.UserId,
-                    p.Username,
-                    VideoStreamType.Camera,
-                    p.IsGamingStation,
-                    p.GamingStationMachineId));
-
-                // Screen share adds a second stream
-                if (p.IsScreenSharing)
-                {
-                    var screenStream = CreateVideoStream(
-                        p.UserId,
-                        p.Username,
-                        VideoStreamType.ScreenShare,
-                        p.IsGamingStation,
-                        p.GamingStationMachineId);
-                    screenStream.HasAudio = p.ScreenShareHasAudio;
-                    VideoStreams.Add(screenStream);
-                }
-            }
-        });
-    }
-
-    public void AddParticipant(VoiceParticipantResponse participant)
-    {
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (_participants.ContainsKey(participant.UserId))
-                return;
-
-            var info = new ParticipantInfo
-            {
-                UserId = participant.UserId,
-                Username = participant.Username,
-                IsMuted = participant.IsMuted,
-                IsDeafened = participant.IsDeafened,
-                IsCameraOn = participant.IsCameraOn,
-                IsScreenSharing = participant.IsScreenSharing,
-                ScreenShareHasAudio = participant.ScreenShareHasAudio,
-                IsGamingStation = participant.IsGamingStation,
-                GamingStationMachineId = participant.GamingStationMachineId
-            };
-            _participants[participant.UserId] = info;
-
-            // Every participant always has a camera stream (shows avatar when camera off, video when on)
-            VideoStreams.Add(CreateVideoStream(
-                participant.UserId,
-                participant.Username,
-                VideoStreamType.Camera,
-                participant.IsGamingStation,
-                participant.GamingStationMachineId));
-
-            // Screen share adds a second stream
-            if (participant.IsScreenSharing)
-            {
-                var screenStream = CreateVideoStream(
-                    participant.UserId,
-                    participant.Username,
-                    VideoStreamType.ScreenShare,
-                    participant.IsGamingStation,
-                    participant.GamingStationMachineId);
-                screenStream.HasAudio = participant.ScreenShareHasAudio;
-                VideoStreams.Add(screenStream);
-            }
-        });
-    }
-
-    public void RemoveParticipant(Guid userId)
-    {
-        Dispatcher.UIThread.Post(() =>
-        {
-            _participants.Remove(userId);
-
-            // Remove all streams for this user
-            var toRemove = VideoStreams.Where(s => s.UserId == userId).ToList();
-            foreach (var stream in toRemove)
-            {
-                VideoStreams.Remove(stream);
-            }
-        });
-    }
-
-    public void UpdateParticipantState(Guid userId, VoiceStateUpdate state)
-    {
-        Dispatcher.UIThread.Post(() =>
-        {
-            if (!_participants.TryGetValue(userId, out var info))
-                return;
-
-            var username = info.Username;
-
-            // Handle camera state change - just update the state, stream is always present
-            if (state.IsCameraOn.HasValue)
-            {
-                info.IsCameraOn = state.IsCameraOn.Value;
-
-                // If camera turned off, clear the video bitmap to show avatar
-                if (!state.IsCameraOn.Value)
-                {
-                    var cameraStream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera);
-                    if (cameraStream != null)
-                    {
-                        cameraStream.VideoBitmap = null;
-                    }
-                }
-            }
-
-            // Track audio flag if provided
-            if (state.ScreenShareHasAudio.HasValue)
-            {
-                info.ScreenShareHasAudio = state.ScreenShareHasAudio.Value;
-            }
-
-            // Handle screen share state change - add/remove the screen share stream
-            if (state.IsScreenSharing.HasValue)
-            {
-                var wasScreenSharing = info.IsScreenSharing;
-                info.IsScreenSharing = state.IsScreenSharing.Value;
-
-                if (state.IsScreenSharing.Value && !wasScreenSharing)
-                {
-                    // Screen share turned on - add stream
-                    if (!VideoStreams.Any(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare))
-                    {
-                        Console.WriteLine($"VoiceChannelContent: Adding ScreenShare stream for user {userId} ({username}), HasAudio={info.ScreenShareHasAudio}");
-                        var screenStream = CreateVideoStream(userId, username, VideoStreamType.ScreenShare);
-                        screenStream.HasAudio = info.ScreenShareHasAudio;
-                        VideoStreams.Add(screenStream);
-                    }
-                }
-                else if (!state.IsScreenSharing.Value && wasScreenSharing)
-                {
-                    // Screen share turned off - remove stream
-                    var stream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare);
-                    if (stream != null)
-                    {
-                        VideoStreams.Remove(stream);
-                    }
-                }
-            }
-
-            // Update HasAudio on existing screen share stream if audio flag changed
-            if (state.ScreenShareHasAudio.HasValue)
-            {
-                var screenStream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.ScreenShare);
-                if (screenStream != null)
-                {
-                    screenStream.HasAudio = state.ScreenShareHasAudio.Value;
-                }
-            }
-
-            // Update other state
-            if (state.IsMuted.HasValue)
-                info.IsMuted = state.IsMuted.Value;
-            if (state.IsDeafened.HasValue)
-                info.IsDeafened = state.IsDeafened.Value;
-        });
-    }
-
-    public void UpdateSpeakingState(Guid userId, bool isSpeaking)
-    {
-        // Only update speaking state on camera streams
-        var cameraStream = VideoStreams.FirstOrDefault(s => s.UserId == userId && s.StreamType == VideoStreamType.Camera);
-        if (cameraStream != null)
-        {
-            cameraStream.IsSpeaking = isSpeaking;
-        }
-
-        if (_participants.TryGetValue(userId, out var info))
-        {
-            info.IsSpeaking = isSpeaking;
-        }
-    }
+    // Note: SetParticipants, AddParticipant, RemoveParticipant, UpdateParticipantState, UpdateSpeakingState
+    // are no longer needed - VoiceStore subscriptions handle all participant state changes reactively.
 
     private void OnVideoFrameReceived(Guid userId, VideoStreamType streamType, int width, int height, byte[] rgbData)
     {
@@ -736,10 +698,10 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task WatchScreenShareAsync(VideoStreamViewModel stream)
     {
-        if (Channel == null || !stream.IsRemoteScreenShare || stream.IsWatching)
+        if (_currentChannelId is null || !stream.IsRemoteScreenShare || stream.IsWatching)
             return;
 
-        await _signalR.WatchScreenShareAsync(Channel.Id, stream.UserId);
+        await _signalR.WatchScreenShareAsync(_currentChannelId.Value, stream.UserId);
         _webRtc.StartWatchingScreenShare(stream.UserId);
         stream.IsWatching = true;
         Console.WriteLine($"VoiceChannelContent: Started watching screen share from {stream.Username}");
@@ -750,10 +712,10 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task StopWatchingScreenShareAsync(VideoStreamViewModel stream)
     {
-        if (Channel == null || !stream.IsRemoteScreenShare || !stream.IsWatching)
+        if (_currentChannelId is null || !stream.IsRemoteScreenShare || !stream.IsWatching)
             return;
 
-        await _signalR.StopWatchingScreenShareAsync(Channel.Id, stream.UserId);
+        await _signalR.StopWatchingScreenShareAsync(_currentChannelId.Value, stream.UserId);
         _webRtc.StopWatchingScreenShare(stream.UserId);
         stream.IsWatching = false;
         stream.VideoBitmap = null; // Clear the video frame
@@ -766,13 +728,13 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task StopWatchingAllScreenSharesAsync()
     {
-        if (Channel == null) return;
+        if (_currentChannelId is null) return;
 
         foreach (var stream in VideoStreams.Where(s => s.IsRemoteScreenShare && s.IsWatching).ToList())
         {
             try
             {
-                await _signalR.StopWatchingScreenShareAsync(Channel.Id, stream.UserId);
+                await _signalR.StopWatchingScreenShareAsync(_currentChannelId.Value, stream.UserId);
                 stream.IsWatching = false;
                 stream.VideoBitmap = null;
                 Console.WriteLine($"VoiceChannelContent: Stopped watching screen share from {stream.Username} (cleanup)");
@@ -786,6 +748,9 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
 
     public void Dispose()
     {
+        // Dispose store subscriptions
+        _subscriptions.Dispose();
+
         // Stop watching all screen shares (fire and forget since Dispose is sync)
         _ = StopWatchingAllScreenSharesAsync();
 
