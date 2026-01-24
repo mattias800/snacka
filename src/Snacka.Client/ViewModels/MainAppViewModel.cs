@@ -4206,7 +4206,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         try
         {
             await _conversationStateService.LoadConversationsAsync();
-            this.RaisePropertyChanged(nameof(TotalDmUnreadCount));
         }
         catch
         {
@@ -4223,11 +4222,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Open the DM content view for this conversation
         _dmContent?.OpenConversationById(conversation.Id, conversation.DisplayName);
 
-        // Mark conversation as read via the service (updates all subscribers)
+        // Mark conversation as read via the service (updates all subscribers via reactive subscription)
         if (conversation.UnreadCount > 0)
         {
             _ = _conversationStateService.MarkConversationAsReadAsync(conversation.Id);
-            this.RaisePropertyChanged(nameof(TotalDmUnreadCount));
         }
     }
 
