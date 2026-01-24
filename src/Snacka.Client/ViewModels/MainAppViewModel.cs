@@ -96,6 +96,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private readonly ObservableCollection<MyGamingStationInfo> _myGamingStations = new();
     private string _currentMachineId = "";  // Unique ID for this machine
 
+    // Voice control ViewModel (encapsulates mute, deafen, speaking state and commands)
+    private VoiceControlViewModel? _voiceControl;
+
     /// <summary>
     /// Fired when an NV12 frame should be rendered to GPU fullscreen view.
     /// Args: (width, height, nv12Data)
@@ -458,7 +461,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         // Create the audio device quick select ViewModel
         _audioDeviceQuickSelect = new AudioDeviceQuickSelectViewModel(settingsStore, audioDeviceService);
-        _audioDeviceQuickSelect.PushToTalkMuteChanged += unmute => IsMuted = !unmute;
+        _audioDeviceQuickSelect.PushToTalkMuteChanged += unmute => _ = _voiceControl?.SetMutedAsync(!unmute);
 
         // Create the inline DM ViewModel
         _dmContent = new DMContentViewModel(
@@ -530,6 +533,51 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             SelectedVoiceChannelForViewing = null;
         };
         _gamingStation.ErrorOccurred += error => ErrorMessage = error;
+
+        // Create voice control ViewModel
+        _voiceControl = new VoiceControlViewModel(
+            _stores.VoiceStore,
+            settingsStore,
+            webRtc,
+            signalR,
+            auth.UserId,
+            () => CurrentVoiceChannel?.Id,
+            (userId, state) => _voiceChannelContent?.UpdateParticipantState(userId, state));
+
+        // Sync VoiceControlViewModel state with local fields (for backwards compatibility)
+        _voiceControl.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(VoiceControlViewModel.IsMuted):
+                    _isMuted = _voiceControl.IsMuted;
+                    this.RaisePropertyChanged(nameof(IsMuted));
+                    break;
+                case nameof(VoiceControlViewModel.IsDeafened):
+                    _isDeafened = _voiceControl.IsDeafened;
+                    this.RaisePropertyChanged(nameof(IsDeafened));
+                    break;
+                case nameof(VoiceControlViewModel.IsSpeaking):
+                    _isSpeaking = _voiceControl.IsSpeaking;
+                    this.RaisePropertyChanged(nameof(IsSpeaking));
+                    break;
+                case nameof(VoiceControlViewModel.IsCameraOn):
+                    _isCameraOn = _voiceControl.IsCameraOn;
+                    this.RaisePropertyChanged(nameof(IsCameraOn));
+                    break;
+                case nameof(VoiceControlViewModel.IsScreenSharing):
+                    _isScreenSharing = _voiceControl.IsScreenSharing;
+                    this.RaisePropertyChanged(nameof(IsScreenSharing));
+                    break;
+                case nameof(VoiceControlViewModel.VoiceConnectionStatus):
+                    _voiceConnectionStatus = _voiceControl.VoiceConnectionStatus;
+                    this.RaisePropertyChanged(nameof(VoiceConnectionStatus));
+                    this.RaisePropertyChanged(nameof(VoiceConnectionStatusText));
+                    this.RaisePropertyChanged(nameof(IsVoiceConnecting));
+                    this.RaisePropertyChanged(nameof(IsVoiceConnected));
+                    break;
+            }
+        };
 
         // Commands
         LogoutCommand = ReactiveCommand.Create(_onLogout);
@@ -645,9 +693,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         CreateVoiceChannelCommand = ReactiveCommand.CreateFromTask(CreateVoiceChannelAsync, canCreateChannel);
         JoinVoiceChannelCommand = ReactiveCommand.CreateFromTask<ChannelResponse>(JoinVoiceChannelAsync);
         LeaveVoiceChannelCommand = ReactiveCommand.CreateFromTask(LeaveVoiceChannelAsync);
-        ToggleMuteCommand = ReactiveCommand.CreateFromTask(ToggleMuteAsync);
-        ToggleDeafenCommand = ReactiveCommand.CreateFromTask(ToggleDeafenAsync);
-        ToggleCameraCommand = ReactiveCommand.CreateFromTask(ToggleCameraAsync);
+        ToggleMuteCommand = _voiceControl.ToggleMuteCommand;
+        ToggleDeafenCommand = _voiceControl.ToggleDeafenCommand;
+        ToggleCameraCommand = _voiceControl.ToggleCameraCommand;
         ToggleScreenShareCommand = ReactiveCommand.CreateFromTask(ToggleScreenShareAsync);
 
         // Voice video overlay commands (show/hide video grid while navigating)
@@ -942,8 +990,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Local speaking detection - broadcast to others and update own state
         _webRtc.SpeakingChanged += isSpeaking => Dispatcher.UIThread.Post(async () =>
         {
-            // Update local speaking state (for avatar indicator)
-            IsSpeaking = isSpeaking;
+            // Update local speaking state via VoiceControlViewModel
+            _voiceControl?.UpdateSpeakingState(isSpeaking);
 
             // Capture channel reference to avoid race condition during leave
             var currentChannel = CurrentVoiceChannel;
@@ -968,21 +1016,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             // If this is the current user being server-muted, update local state
             if (e.TargetUserId == _auth.UserId)
             {
-                // If server-muted, ensure we're actually muted
-                if (e.IsServerMuted == true && !IsMuted)
-                {
-                    // Force mute
-                    IsMuted = true;
+                _voiceControl?.HandleServerVoiceStateUpdate(e.IsServerMuted, e.IsServerDeafened);
+
+                // Apply to WebRTC
+                if (e.IsServerMuted == true)
                     _webRtc.SetMuted(true);
-                }
-                // If server-deafened, ensure we're actually deafened
-                if (e.IsServerDeafened == true && !IsDeafened)
-                {
-                    // Force deafen (and mute)
-                    IsDeafened = true;
-                    IsMuted = true;
+                if (e.IsServerDeafened == true)
                     _webRtc.SetMuted(true);
-                }
             }
         });
 
@@ -1905,7 +1945,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 // When PTT is enabled while in voice channel, start muted
                 if (value && IsInVoiceChannel)
                 {
-                    IsMuted = true;
+                    _ = _voiceControl?.SetMutedAsync(true);
                 }
             }
         }
@@ -2001,32 +2041,52 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     public bool IsMuted
     {
-        get => _isMuted;
-        set => this.RaiseAndSetIfChanged(ref _isMuted, value);
+        get => _voiceControl?.IsMuted ?? _isMuted;
+        set
+        {
+            if (_voiceControl is not null) _voiceControl.IsMuted = value;
+            else this.RaiseAndSetIfChanged(ref _isMuted, value);
+        }
     }
 
     public bool IsDeafened
     {
-        get => _isDeafened;
-        set => this.RaiseAndSetIfChanged(ref _isDeafened, value);
+        get => _voiceControl?.IsDeafened ?? _isDeafened;
+        set
+        {
+            if (_voiceControl is not null) _voiceControl.IsDeafened = value;
+            else this.RaiseAndSetIfChanged(ref _isDeafened, value);
+        }
     }
 
     public bool IsCameraOn
     {
-        get => _isCameraOn;
-        set => this.RaiseAndSetIfChanged(ref _isCameraOn, value);
+        get => _voiceControl?.IsCameraOn ?? _isCameraOn;
+        set
+        {
+            if (_voiceControl is not null) _voiceControl.IsCameraOn = value;
+            else this.RaiseAndSetIfChanged(ref _isCameraOn, value);
+        }
     }
 
     public bool IsScreenSharing
     {
-        get => _isScreenSharing;
-        set => this.RaiseAndSetIfChanged(ref _isScreenSharing, value);
+        get => _voiceControl?.IsScreenSharing ?? _isScreenSharing;
+        set
+        {
+            if (_voiceControl is not null) _voiceControl.IsScreenSharing = value;
+            else this.RaiseAndSetIfChanged(ref _isScreenSharing, value);
+        }
     }
 
     public bool IsSpeaking
     {
-        get => _isSpeaking;
-        set => this.RaiseAndSetIfChanged(ref _isSpeaking, value);
+        get => _voiceControl?.IsSpeaking ?? _isSpeaking;
+        set
+        {
+            if (_voiceControl is not null) _voiceControl.IsSpeaking = value;
+            else this.RaiseAndSetIfChanged(ref _isSpeaking, value);
+        }
     }
 
     /// <summary>
@@ -2102,6 +2162,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     // Gaming Stations properties (delegate to GamingStationViewModel)
     public GamingStationViewModel? GamingStation => _gamingStation;
+    public VoiceControlViewModel? VoiceControl => _voiceControl;
     public bool IsViewingGamingStations => _gamingStation?.IsViewingGamingStations ?? false;
     public bool IsLoadingStations => _gamingStation?.IsLoadingStations ?? false;
     public ObservableCollection<GamingStationResponse> MyStations => _gamingStation?.MyStations ?? new ObservableCollection<GamingStationResponse>();
@@ -2929,13 +2990,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         var participant = await _signalR.JoinVoiceChannelAsync(channel.Id);
         if (participant is not null)
         {
-            // Apply persisted mute/deafen state (already loaded from settings)
-            // and send it to the server
-            _webRtc.SetMuted(IsMuted);
-            _webRtc.SetDeafened(IsDeafened);
-            if (IsMuted || IsDeafened)
+            // Apply persisted mute/deafen state via VoiceControlViewModel
+            if (_voiceControl is not null)
             {
-                await _signalR.UpdateVoiceStateAsync(channel.Id, new VoiceStateUpdate(IsMuted: IsMuted, IsDeafened: IsDeafened));
+                await _voiceControl.ApplyPersistedStateAsync(channel.Id);
             }
 
             // Load existing participants (includes ourselves)
@@ -2984,9 +3042,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // VoiceChannelViewModel will be updated via VoiceStore subscription when Clear() is called
 
         CurrentVoiceChannel = null;
+
+        // Reset transient state via VoiceControlViewModel
         // Note: IsMuted and IsDeafened are persisted and NOT reset when leaving
-        IsCameraOn = false;
-        IsScreenSharing = false;
+        _voiceControl?.ResetTransientState();
 
         // Clear voice store participants (for migration to Redux-style architecture)
         _stores.VoiceStore.Clear();
@@ -2997,100 +3056,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _voiceChannelContent?.SetParticipants(Enumerable.Empty<VoiceParticipantResponse>());
     }
 
-    private async Task ToggleMuteAsync()
-    {
-        // Check if server-muted (cannot unmute if server-muted)
-        if (CurrentVoiceChannel is not null && !IsMuted)
-        {
-            var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
-            var currentParticipant = voiceChannel?.Participants.FirstOrDefault(p => p.UserId == _auth.UserId);
-            if (currentParticipant?.IsServerMuted == true) return;
-        }
-
-        IsMuted = !IsMuted;
-
-        // Persist to settings
-        _settingsStore.Settings.IsMuted = IsMuted;
-        _settingsStore.Save();
-
-        // Update voice store (for migration to Redux-style architecture)
-        _stores.VoiceStore.SetLocalMuted(IsMuted);
-
-        // If in a voice channel, apply immediately
-        if (CurrentVoiceChannel is not null)
-        {
-            _webRtc.SetMuted(IsMuted);
-            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsMuted: IsMuted));
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription (server round-trip)
-            // Update video grid immediately for responsiveness
-            var state = new VoiceStateUpdate(IsMuted: IsMuted);
-            _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
-        }
-    }
-
-    private async Task ToggleDeafenAsync()
-    {
-        // Check if server-deafened (cannot undeafen if server-deafened)
-        if (CurrentVoiceChannel is not null && !IsDeafened)
-        {
-            var voiceChannel = VoiceChannelViewModels.FirstOrDefault(v => v.Id == CurrentVoiceChannel.Id);
-            var currentParticipant = voiceChannel?.Participants.FirstOrDefault(p => p.UserId == _auth.UserId);
-            if (currentParticipant?.IsServerDeafened == true) return;
-        }
-
-        IsDeafened = !IsDeafened;
-
-        // If deafening, also mute
-        if (IsDeafened && !IsMuted)
-        {
-            IsMuted = true;
-            _settingsStore.Settings.IsMuted = IsMuted;
-        }
-
-        // Persist to settings
-        _settingsStore.Settings.IsDeafened = IsDeafened;
-        _settingsStore.Save();
-
-        // Update voice store (for migration to Redux-style architecture)
-        _stores.VoiceStore.SetLocalMuted(IsMuted);
-        _stores.VoiceStore.SetLocalDeafened(IsDeafened);
-
-        // If in a voice channel, apply immediately
-        if (CurrentVoiceChannel is not null)
-        {
-            _webRtc.SetMuted(IsMuted);
-            _webRtc.SetDeafened(IsDeafened);
-            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsMuted: IsMuted, IsDeafened: IsDeafened));
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription (server round-trip)
-            // Update video grid immediately for responsiveness
-            var state = new VoiceStateUpdate(IsMuted: IsMuted, IsDeafened: IsDeafened);
-            _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
-        }
-    }
-
-    private async Task ToggleCameraAsync()
-    {
-        if (CurrentVoiceChannel is null) return;
-
-        try
-        {
-            var newState = !IsCameraOn;
-            await _webRtc.SetCameraAsync(newState);
-            IsCameraOn = newState;
-            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsCameraOn: IsCameraOn));
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription (server round-trip)
-            // Update video grid immediately for responsiveness
-            var state = new VoiceStateUpdate(IsCameraOn: newState);
-            _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
-        }
-        catch
-        {
-            // Camera toggle failure - ignore
-        }
-    }
+    // Note: ToggleMuteAsync, ToggleDeafenAsync, and ToggleCameraAsync are now handled by VoiceControlViewModel
 
     private async Task ToggleScreenShareAsync()
     {
@@ -3636,6 +3602,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         HideSharerAnnotationOverlay();
+        _voiceControl?.Dispose();
         _videoFullscreen?.Dispose();
         _typingSubscription?.Dispose();
         _storeSubscriptions.Dispose();
