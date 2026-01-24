@@ -343,6 +343,7 @@ public class ParticipantInfo
 /// <summary>
 /// ViewModel for the voice channel content view.
 /// Displays a grid of video streams (one tile per camera or screen share).
+/// Subscribes to SignalR events for real-time participant updates.
 /// </summary>
 public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
 {
@@ -365,6 +366,12 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     /// </summary>
     public Action<string>? OnGamingStationStopShareScreen { get; set; }
 
+    /// <summary>
+    /// Event raised when a participant leaves the channel.
+    /// Parameters are (channelId, userId).
+    /// </summary>
+    public event Action<Guid, Guid>? ParticipantLeft;
+
     public VoiceChannelContentViewModel(IWebRtcService webRtc, ISignalRService signalR, Guid localUserId)
     {
         _webRtc = webRtc;
@@ -376,6 +383,47 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         _webRtc.LocalVideoFrameCaptured += OnLocalVideoFrameCaptured;
         _webRtc.HardwareDecoderReady += OnHardwareDecoderReady;
         _webRtc.LocalHardwarePreviewReady += OnLocalHardwarePreviewReady;
+
+        // Subscribe to SignalR events for participant updates
+        SetupSignalRHandlers();
+    }
+
+    private void SetupSignalRHandlers()
+    {
+        _signalR.VoiceParticipantJoined += e => Dispatcher.UIThread.Post(() =>
+        {
+            if (_channel is not null && e.ChannelId == _channel.Id)
+            {
+                AddParticipant(e.Participant);
+            }
+        });
+
+        _signalR.VoiceParticipantLeft += e => Dispatcher.UIThread.Post(() =>
+        {
+            if (_channel is not null && e.ChannelId == _channel.Id)
+            {
+                RemoveParticipant(e.UserId);
+
+                // Notify parent ViewModel (for fullscreen handling)
+                ParticipantLeft?.Invoke(e.ChannelId, e.UserId);
+            }
+        });
+
+        _signalR.VoiceStateChanged += e => Dispatcher.UIThread.Post(() =>
+        {
+            if (_channel is not null && e.ChannelId == _channel.Id)
+            {
+                UpdateParticipantState(e.UserId, e.State);
+            }
+        });
+
+        _signalR.SpeakingStateChanged += e => Dispatcher.UIThread.Post(() =>
+        {
+            if (_channel is not null && e.ChannelId == _channel.Id)
+            {
+                UpdateSpeakingState(e.UserId, e.IsSpeaking);
+            }
+        });
     }
 
     /// <summary>

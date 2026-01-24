@@ -214,8 +214,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             webRtcService.SetLocalUserId(auth.UserId);
         }
 
-        // Create voice channel content view model for video grid
+        // Create voice channel content view model for video grid (handles its own SignalR subscriptions)
         _voiceChannelContent = new VoiceChannelContentViewModel(_webRtc, _signalR, auth.UserId);
+        _voiceChannelContent.ParticipantLeft += (channelId, userId) =>
+        {
+            // Close fullscreen if viewing this user's stream
+            if (IsVideoFullscreen && FullscreenStream?.UserId == userId)
+            {
+                CloseFullscreen();
+            }
+        };
 
         // Create voice channel ViewModel manager
         _voiceChannelManager = new VoiceChannelViewModelManager(
@@ -504,14 +512,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             apiClient,
             LoadCommunitiesAsync);
 
-        // Create gaming station ViewModel
+        // Create gaming station ViewModel (handles its own SignalR status event subscription)
         _gamingStation = new GamingStationViewModel(
             apiClient,
             signalR,
             settingsStore,
             _myGamingStations,
             _currentMachineId,
-            () => CurrentVoiceChannel?.Id);
+            () => CurrentVoiceChannel?.Id,
+            auth.UserId);
         _gamingStation.ViewOpening += () =>
         {
             _dmContent?.Close();
@@ -719,8 +728,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _controllerHostService,
             () => _currentVoiceChannel?.Id);
 
-        // Create thread panel ViewModel
-        _threadPanel = new ThreadPanelViewModel(_apiClient, _stores.MessageStore);
+        // Create thread panel ViewModel (handles its own SignalR event subscriptions)
+        _threadPanel = new ThreadPanelViewModel(_apiClient, _stores.MessageStore, _signalR, _auth.UserId);
 
         // Commands
         LogoutCommand = ReactiveCommand.Create(_onLogout);
@@ -943,45 +952,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         });
 
         // MessageReceived handled entirely by SignalREventDispatcher -> MessageStore, TypingStore, ChannelStore
-
-        _signalR.MessageEdited += message => Dispatcher.UIThread.Post(() =>
-        {
-            // Update in thread replies if thread is open (view-specific state)
-            _threadPanel?.UpdateReply(message);
-        });
-
-        _signalR.MessageDeleted += e => Dispatcher.UIThread.Post(() =>
-        {
-            // Remove from thread if open (view-specific state; store update via SignalREventDispatcher)
-            _threadPanel?.RemoveReply(e.MessageId);
-        });
-
-        // Thread events
-        _signalR.ThreadReplyReceived += e => Dispatcher.UIThread.Post(() =>
-        {
-            // If this thread is currently open, add the reply (view-specific state)
-            _threadPanel?.AddReplyIfMatches(e.ParentMessageId, e.Reply);
-
-            // Update the parent message's reply count in the store
-            var existingMessage = _stores.MessageStore.GetMessage(e.ParentMessageId);
-            if (existingMessage is not null)
-            {
-                _threadPanel?.UpdateThreadMetadata(
-                    e.ParentMessageId,
-                    existingMessage.ReplyCount + 1,
-                    e.Reply.CreatedAt);
-            }
-        });
-
-        // ThreadMetadataUpdated is handled by SignalREventDispatcher -> MessageStore
-
-        _signalR.ReactionUpdated += e => Dispatcher.UIThread.Post(() =>
-        {
-            // Update in thread replies if thread is open (view-specific; main list via SignalREventDispatcher)
-            _threadPanel?.UpdateReplyReaction(
-                e.MessageId, e.Emoji, e.Count, e.Added,
-                e.UserId, e.Username, e.EffectiveDisplayName, _auth.UserId);
-        });
+        // MessageEdited, MessageDeleted, ThreadReplyReceived, ReactionUpdated handled by ThreadPanelViewModel
+        // ThreadMetadataUpdated handled by SignalREventDispatcher -> MessageStore
 
         _signalR.MessagePinned += e => Dispatcher.UIThread.Post(() =>
         {
@@ -1018,48 +990,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // CommunityMemberRemoved event is now handled by SignalREventDispatcher -> CommunityStore
         // StoreMembers auto-updates via DynamicData binding
 
-        // Voice channel events - VoiceChannelViewModels auto-update via VoiceStore subscription
-        // We still need to update _voiceChannelContent for video grid
-        _signalR.VoiceParticipantJoined += e => Dispatcher.UIThread.Post(() =>
-        {
-            if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
-            {
-                _voiceChannelContent?.AddParticipant(e.Participant);
-            }
-        });
-
-        _signalR.VoiceParticipantLeft += e => Dispatcher.UIThread.Post(() =>
-        {
-            if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
-            {
-                _voiceChannelContent?.RemoveParticipant(e.UserId);
-
-                // Close fullscreen if viewing this user's stream
-                if (IsVideoFullscreen && FullscreenStream?.UserId == e.UserId)
-                {
-                    CloseFullscreen();
-                }
-            }
-        });
-
-        _signalR.VoiceStateChanged += e => Dispatcher.UIThread.Post(() =>
-        {
-            if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
-            {
-                _voiceChannelContent?.UpdateParticipantState(e.UserId, e.State);
-            }
-        });
-
-        // Speaking state from other users
-        // VoiceChannelViewModel auto-updates via VoiceStore subscription
-        _signalR.SpeakingStateChanged += e => Dispatcher.UIThread.Post(() =>
-        {
-            // Update video grid
-            if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
-            {
-                _voiceChannelContent?.UpdateSpeakingState(e.UserId, e.IsSpeaking);
-            }
-        });
+        // Voice channel events (VoiceParticipantJoined, VoiceParticipantLeft, VoiceStateChanged, SpeakingStateChanged)
+        // now handled by VoiceChannelContentViewModel which subscribes to SignalR events directly
+        // VoiceChannelViewModels auto-update via VoiceStore subscription
 
         // Multi-device voice events
         _signalR.VoiceSessionActiveOnOtherDevice += e => Dispatcher.UIThread.Post(() =>
@@ -1178,11 +1111,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(_ => this.RaisePropertyChanged(nameof(TotalDmUnreadCount)));
 
-        // Gaming Station events (delegate to GamingStationViewModel)
-        _signalR.GamingStationStatusChanged += e => Dispatcher.UIThread.Post(() =>
-        {
-            _gamingStation?.OnGamingStationStatusChanged(e, _auth.UserId);
-        });
+        // GamingStationStatusChanged now handled by GamingStationViewModel directly
 
         // Gaming Station command events (this client is a gaming station receiving commands)
         _signalR.StationCommandJoinChannel += e => Dispatcher.UIThread.Post(async () =>

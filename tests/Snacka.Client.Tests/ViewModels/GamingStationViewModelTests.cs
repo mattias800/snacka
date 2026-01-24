@@ -47,7 +47,8 @@ public class GamingStationViewModelTests : IDisposable
             _mockSettingsStore.Object,
             _myGamingStations,
             _currentMachineId,
-            () => _currentVoiceChannelId
+            () => _currentVoiceChannelId,
+            _currentUserId
         );
     }
 

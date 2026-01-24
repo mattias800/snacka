@@ -1,4 +1,5 @@
 using System.Reactive;
+using Avalonia.Threading;
 using ReactiveUI;
 using Snacka.Client.Services;
 using Snacka.Client.Stores;
@@ -9,21 +10,72 @@ namespace Snacka.Client.ViewModels;
 /// <summary>
 /// ViewModel for the thread panel that displays message replies.
 /// Handles opening, closing, and updating thread state.
+/// Subscribes to SignalR events for real-time thread updates.
 /// </summary>
 public class ThreadPanelViewModel : ReactiveObject, IDisposable
 {
     private readonly IApiClient _apiClient;
     private readonly IMessageStore _messageStore;
+    private readonly ISignalRService _signalR;
+    private readonly Guid _currentUserId;
     private ThreadViewModel? _currentThread;
     private double _panelWidth = 400;
 
-    public ThreadPanelViewModel(IApiClient apiClient, IMessageStore messageStore)
+    public ThreadPanelViewModel(
+        IApiClient apiClient,
+        IMessageStore messageStore,
+        ISignalRService signalR,
+        Guid currentUserId)
     {
         _apiClient = apiClient;
         _messageStore = messageStore;
+        _signalR = signalR;
+        _currentUserId = currentUserId;
 
         OpenCommand = ReactiveCommand.CreateFromTask<MessageResponse>(OpenAsync);
         CloseCommand = ReactiveCommand.Create(Close);
+
+        // Subscribe to SignalR events for thread updates
+        SetupSignalRHandlers();
+    }
+
+    private void SetupSignalRHandlers()
+    {
+        // Message edited - update in thread replies
+        _signalR.MessageEdited += message => Dispatcher.UIThread.Post(() =>
+        {
+            UpdateReply(message);
+        });
+
+        // Message deleted - remove from thread
+        _signalR.MessageDeleted += e => Dispatcher.UIThread.Post(() =>
+        {
+            RemoveReply(e.MessageId);
+        });
+
+        // Thread reply received - add to thread and update metadata
+        _signalR.ThreadReplyReceived += e => Dispatcher.UIThread.Post(() =>
+        {
+            AddReplyIfMatches(e.ParentMessageId, e.Reply);
+
+            // Update the parent message's reply count in the store
+            var existingMessage = _messageStore.GetMessage(e.ParentMessageId);
+            if (existingMessage is not null)
+            {
+                UpdateThreadMetadata(
+                    e.ParentMessageId,
+                    existingMessage.ReplyCount + 1,
+                    e.Reply.CreatedAt);
+            }
+        });
+
+        // Reaction updated - update in thread replies
+        _signalR.ReactionUpdated += e => Dispatcher.UIThread.Post(() =>
+        {
+            UpdateReplyReaction(
+                e.MessageId, e.Emoji, e.Count, e.Added,
+                e.UserId, e.Username, e.EffectiveDisplayName, _currentUserId);
+        });
     }
 
     #region Properties

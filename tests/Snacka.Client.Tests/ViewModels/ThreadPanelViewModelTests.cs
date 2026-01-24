@@ -11,16 +11,23 @@ public class ThreadPanelViewModelTests
 {
     private readonly Mock<IApiClient> _apiClientMock;
     private readonly Mock<IMessageStore> _messageStoreMock;
+    private readonly Mock<ISignalRService> _signalRMock;
+    private readonly Guid _currentUserId = Guid.NewGuid();
 
     public ThreadPanelViewModelTests()
     {
         _apiClientMock = new Mock<IApiClient>();
         _messageStoreMock = new Mock<IMessageStore>();
+        _signalRMock = new Mock<ISignalRService>();
     }
 
     private ThreadPanelViewModel CreateViewModel()
     {
-        return new ThreadPanelViewModel(_apiClientMock.Object, _messageStoreMock.Object);
+        return new ThreadPanelViewModel(
+            _apiClientMock.Object,
+            _messageStoreMock.Object,
+            _signalRMock.Object,
+            _currentUserId);
     }
 
     private static MessageResponse CreateTestMessage(Guid? id = null)
@@ -166,6 +173,23 @@ public class ThreadPanelViewModelTests
         _messageStoreMock.Verify(
             x => x.UpdateThreadMetadata(parentMessageId, replyCount, lastReplyAt),
             Times.Once);
+    }
+
+    #endregion
+
+    #region SignalR Handler Tests
+
+    [Fact]
+    public void Constructor_SubscribesToSignalREvents()
+    {
+        // Act
+        var vm = CreateViewModel();
+
+        // Assert - verify event handlers were registered
+        _signalRMock.VerifyAdd(x => x.MessageEdited += It.IsAny<Action<MessageResponse>>(), Times.Once);
+        _signalRMock.VerifyAdd(x => x.MessageDeleted += It.IsAny<Action<MessageDeletedEvent>>(), Times.Once);
+        _signalRMock.VerifyAdd(x => x.ThreadReplyReceived += It.IsAny<Action<ThreadReplyEvent>>(), Times.Once);
+        _signalRMock.VerifyAdd(x => x.ReactionUpdated += It.IsAny<Action<ReactionUpdatedEvent>>(), Times.Once);
     }
 
     #endregion

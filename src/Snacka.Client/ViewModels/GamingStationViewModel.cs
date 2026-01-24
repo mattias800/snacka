@@ -1,5 +1,6 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using Avalonia.Threading;
 using ReactiveUI;
 using Snacka.Client.Models;
 using Snacka.Client.Services;
@@ -10,6 +11,7 @@ namespace Snacka.Client.ViewModels;
 /// <summary>
 /// ViewModel for gaming station management and streaming.
 /// Handles station listing, registration, connection, and input streaming.
+/// Subscribes to SignalR events for real-time gaming station status updates.
 /// </summary>
 public class GamingStationViewModel : ReactiveObject
 {
@@ -17,6 +19,7 @@ public class GamingStationViewModel : ReactiveObject
     private readonly ISignalRService _signalR;
     private readonly ISettingsStore _settingsStore;
     private readonly Func<Guid?> _getCurrentVoiceChannelId;
+    private readonly Guid _currentUserId;
 
     // Station list state (old architecture)
     private bool _isViewingGamingStations;
@@ -56,7 +59,8 @@ public class GamingStationViewModel : ReactiveObject
         ISettingsStore settingsStore,
         ObservableCollection<MyGamingStationInfo> myGamingStations,
         string currentMachineId,
-        Func<Guid?> getCurrentVoiceChannelId)
+        Func<Guid?> getCurrentVoiceChannelId,
+        Guid currentUserId)
     {
         _apiClient = apiClient;
         _signalR = signalR;
@@ -64,6 +68,7 @@ public class GamingStationViewModel : ReactiveObject
         _myGamingStations = myGamingStations;
         _currentMachineId = currentMachineId;
         _getCurrentVoiceChannelId = getCurrentVoiceChannelId;
+        _currentUserId = currentUserId;
 
         // Commands
         OpenCommand = ReactiveCommand.CreateFromTask(OpenAsync);
@@ -73,6 +78,17 @@ public class GamingStationViewModel : ReactiveObject
         DisconnectCommand = ReactiveCommand.CreateFromTask(DisconnectFromStationAsync);
         ToggleFullscreenCommand = ReactiveCommand.Create(ToggleStationFullscreen);
         DisableCommand = ReactiveCommand.CreateFromTask(DisableGamingStationAsync);
+
+        // Subscribe to SignalR events for gaming station status updates
+        SetupSignalRHandlers();
+    }
+
+    private void SetupSignalRHandlers()
+    {
+        _signalR.GamingStationStatusChanged += e => Dispatcher.UIThread.Post(() =>
+        {
+            OnGamingStationStatusChanged(e, _currentUserId);
+        });
     }
 
     #region Properties
