@@ -99,6 +99,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Voice control ViewModel (encapsulates mute, deafen, speaking state and commands)
     private VoiceControlViewModel? _voiceControl;
 
+    // Screen share ViewModel (encapsulates screen sharing state and commands)
+    private ScreenShareViewModel? _screenShare;
+
     /// <summary>
     /// Fired when an NV12 frame should be rendered to GPU fullscreen view.
     /// Args: (width, height, nv12Data)
@@ -108,8 +111,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Drawing annotation service (shared with VideoFullscreenViewModel and sharer overlay)
     private readonly AnnotationService _annotationService;
 
-    // Sharer annotation overlay state
-    private ScreenShareSettings? _currentScreenShareSettings;
+    // Sharer annotation overlay windows
     private Views.ScreenAnnotationWindow? _screenAnnotationWindow;
     private Views.AnnotationToolbarWindow? _annotationToolbarWindow;
 
@@ -579,6 +581,52 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         };
 
+        // Create screen share ViewModel
+        _screenShare = new ScreenShareViewModel(
+            screenCaptureService,
+            signalR,
+            webRtc,
+            _annotationService,
+            auth.UserId,
+            auth.Username,
+            () => CurrentVoiceChannel?.Id,
+            (userId, state) => _voiceChannelContent?.UpdateParticipantState(userId, state));
+
+        // Sync ScreenShareViewModel state with local fields
+        _screenShare.PropertyChanged += (_, e) =>
+        {
+            switch (e.PropertyName)
+            {
+                case nameof(ScreenShareViewModel.IsScreenSharing):
+                    _isScreenSharing = _screenShare.IsScreenSharing;
+                    this.RaisePropertyChanged(nameof(IsScreenSharing));
+                    break;
+                case nameof(ScreenShareViewModel.IsScreenSharePickerOpen):
+                    _isScreenSharePickerOpen = _screenShare.IsScreenSharePickerOpen;
+                    this.RaisePropertyChanged(nameof(IsScreenSharePickerOpen));
+                    break;
+                case nameof(ScreenShareViewModel.ScreenSharePicker):
+                    _screenSharePicker = _screenShare.ScreenSharePicker;
+                    this.RaisePropertyChanged(nameof(ScreenSharePicker));
+                    break;
+                case nameof(ScreenShareViewModel.IsDrawingAllowedForViewers):
+                    this.RaisePropertyChanged(nameof(IsDrawingAllowedForViewers));
+                    break;
+            }
+        };
+
+        // Wire up screen share events
+        _screenShare.ShowAnnotationOverlayRequested += (settings, annotationVm) =>
+        {
+            _screenAnnotationViewModel = annotationVm;
+            ShowSharerAnnotationOverlay(settings);
+        };
+        _screenShare.HideAnnotationOverlayRequested += () =>
+        {
+            HideSharerAnnotationOverlay();
+        };
+        _screenShare.ErrorOccurred += error => ErrorMessage = error;
+
         // Commands
         LogoutCommand = ReactiveCommand.Create(_onLogout);
         SwitchServerCommand = _onSwitchServer is not null
@@ -696,7 +744,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         ToggleMuteCommand = _voiceControl.ToggleMuteCommand;
         ToggleDeafenCommand = _voiceControl.ToggleDeafenCommand;
         ToggleCameraCommand = _voiceControl.ToggleCameraCommand;
-        ToggleScreenShareCommand = ReactiveCommand.CreateFromTask(ToggleScreenShareAsync);
+        ToggleScreenShareCommand = _screenShare.ToggleScreenShareCommand;
 
         // Voice video overlay commands (show/hide video grid while navigating)
         ShowVoiceVideoOverlayCommand = ReactiveCommand.Create(() =>
@@ -954,17 +1002,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.DisconnectedFromVoice += e => Dispatcher.UIThread.Post(async () =>
         {
-
             if (CurrentVoiceChannel is not null && CurrentVoiceChannel.Id == e.ChannelId)
             {
                 // Stop screen sharing first
-                if (IsScreenSharing)
-                {
-                    HideSharerAnnotationOverlay();
-                    await _webRtc.SetScreenSharingAsync(false);
-                    _currentScreenShareSettings = null;
-                    _annotationService.OnScreenShareEnded(_auth.UserId);
-                }
+                _screenShare?.ForceStop();
+                await _webRtc.SetScreenSharingAsync(false);
 
                 // Leave WebRTC connections (but don't notify server - it already knows)
                 await _webRtc.LeaveVoiceChannelAsync();
@@ -1112,34 +1154,18 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.StationCommandStartScreenShare += e => Dispatcher.UIThread.Post(async () =>
         {
-
             // Only execute if this client is a gaming station and in a voice channel
             if (!IsGamingStationEnabled || CurrentVoiceChannel is null) return;
 
-            // Get primary display
-            var displays = _screenCaptureService.GetDisplays();
-            var primaryDisplay = displays.FirstOrDefault();
-            if (primaryDisplay is null) return;
-
-            // Create screen share settings with gaming-optimized defaults
-            var settings = new ScreenShareSettings(
-                Source: primaryDisplay,
-                Resolution: ScreenShareResolution.HD1080,
-                Framerate: ScreenShareFramerate.Fps60,
-                Quality: ScreenShareQuality.Gaming,
-                IncludeAudio: true
-            );
-
-            await StartScreenShareWithSettingsAsync(settings);
+            await _screenShare?.StartFromStationCommandAsync()!;
         });
 
         _signalR.StationCommandStopScreenShare += e => Dispatcher.UIThread.Post(async () =>
         {
-
             // Only execute if this client is a gaming station
             if (!IsGamingStationEnabled) return;
 
-            await StopScreenShareAsync();
+            await _screenShare?.StopScreenShareAsync()!;
         });
 
         _signalR.StationCommandDisable += e => Dispatcher.UIThread.Post(async () =>
@@ -2095,13 +2121,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// </summary>
     public bool IsDrawingAllowedForViewers
     {
-        get => _screenAnnotationViewModel?.IsDrawingAllowedForViewers ?? false;
+        get => _screenShare?.IsDrawingAllowedForViewers ?? false;
         set
         {
-            if (_screenAnnotationViewModel != null)
+            if (_screenShare != null)
             {
-                _screenAnnotationViewModel.IsDrawingAllowedForViewers = value;
-                this.RaisePropertyChanged();
+                _screenShare.IsDrawingAllowedForViewers = value;
             }
         }
     }
@@ -2183,18 +2208,31 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public string StationResolution => _gamingStation?.StationResolution ?? "—";
     public int? StationPlayerSlot => _gamingStation?.StationPlayerSlot;
 
-    // Screen share picker properties
+    // Screen share picker properties (delegate to ScreenShareViewModel)
     public bool IsScreenSharePickerOpen
     {
-        get => _isScreenSharePickerOpen;
-        set => this.RaiseAndSetIfChanged(ref _isScreenSharePickerOpen, value);
+        get => _screenShare?.IsScreenSharePickerOpen ?? _isScreenSharePickerOpen;
+        set
+        {
+            if (_screenShare != null) _screenShare.IsScreenSharePickerOpen = value;
+            else this.RaiseAndSetIfChanged(ref _isScreenSharePickerOpen, value);
+        }
     }
 
     public ScreenSharePickerViewModel? ScreenSharePicker
     {
-        get => _screenSharePicker;
-        set => this.RaiseAndSetIfChanged(ref _screenSharePicker, value);
+        get => _screenShare?.ScreenSharePicker ?? _screenSharePicker;
+        set
+        {
+            if (_screenShare != null) _screenShare.ScreenSharePicker = value;
+            else this.RaiseAndSetIfChanged(ref _screenSharePicker, value);
+        }
     }
+
+    /// <summary>
+    /// The ScreenShareViewModel (for direct binding if needed).
+    /// </summary>
+    public ScreenShareViewModel? ScreenShare => _screenShare;
 
     /// <summary>
     /// True when the voice video overlay is open (for viewing video grid while navigating text channels).
@@ -3026,13 +3064,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         var channelName = CurrentVoiceChannel.Name;
 
         // Stop screen sharing first (this closes the annotation overlay)
-        if (IsScreenSharing)
-        {
-            HideSharerAnnotationOverlay();
-            await _webRtc.SetScreenSharingAsync(false);
-            _currentScreenShareSettings = null;
-            _annotationService.OnScreenShareEnded(_auth.UserId);
-        }
+        _screenShare?.ForceStop();
+        await _webRtc.SetScreenSharingAsync(false);
 
         // Leave WebRTC connections
         await _webRtc.LeaveVoiceChannelAsync();
@@ -3057,96 +3090,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     // Note: ToggleMuteAsync, ToggleDeafenAsync, and ToggleCameraAsync are now handled by VoiceControlViewModel
-
-    private async Task ToggleScreenShareAsync()
-    {
-        if (CurrentVoiceChannel is null) return;
-
-        // If already sharing, stop sharing
-        if (IsScreenSharing)
-        {
-            await StopScreenShareAsync();
-            return;
-        }
-
-        // Show screen share picker
-        ScreenSharePicker = new ScreenSharePickerViewModel(_screenCaptureService, async settings =>
-        {
-            IsScreenSharePickerOpen = false;
-            ScreenSharePicker = null;
-
-            if (settings != null)
-            {
-                await StartScreenShareWithSettingsAsync(settings);
-            }
-        });
-        IsScreenSharePickerOpen = true;
-    }
-
-    private async Task StartScreenShareWithSettingsAsync(ScreenShareSettings settings)
-    {
-        if (CurrentVoiceChannel is null) return;
-
-        try
-        {
-            // Update local state BEFORE starting capture so the video stream exists
-            // when HardwarePreviewReady fires (otherwise the hardware decoder is dropped)
-            IsScreenSharing = true;
-            IsCameraOn = false;
-            _currentScreenShareSettings = settings;
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription (server round-trip)
-            // Update video grid immediately for responsiveness
-            var state = new VoiceStateUpdate(IsScreenSharing: true, ScreenShareHasAudio: settings.IncludeAudio, IsCameraOn: false);
-            _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
-
-            // Now start the capture (hardware decoder will find the video stream)
-            await _webRtc.SetScreenSharingAsync(true, settings);
-
-            // Notify server
-            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, state);
-
-            // Show annotation overlay for monitor (display) sharing only
-            if (settings.Source.Type == ScreenCaptureSourceType.Display)
-            {
-                ShowSharerAnnotationOverlay(settings);
-            }
-        }
-        catch
-        {
-            // Screen share start failure - reset state
-            IsScreenSharing = false;
-            _currentScreenShareSettings = null;
-        }
-    }
-
-    private async Task StopScreenShareAsync()
-    {
-        if (CurrentVoiceChannel is null) return;
-
-        try
-        {
-            // Close annotation overlay windows first
-            HideSharerAnnotationOverlay();
-
-            await _webRtc.SetScreenSharingAsync(false);
-            IsScreenSharing = false;
-            _currentScreenShareSettings = null;
-
-            await _signalR.UpdateVoiceStateAsync(CurrentVoiceChannel.Id, new VoiceStateUpdate(IsScreenSharing: false, ScreenShareHasAudio: false));
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription (server round-trip)
-            // Update video grid immediately for responsiveness
-            var state = new VoiceStateUpdate(IsScreenSharing: false, ScreenShareHasAudio: false);
-            _voiceChannelContent?.UpdateParticipantState(_auth.UserId, state);
-
-            // Clear annotations for this screen share
-            _annotationService.OnScreenShareEnded(_auth.UserId);
-        }
-        catch
-        {
-            // Screen share stop failure - ignore
-        }
-    }
+    // Note: ToggleScreenShareAsync, StartScreenShareWithSettingsAsync, and StopScreenShareAsync are now handled by ScreenShareViewModel
 
     /// <summary>
     /// Server mute/unmute a user (admin action).
@@ -3193,21 +3137,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// Shows the annotation overlay and toolbar on the shared monitor.
     /// Only called for display (monitor) sharing, not window sharing.
+    /// Note: _screenAnnotationViewModel is set by ScreenShareViewModel before this is called.
     /// </summary>
     private void ShowSharerAnnotationOverlay(ScreenShareSettings settings)
     {
-        if (CurrentVoiceChannel is null) return;
+        if (CurrentVoiceChannel is null || _screenAnnotationViewModel is null) return;
 
         try
         {
-            // Create the view model
-            _screenAnnotationViewModel = new ScreenAnnotationViewModel(
-                _annotationService,
-                CurrentVoiceChannel.Id,
-                _auth.UserId,
-                _auth.Username);
-            this.RaisePropertyChanged(nameof(IsDrawingAllowedForViewers));
-
             // Find the screen
             Avalonia.PixelRect? targetBounds = null;
 
@@ -3277,6 +3214,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     /// <summary>
     /// Hides and closes the annotation overlay and toolbar windows.
+    /// Note: ScreenAnnotationViewModel cleanup is handled by ScreenShareViewModel.
     /// </summary>
     private void HideSharerAnnotationOverlay()
     {
@@ -3293,18 +3231,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _screenAnnotationWindow = null;
         }
 
-        if (_screenAnnotationViewModel != null)
-        {
-            _screenAnnotationViewModel.Cleanup();
-            _screenAnnotationViewModel = null;
-            this.RaisePropertyChanged(nameof(IsDrawingAllowedForViewers));
-        }
+        // Clear reference (cleanup is handled by ScreenShareViewModel)
+        _screenAnnotationViewModel = null;
     }
 
     private void OnAnnotationToolbarCloseRequested()
     {
-        // User closed the toolbar - stop screen sharing
-        _ = StopScreenShareAsync();
+        // User closed the toolbar - stop screen sharing via ScreenShareViewModel
+        _screenShare?.OnAnnotationToolbarCloseRequested();
     }
 
     // Unified autocomplete methods (for @ mentions and / commands)
@@ -3602,6 +3536,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         HideSharerAnnotationOverlay();
+        _screenShare?.Dispose();
         _voiceControl?.Dispose();
         _videoFullscreen?.Dispose();
         _typingSubscription?.Dispose();
