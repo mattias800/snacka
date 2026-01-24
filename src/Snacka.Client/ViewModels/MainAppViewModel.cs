@@ -139,12 +139,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private Views.ScreenAnnotationWindow? _screenAnnotationWindow;
     private Views.AnnotationToolbarWindow? _annotationToolbarWindow;
 
-    // Typing indicator state (channel typing only - DM typing is in DMContentViewModel)
-    private ObservableCollection<TypingUser> _typingUsers = new();
+    // Typing indicator state - backed by TypingStore, subscriptions update when channel changes
     private DateTime _lastTypingSent = DateTime.MinValue;
     private const int TypingThrottleMs = 3000; // Send typing event every 3 seconds
-    private const int TypingTimeoutMs = 5000; // Clear typing after 5 seconds of inactivity
-    private System.Timers.Timer? _typingCleanupTimer;
+    private bool _isAnyoneTyping;
+    private string _typingIndicatorText = string.Empty;
+    private IDisposable? _typingSubscription;
     private ScreenAnnotationViewModel? _screenAnnotationViewModel;
 
     // Unified autocomplete for @ mentions and / commands
@@ -827,15 +827,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.MessageReceived += message => Dispatcher.UIThread.Post(() =>
         {
-            // Clear typing indicator for this user since they sent a message
-            var typingUser = _typingUsers.FirstOrDefault(t => t.UserId == message.AuthorId);
-            if (typingUser != null)
-            {
-                _typingUsers.Remove(typingUser);
-                this.RaisePropertyChanged(nameof(TypingIndicatorText));
-                this.RaisePropertyChanged(nameof(IsAnyoneTyping));
-            }
-
+            // Typing indicator cleared by SignalREventDispatcher -> TypingStore
             // Message list updates handled by SignalREventDispatcher -> MessageStore
             // StoreMessages auto-updates via DynamicData binding
 
@@ -1232,20 +1224,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         });
 
-        // Typing indicator events (DM typing is handled by DMContentViewModel)
-        _signalR.UserTyping += e => Dispatcher.UIThread.Post(() =>
-        {
-            // Only show typing for the currently selected channel
-            if (SelectedChannel is not null && e.ChannelId == SelectedChannel.Id && e.UserId != _auth.UserId)
-            {
-                var existing = _typingUsers.FirstOrDefault(t => t.UserId == e.UserId);
-                if (existing != null)
-                    _typingUsers.Remove(existing);
-                _typingUsers.Add(new TypingUser(e.UserId, e.Username, DateTime.UtcNow));
-                this.RaisePropertyChanged(nameof(TypingIndicatorText));
-                this.RaisePropertyChanged(nameof(IsAnyoneTyping));
-            }
-        });
+        // Typing indicator events now handled by SignalREventDispatcher -> TypingStore
+        // UI subscribes to store via _typingSubscription (set up in SubscribeToTypingStore)
 
         // Conversation message received - update via centralized state service
         _signalR.ConversationMessageReceived += message => Dispatcher.UIThread.Post(() =>
@@ -1456,28 +1436,56 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             InjectMouseInput(input);
         };
 
-        // Set up typing cleanup timer
-        _typingCleanupTimer = new System.Timers.Timer(1000); // Check every second
-        _typingCleanupTimer.Elapsed += (s, e) => Dispatcher.UIThread.Post(CleanupExpiredTypingIndicators);
-        _typingCleanupTimer.Start();
+        // Channel typing cleanup now handled by TypingStore
+        // DM typing cleanup is handled internally by DMContentViewModel
     }
 
-    private void CleanupExpiredTypingIndicators()
+    /// <summary>
+    /// Sets up typing indicator subscriptions for the given channel.
+    /// Disposes any previous subscription and creates new ones.
+    /// </summary>
+    private void SubscribeToTypingStore(Guid channelId)
     {
-        var now = DateTime.UtcNow;
-        var expiredChannel = _typingUsers.Where(t => (now - t.LastTypingAt).TotalMilliseconds > TypingTimeoutMs).ToList();
+        // Dispose previous subscription
+        _typingSubscription?.Dispose();
 
-        foreach (var user in expiredChannel)
-            _typingUsers.Remove(user);
+        // Create a composite disposable to hold both subscriptions
+        var disposables = new CompositeDisposable();
 
-        if (expiredChannel.Count > 0)
-        {
-            this.RaisePropertyChanged(nameof(TypingIndicatorText));
-            this.RaisePropertyChanged(nameof(IsAnyoneTyping));
-        }
+        // Subscribe to IsAnyoneTyping
+        _stores.TypingStore.IsAnyoneTyping(channelId)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(isTyping =>
+            {
+                _isAnyoneTyping = isTyping;
+                this.RaisePropertyChanged(nameof(IsAnyoneTyping));
+            })
+            .DisposeWith(disposables);
 
-        // Also cleanup DM typing indicators in the DMContentViewModel
-        _dmContent?.CleanupExpiredTypingIndicators();
+        // Subscribe to TypingIndicatorText
+        _stores.TypingStore.GetTypingIndicatorText(channelId)
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(text =>
+            {
+                _typingIndicatorText = text;
+                this.RaisePropertyChanged(nameof(TypingIndicatorText));
+            })
+            .DisposeWith(disposables);
+
+        _typingSubscription = disposables;
+    }
+
+    /// <summary>
+    /// Clears the typing indicator state and subscriptions.
+    /// </summary>
+    private void ClearTypingSubscription()
+    {
+        _typingSubscription?.Dispose();
+        _typingSubscription = null;
+        _isAnyoneTyping = false;
+        _typingIndicatorText = string.Empty;
+        this.RaisePropertyChanged(nameof(IsAnyoneTyping));
+        this.RaisePropertyChanged(nameof(TypingIndicatorText));
     }
 
     private async Task OnCommunitySelectedAsync()
@@ -1509,6 +1517,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
             // Update SelectedChannel with zero unread count
             SelectedChannel = SelectedChannel with { UnreadCount = 0 };
+
+            // Subscribe to typing indicators for this channel
+            SubscribeToTypingStore(SelectedChannel.Id);
+        }
+        else
+        {
+            // No channel selected, clear typing state
+            ClearTypingSubscription();
         }
 
         await LoadMessagesAsync();
@@ -1646,19 +1662,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         }
     }
 
-    // Typing indicator properties
-    public bool IsAnyoneTyping => _typingUsers.Count > 0;
+    // Typing indicator properties (backed by TypingStore)
+    public bool IsAnyoneTyping => _isAnyoneTyping;
 
-    public string TypingIndicatorText
-    {
-        get
-        {
-            if (_typingUsers.Count == 0) return string.Empty;
-            if (_typingUsers.Count == 1) return $"{_typingUsers[0].Username} is typing...";
-            if (_typingUsers.Count == 2) return $"{_typingUsers[0].Username} and {_typingUsers[1].Username} are typing...";
-            return $"{_typingUsers[0].Username} and {_typingUsers.Count - 1} others are typing...";
-        }
-    }
+    public string TypingIndicatorText => _typingIndicatorText;
 
     // Unified autocomplete properties (for @ mentions and / commands)
     public bool IsAutocompletePopupOpen => _autocomplete.IsPopupOpen;
@@ -4853,7 +4860,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public void Dispose()
     {
         HideSharerAnnotationOverlay();
-        _typingCleanupTimer?.Dispose();
+        _typingSubscription?.Dispose();
         _storeSubscriptions.Dispose();
         _ = _signalR.DisposeAsync();
     }
@@ -4965,8 +4972,3 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     #endregion
 }
-
-/// <summary>
-/// Represents a user who is currently typing.
-/// </summary>
-public record TypingUser(Guid UserId, string Username, DateTime LastTypingAt);

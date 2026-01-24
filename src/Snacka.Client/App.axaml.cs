@@ -43,7 +43,8 @@ public partial class App : Application
                 MessageStore: new MessageStore(),
                 CommunityStore: new CommunityStore(),
                 VoiceStore: new VoiceStore(),
-                GamingStationStore: new GamingStationStore()
+                GamingStationStore: new GamingStationStore(),
+                TypingStore: new TypingStore()
             );
 
             // SignalR event dispatcher (will be initialized after login with user ID)

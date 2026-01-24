@@ -555,6 +555,7 @@ public class MainWindowViewModel : ViewModelBase
             _stores.VoiceStore,
             _stores.PresenceStore,
             _stores.GamingStationStore,
+            _stores.TypingStore,
             auth.UserId
         );
 

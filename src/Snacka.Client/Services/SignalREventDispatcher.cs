@@ -20,6 +20,7 @@ public interface ISignalREventDispatcher : IDisposable
         IVoiceStore voiceStore,
         IPresenceStore presenceStore,
         IGamingStationStore gamingStationStore,
+        ITypingStore typingStore,
         Guid currentUserId
     );
 }
@@ -37,6 +38,7 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
     private IVoiceStore? _voiceStore;
     private IPresenceStore? _presenceStore;
     private IGamingStationStore? _gamingStationStore;
+    private ITypingStore? _typingStore;
 
     public SignalREventDispatcher(ISignalRService signalR)
     {
@@ -50,6 +52,7 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
         IVoiceStore voiceStore,
         IPresenceStore presenceStore,
         IGamingStationStore gamingStationStore,
+        ITypingStore typingStore,
         Guid currentUserId)
     {
         _channelStore = channelStore;
@@ -58,6 +61,7 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
         _voiceStore = voiceStore;
         _presenceStore = presenceStore;
         _gamingStationStore = gamingStationStore;
+        _typingStore = typingStore;
         _currentUserId = currentUserId;
 
         // Subscribe to connection state changes
@@ -97,6 +101,9 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
 
         // Subscribe to gaming station events
         _signalR.GamingStationStatusChanged += OnGamingStationStatusChanged;
+
+        // Subscribe to typing events
+        _signalR.UserTyping += OnUserTyping;
     }
 
     #region Connection Events
@@ -142,6 +149,9 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
     private void OnMessageReceived(MessageResponse message)
     {
         _messageStore?.AddMessage(message);
+
+        // Remove typing indicator for the author (they sent a message, so they're no longer typing)
+        _typingStore?.RemoveTypingUser(message.ChannelId, message.AuthorId);
 
         // Increment unread count if:
         // 1. Not viewing this channel (different from selected)
@@ -270,6 +280,19 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
 
     #endregion
 
+    #region Typing Events
+
+    private void OnUserTyping(TypingEvent e)
+    {
+        // Don't show our own typing indicator
+        if (e.UserId != _currentUserId)
+        {
+            _typingStore?.AddTypingUser(e.ChannelId, e.UserId, e.Username);
+        }
+    }
+
+    #endregion
+
     #region Gaming Station Events
 
     private void OnGamingStationStatusChanged(GamingStationStatusChangedEvent e)
@@ -327,6 +350,8 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
         _signalR.DisconnectedFromVoice -= OnDisconnectedFromVoice;
 
         _signalR.GamingStationStatusChanged -= OnGamingStationStatusChanged;
+
+        _signalR.UserTyping -= OnUserTyping;
 
         foreach (var subscription in _subscriptions)
         {

@@ -10,5 +10,6 @@ public record StoreContainer(
     IMessageStore MessageStore,
     ICommunityStore CommunityStore,
     IVoiceStore VoiceStore,
-    IGamingStationStore GamingStationStore
+    IGamingStationStore GamingStationStore,
+    ITypingStore TypingStore
 );
