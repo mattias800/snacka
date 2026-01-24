@@ -465,11 +465,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 this.RaisePropertyChanged(nameof(SelectedAutocompleteIndex));
         };
 
-        // Initialize GIF picker (only if GIFs are enabled)
+        // Initialize GIF ViewModels (only if GIFs are enabled)
         if (_isGifsEnabled)
         {
             _gifPicker = new GifPickerViewModel(apiClient);
             _gifPicker.SendRequested += OnGifPickerSendRequested;
+
+            _gifPanel = new GifPanelViewModel(apiClient);
+            _gifPanel.GifSelected += OnGifPanelGifSelected;
         }
 
         // Create the inline DM ViewModel
@@ -1791,11 +1794,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         LightboxImage = null;
     }
 
-    // GIF picker properties
-    private ObservableCollection<GifResult> _gifResults = new();
-    private string _gifSearchQuery = string.Empty;
-    private bool _isLoadingGifs;
-    private string? _gifNextPos;
+    // GIF panel ViewModel (for the GIF search panel)
+    private GifPanelViewModel? _gifPanel;
 
     // GIF preview state (for /gif command inline preview)
     private bool _isGifPreviewVisible;
@@ -1806,19 +1806,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     public bool IsGifsEnabled => _isGifsEnabled;
 
-    public ObservableCollection<GifResult> GifResults => _gifResults;
+    // GIF panel properties (delegate to GifPanelViewModel)
+    public GifPanelViewModel? GifPanel => _gifPanel;
+    public ObservableCollection<GifResult> GifResults => _gifPanel?.Results ?? new ObservableCollection<GifResult>();
 
     public string GifSearchQuery
     {
-        get => _gifSearchQuery;
-        set => this.RaiseAndSetIfChanged(ref _gifSearchQuery, value);
+        get => _gifPanel?.SearchQuery ?? string.Empty;
+        set { if (_gifPanel != null) _gifPanel.SearchQuery = value; }
     }
 
-    public bool IsLoadingGifs
-    {
-        get => _isLoadingGifs;
-        set => this.RaiseAndSetIfChanged(ref _isLoadingGifs, value);
-    }
+    public bool IsLoadingGifs => _gifPanel?.IsLoading ?? false;
 
     // GIF preview properties (for /gif command)
     public bool IsGifPreviewVisible
@@ -1839,65 +1837,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _gifPreviewQuery, value);
     }
 
-    public async Task LoadTrendingGifsAsync()
-    {
-        if (IsLoadingGifs) return;
+    public Task LoadTrendingGifsAsync() => _gifPanel?.LoadTrendingAsync() ?? Task.CompletedTask;
 
-        IsLoadingGifs = true;
-        _gifResults.Clear();
-        _gifNextPos = null;
-
-        try
-        {
-            var result = await _apiClient.GetTrendingGifsAsync(24);
-            if (result.Success && result.Data != null)
-            {
-                foreach (var gif in result.Data.Results)
-                {
-                    _gifResults.Add(gif);
-                }
-                _gifNextPos = result.Data.NextPos;
-            }
-        }
-        catch
-        {
-            // GIF loading failures are non-critical
-        }
-        finally
-        {
-            IsLoadingGifs = false;
-        }
-    }
-
-    public async Task SearchGifsAsync()
-    {
-        if (IsLoadingGifs || string.IsNullOrWhiteSpace(GifSearchQuery)) return;
-
-        IsLoadingGifs = true;
-        _gifResults.Clear();
-        _gifNextPos = null;
-
-        try
-        {
-            var result = await _apiClient.SearchGifsAsync(GifSearchQuery.Trim(), 24);
-            if (result.Success && result.Data != null)
-            {
-                foreach (var gif in result.Data.Results)
-                {
-                    _gifResults.Add(gif);
-                }
-                _gifNextPos = result.Data.NextPos;
-            }
-        }
-        catch
-        {
-            // GIF search failures are non-critical
-        }
-        finally
-        {
-            IsLoadingGifs = false;
-        }
-    }
+    public Task SearchGifsAsync() => _gifPanel?.SearchAsync() ?? Task.CompletedTask;
 
     public async Task SendGifMessageAsync(GifResult gif)
     {
@@ -1919,19 +1861,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     /// <summary>
-    /// Handler for when user clicks Send in the GIF picker.
+    /// Handler for when user clicks Send in the inline GIF picker (/gif command).
     /// </summary>
-    private async void OnGifPickerSendRequested(GifResult gif)
-    {
-        await SendGifMessageAsync(gif);
-    }
+    private async void OnGifPickerSendRequested(GifResult gif) => await SendGifMessageAsync(gif);
 
-    public void ClearGifResults()
-    {
-        _gifResults.Clear();
-        GifSearchQuery = string.Empty;
-        _gifNextPos = null;
-    }
+    /// <summary>
+    /// Handler for when user selects a GIF in the GIF panel.
+    /// </summary>
+    private async void OnGifPanelGifSelected(GifResult gif) => await SendGifMessageAsync(gif);
+
+    public void ClearGifResults() => _gifPanel?.Clear();
 
     /// <summary>
     /// Initiates a GIF preview search for the /gif command.
