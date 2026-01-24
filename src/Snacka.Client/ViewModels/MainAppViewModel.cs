@@ -202,6 +202,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private CommunityDiscoveryViewModel? _communityDiscovery;
     private bool _isWelcomeModalOpen;
 
+    // Audio device quick selector (extracted ViewModel)
+    private AudioDeviceQuickSelectViewModel? _audioDeviceQuickSelect;
+
     public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, IConversationStateService conversationStateService, StoreContainer stores, ISignalREventDispatcher signalREventDispatcher, IChannelCoordinator channelCoordinator, ICommunityCoordinator communityCoordinator, IVoiceCoordinator voiceCoordinator, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
@@ -474,6 +477,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _gifPanel = new GifPanelViewModel(apiClient);
             _gifPanel.GifSelected += OnGifPanelGifSelected;
         }
+
+        // Create the audio device quick select ViewModel
+        _audioDeviceQuickSelect = new AudioDeviceQuickSelectViewModel(settingsStore, audioDeviceService);
+        _audioDeviceQuickSelect.PushToTalkMuteChanged += unmute => IsMuted = !unmute;
 
         // Create the inline DM ViewModel
         _dmContent = new DMContentViewModel(
@@ -1920,199 +1927,65 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _gifPreviewIndex = 0;
     }
 
-    // Quick audio device switcher
-    private ObservableCollection<AudioDeviceItem> _inputDevices = new();
-    private ObservableCollection<AudioDeviceItem> _outputDevices = new();
-    private bool _isAudioDevicePopupOpen;
-    private float _inputLevel;
-    private bool _isRefreshingDevices; // Flag to prevent binding feedback during refresh
-
-    public ObservableCollection<AudioDeviceItem> InputDevices => _inputDevices;
-    public ObservableCollection<AudioDeviceItem> OutputDevices => _outputDevices;
-
-    public float InputLevel
-    {
-        get => _inputLevel;
-        set => this.RaiseAndSetIfChanged(ref _inputLevel, value);
-    }
+    // Quick audio device switcher (delegated to AudioDeviceQuickSelectViewModel)
+    public AudioDeviceQuickSelectViewModel? AudioDeviceQuickSelect => _audioDeviceQuickSelect;
+    public ObservableCollection<AudioDeviceItem> InputDevices => _audioDeviceQuickSelect?.InputDevices ?? new();
+    public ObservableCollection<AudioDeviceItem> OutputDevices => _audioDeviceQuickSelect?.OutputDevices ?? new();
+    public float InputLevel => _audioDeviceQuickSelect?.InputLevel ?? 0;
 
     public bool IsAudioDevicePopupOpen
     {
-        get => _isAudioDevicePopupOpen;
-        set
-        {
-            if (_isAudioDevicePopupOpen == value) return;
-            this.RaiseAndSetIfChanged(ref _isAudioDevicePopupOpen, value);
-
-            // Start/stop audio level monitoring when popup opens/closes
-            if (value)
-            {
-                _ = StartAudioLevelMonitoringAsync();
-            }
-            else
-            {
-                _ = StopAudioLevelMonitoringAsync();
-            }
-        }
+        get => _audioDeviceQuickSelect?.IsOpen ?? false;
+        set { if (_audioDeviceQuickSelect != null) _audioDeviceQuickSelect.IsOpen = value; }
     }
 
     public AudioDeviceItem? SelectedInputDeviceItem
     {
-        get => InputDevices.FirstOrDefault(d => d.Value == _settingsStore.Settings.AudioInputDevice)
-               ?? InputDevices.FirstOrDefault(); // Fall back to "Default"
+        get => _audioDeviceQuickSelect?.SelectedInputDeviceItem;
         set
         {
-            var newValue = value?.Value;
-
-            // Ignore binding updates during device refresh
-            if (_isRefreshingDevices) return;
-
-            if (_settingsStore.Settings.AudioInputDevice == newValue) return;
-            _settingsStore.Settings.AudioInputDevice = newValue;
-            _settingsStore.Save();
-            this.RaisePropertyChanged(nameof(SelectedInputDeviceItem));
-            this.RaisePropertyChanged(nameof(SelectedInputDeviceDisplay));
-            this.RaisePropertyChanged(nameof(HasNoInputDevice));
+            if (_audioDeviceQuickSelect != null) _audioDeviceQuickSelect.SelectedInputDeviceItem = value;
             this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
         }
     }
 
     public AudioDeviceItem? SelectedOutputDeviceItem
     {
-        get => OutputDevices.FirstOrDefault(d => d.Value == _settingsStore.Settings.AudioOutputDevice)
-               ?? OutputDevices.FirstOrDefault(); // Fall back to "Default"
+        get => _audioDeviceQuickSelect?.SelectedOutputDeviceItem;
         set
         {
-            var newValue = value?.Value;
-
-            // Ignore binding updates during device refresh
-            if (_isRefreshingDevices) return;
-
-            if (_settingsStore.Settings.AudioOutputDevice == newValue) return;
-            _settingsStore.Settings.AudioOutputDevice = newValue;
-            _settingsStore.Save();
-            this.RaisePropertyChanged(nameof(SelectedOutputDeviceItem));
-            this.RaisePropertyChanged(nameof(SelectedOutputDeviceDisplay));
-            this.RaisePropertyChanged(nameof(HasNoOutputDevice));
+            if (_audioDeviceQuickSelect != null) _audioDeviceQuickSelect.SelectedOutputDeviceItem = value;
             this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
         }
     }
 
-    public string SelectedInputDeviceDisplay => _settingsStore.Settings.AudioInputDevice ?? "Default";
-    public string SelectedOutputDeviceDisplay => _settingsStore.Settings.AudioOutputDevice ?? "Default";
-
-    // Push-to-talk
-    private bool _isPushToTalkActive;
+    public string SelectedInputDeviceDisplay => _audioDeviceQuickSelect?.SelectedInputDeviceDisplay ?? "Default";
+    public string SelectedOutputDeviceDisplay => _audioDeviceQuickSelect?.SelectedOutputDeviceDisplay ?? "Default";
 
     public bool PushToTalkEnabled
     {
-        get => _settingsStore.Settings.PushToTalkEnabled;
+        get => _audioDeviceQuickSelect?.PushToTalkEnabled ?? false;
         set
         {
-            if (_settingsStore.Settings.PushToTalkEnabled == value) return;
-            _settingsStore.Settings.PushToTalkEnabled = value;
-            _settingsStore.Save();
-            this.RaisePropertyChanged(nameof(PushToTalkEnabled));
-            this.RaisePropertyChanged(nameof(VoiceModeDescription));
-
-            // When PTT is enabled, start muted; when disabled, unmute if was PTT muted
-            if (value && IsInVoiceChannel)
+            if (_audioDeviceQuickSelect != null)
             {
-                IsMuted = true;
+                _audioDeviceQuickSelect.PushToTalkEnabled = value;
+                // When PTT is enabled while in voice channel, start muted
+                if (value && IsInVoiceChannel)
+                {
+                    IsMuted = true;
+                }
             }
         }
     }
 
-    public string VoiceModeDescription => PushToTalkEnabled
-        ? "Push-to-talk: Hold Space to talk"
-        : "Voice activity: Speak to transmit";
+    public string VoiceModeDescription => _audioDeviceQuickSelect?.VoiceModeDescription ?? "Voice activity: Speak to transmit";
 
-    /// <summary>
-    /// Called when push-to-talk key is pressed or released.
-    /// </summary>
-    public void HandlePushToTalk(bool isPressed)
-    {
-        if (!PushToTalkEnabled || !IsInVoiceChannel) return;
+    public void HandlePushToTalk(bool isPressed) => _audioDeviceQuickSelect?.HandlePushToTalk(isPressed, IsInVoiceChannel);
 
-        _isPushToTalkActive = isPressed;
+    public void OpenAudioDevicePopup() => _audioDeviceQuickSelect?.Open();
 
-        // When PTT key is pressed, unmute; when released, mute
-        if (isPressed)
-        {
-            IsMuted = false;
-        }
-        else
-        {
-            IsMuted = true;
-        }
-    }
-
-    public void OpenAudioDevicePopup()
-    {
-        RefreshAudioDevices();
-        IsAudioDevicePopupOpen = true;
-    }
-
-    public void RefreshAudioDevices()
-    {
-        _isRefreshingDevices = true;
-        try
-        {
-            _inputDevices.Clear();
-            _outputDevices.Clear();
-
-            // Add default option
-            _inputDevices.Add(new AudioDeviceItem(null, "Default"));
-            _outputDevices.Add(new AudioDeviceItem(null, "Default"));
-
-            // Add available devices
-            foreach (var device in _audioDeviceService.GetInputDevices())
-            {
-                _inputDevices.Add(new AudioDeviceItem(device, device));
-            }
-
-            foreach (var device in _audioDeviceService.GetOutputDevices())
-            {
-                _outputDevices.Add(new AudioDeviceItem(device, device));
-            }
-        }
-        finally
-        {
-            _isRefreshingDevices = false;
-        }
-
-        // Notify UI to re-sync the selection after items are populated
-        this.RaisePropertyChanged(nameof(SelectedInputDeviceItem));
-        this.RaisePropertyChanged(nameof(SelectedOutputDeviceItem));
-    }
-
-    private async Task StartAudioLevelMonitoringAsync()
-    {
-        try
-        {
-            await _audioDeviceService.StartInputTestAsync(
-                _settingsStore.Settings.AudioInputDevice,
-                level => Avalonia.Threading.Dispatcher.UIThread.Post(() => InputLevel = level)
-            );
-        }
-        catch
-        {
-            // Audio monitoring startup failure is non-critical
-        }
-    }
-
-    private async Task StopAudioLevelMonitoringAsync()
-    {
-        try
-        {
-            await _audioDeviceService.StopTestAsync();
-            InputLevel = 0;
-        }
-        catch
-        {
-            // Audio monitoring stop failure is non-critical
-        }
-    }
+    public void RefreshAudioDevices() => _audioDeviceQuickSelect?.RefreshDevices();
 
     // Voice channel properties
     public ChannelResponse? CurrentVoiceChannel
@@ -2181,12 +2054,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// Whether the user has not configured an audio input device.
     /// </summary>
-    public bool HasNoInputDevice => string.IsNullOrEmpty(_settingsStore.Settings.AudioInputDevice);
+    public bool HasNoInputDevice => _audioDeviceQuickSelect?.HasNoInputDevice ?? true;
 
     /// <summary>
     /// Whether the user has not configured an audio output device.
     /// </summary>
-    public bool HasNoOutputDevice => string.IsNullOrEmpty(_settingsStore.Settings.AudioOutputDevice);
+    public bool HasNoOutputDevice => _audioDeviceQuickSelect?.HasNoOutputDevice ?? true;
 
     /// <summary>
     /// Whether to show the audio device warning banner in the voice channel view.
