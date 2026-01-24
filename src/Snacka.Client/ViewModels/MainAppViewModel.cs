@@ -116,15 +116,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Drawing annotation service (shared with VideoFullscreenViewModel and sharer overlay)
     private readonly AnnotationService _annotationService;
 
-    // Sharer annotation overlay windows
-    private Views.ScreenAnnotationWindow? _screenAnnotationWindow;
-    private Views.AnnotationToolbarWindow? _annotationToolbarWindow;
+    // Sharer annotation overlay manager (handles overlay windows for screen sharing)
+    private SharerAnnotationOverlayManager? _sharerAnnotationOverlay;
 
     // Typing indicator state - backed by TypingStore, subscriptions update when channel changes
     private bool _isAnyoneTyping;
     private string _typingIndicatorText = string.Empty;
     private IDisposable? _typingSubscription;
-    private ScreenAnnotationViewModel? _screenAnnotationViewModel;
 
     // Self-contained GIF picker (appears in message list)
     private GifPickerViewModel? _gifPicker;
@@ -601,16 +599,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         };
 
-        // Wire up screen share events
+        // Create sharer annotation overlay manager
+        _sharerAnnotationOverlay = new SharerAnnotationOverlayManager();
+        _sharerAnnotationOverlay.CloseRequested += () => _screenShare?.OnAnnotationToolbarCloseRequested();
+
+        // Wire up screen share events to overlay manager
         _screenShare.ShowAnnotationOverlayRequested += (settings, annotationVm) =>
-        {
-            _screenAnnotationViewModel = annotationVm;
-            ShowSharerAnnotationOverlay(settings);
-        };
+            _sharerAnnotationOverlay.Show(settings, annotationVm);
         _screenShare.HideAnnotationOverlayRequested += () =>
-        {
-            HideSharerAnnotationOverlay();
-        };
+            _sharerAnnotationOverlay.Hide();
         _screenShare.ErrorOccurred += error => ErrorMessage = error;
 
         // Create message input ViewModel
@@ -2840,113 +2837,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         await _voiceCoordinator.MoveUserAsync(args.Participant.UserId, args.TargetChannel.Id);
     }
 
-    /// <summary>
-    /// Shows the annotation overlay and toolbar on the shared monitor.
-    /// Only called for display (monitor) sharing, not window sharing.
-    /// Note: _screenAnnotationViewModel is set by ScreenShareViewModel before this is called.
-    /// </summary>
-    private void ShowSharerAnnotationOverlay(ScreenShareSettings settings)
-    {
-        if (CurrentVoiceChannel is null || _screenAnnotationViewModel is null) return;
-
-        try
-        {
-            // Find the screen
-            Avalonia.PixelRect? targetBounds = null;
-
-            if (Avalonia.Application.Current?.ApplicationLifetime is Avalonia.Controls.ApplicationLifetimes.IClassicDesktopStyleApplicationLifetime desktop)
-            {
-                var screensService = desktop.MainWindow?.Screens;
-                if (screensService != null && int.TryParse(settings.Source.Id, out var displayIndex))
-                {
-                    var allScreens = screensService.All.ToList();
-                    if (displayIndex < allScreens.Count)
-                    {
-                        targetBounds = allScreens[displayIndex].Bounds;
-                    }
-                }
-            }
-
-            // Create overlay window
-            _screenAnnotationWindow = new Views.ScreenAnnotationWindow();
-            _screenAnnotationWindow.DataContext = _screenAnnotationViewModel;
-
-            // Position the window
-            if (targetBounds.HasValue)
-            {
-                _screenAnnotationWindow.Position = new Avalonia.PixelPoint(
-                    targetBounds.Value.X,
-                    targetBounds.Value.Y);
-                _screenAnnotationWindow.Width = targetBounds.Value.Width;
-                _screenAnnotationWindow.Height = targetBounds.Value.Height;
-            }
-            else
-            {
-                _screenAnnotationWindow.WindowState = Avalonia.Controls.WindowState.Maximized;
-            }
-
-            // Show the overlay window
-            // Window is shown on all platforms - input pass-through handles click behavior
-            _screenAnnotationWindow.Show();
-
-            // Create toolbar window
-            _annotationToolbarWindow = new Views.AnnotationToolbarWindow();
-            _annotationToolbarWindow.DataContext = _screenAnnotationViewModel;
-            _annotationToolbarWindow.SetOverlayWindow(_screenAnnotationWindow);
-
-            // Position toolbar
-            if (targetBounds.HasValue)
-            {
-                var toolbarX = targetBounds.Value.X + (targetBounds.Value.Width - 380) / 2;
-                var toolbarY = targetBounds.Value.Y + targetBounds.Value.Height - 80;
-                _annotationToolbarWindow.Position = new Avalonia.PixelPoint(toolbarX, toolbarY);
-            }
-            else
-            {
-                _annotationToolbarWindow.Position = new Avalonia.PixelPoint(400, 700);
-            }
-
-            // Setup toolbar event handler
-            // Note: We don't call Show() here - the toolbar manages its own visibility
-            // based on the IsDrawingAllowedForViewers subscription. It will show when
-            // the host clicks "Allow Drawing" in the voice panel.
-            _annotationToolbarWindow.CloseRequested += OnAnnotationToolbarCloseRequested;
-        }
-        catch
-        {
-            // Annotation overlay creation failed - non-critical
-        }
-    }
-
-    /// <summary>
-    /// Hides and closes the annotation overlay and toolbar windows.
-    /// Note: ScreenAnnotationViewModel cleanup is handled by ScreenShareViewModel.
-    /// </summary>
-    private void HideSharerAnnotationOverlay()
-    {
-        if (_annotationToolbarWindow != null)
-        {
-            _annotationToolbarWindow.CloseRequested -= OnAnnotationToolbarCloseRequested;
-            _annotationToolbarWindow.Close();
-            _annotationToolbarWindow = null;
-        }
-
-        if (_screenAnnotationWindow != null)
-        {
-            _screenAnnotationWindow.Close();
-            _screenAnnotationWindow = null;
-        }
-
-        // Clear reference (cleanup is handled by ScreenShareViewModel)
-        _screenAnnotationViewModel = null;
-    }
-
-    private void OnAnnotationToolbarCloseRequested()
-    {
-        // User closed the toolbar - stop screen sharing via ScreenShareViewModel
-        _screenShare?.OnAnnotationToolbarCloseRequested();
-    }
-
     // Unified autocomplete methods (delegated to MessageInputViewModel)
 
     /// <summary>
@@ -3213,7 +3103,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
-        HideSharerAnnotationOverlay();
+        _sharerAnnotationOverlay?.Dispose();
         _messageInputVm?.Dispose();
         _screenShare?.Dispose();
         _voiceControl?.Dispose();
