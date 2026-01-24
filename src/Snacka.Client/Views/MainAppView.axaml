@@ -180,7 +180,7 @@
 
         <!-- Community List (Left Sidebar) -->
         <controls:CommunityListView Grid.Column="0"
-                                    Communities="{Binding Communities}"
+                                    Communities="{Binding StoreCommunities}"
                                     IsLoading="{Binding IsLoading}"
                                     SelectCommunityCommand="{Binding SelectCommunityCommand}"
                                     CreateCommunityCommand="{Binding CreateCommunityCommand}"
@@ -377,7 +377,7 @@
                                    GifPreviewQuery="{Binding GifPreviewQuery}"
                                    MessageInput="{Binding MessageInput, Mode=TwoWay}"
                                    IsLoading="{Binding IsLoading}"
-                                   Messages="{Binding Messages}"
+                                   Messages="{Binding StoreMessages}"
                                    BaseUrl="{Binding BaseUrl}"
                                    AccessToken="{Binding AccessToken}"
                                    IsEditing="{Binding EditingMessage, Converter={x:Static ObjectConverters.IsNotNull}}"

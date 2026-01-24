@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Collections.Specialized;
 using System.Reactive;
 using Snacka.Client.Models;
 using Snacka.Client.Services;
@@ -22,8 +23,13 @@ public class MembersListViewModel : ViewModelBase
     private readonly Func<Task<bool>> _isInVoiceChannel;
     private readonly Func<string, Task> _onAddStationToChannel;
 
-    // Shared members collection (owned by MainAppViewModel)
-    private readonly ObservableCollection<CommunityMemberResponse> _members;
+    // Shared members collection (store-backed, read-only)
+    private readonly ReadOnlyObservableCollection<CommunityMemberResponse> _members;
+
+    // Store mutation delegates
+    private readonly Action<Guid, Guid, string?> _updateMemberNickname;
+    private readonly Action<Guid, Guid, UserRole> _updateMemberRole;
+    private readonly Action<Guid, IEnumerable<CommunityMemberResponse>> _setMembers;
 
     // Gaming stations collection (owned by MainAppViewModel)
     private readonly ObservableCollection<MyGamingStationInfo> _myGamingStations;
@@ -39,13 +45,16 @@ public class MembersListViewModel : ViewModelBase
     public MembersListViewModel(
         IApiClient apiClient,
         Guid currentUserId,
-        ObservableCollection<CommunityMemberResponse> members,
+        ReadOnlyObservableCollection<CommunityMemberResponse> members,
         ObservableCollection<MyGamingStationInfo> myGamingStations,
         Func<Guid> getSelectedCommunityId,
         Action<CommunityMemberResponse> onStartDM,
         Func<Guid, int> getDmUnreadCount,
         Func<Task<bool>> isInVoiceChannel,
         Func<string, Task> onAddStationToChannel,
+        Action<Guid, Guid, string?> updateMemberNickname,
+        Action<Guid, Guid, UserRole> updateMemberRole,
+        Action<Guid, IEnumerable<CommunityMemberResponse>> setMembers,
         Action<string?> onError)
     {
         _apiClient = apiClient;
@@ -57,6 +66,9 @@ public class MembersListViewModel : ViewModelBase
         _getDmUnreadCount = getDmUnreadCount;
         _isInVoiceChannel = isInVoiceChannel;
         _onAddStationToChannel = onAddStationToChannel;
+        _updateMemberNickname = updateMemberNickname;
+        _updateMemberRole = updateMemberRole;
+        _setMembers = setMembers;
         _onError = onError;
 
         // Nickname commands
@@ -75,6 +87,14 @@ public class MembersListViewModel : ViewModelBase
 
         // Gaming station command
         AddStationToChannelCommand = ReactiveCommand.CreateFromTask<MyGamingStationInfo>(AddStationToChannelAsync);
+
+        // Subscribe to collection changes to notify SortedMembers (auto-update from store)
+        ((INotifyCollectionChanged)_members).CollectionChanged += OnMembersCollectionChanged;
+    }
+
+    private void OnMembersCollectionChanged(object? sender, NotifyCollectionChangedEventArgs e)
+    {
+        this.RaisePropertyChanged(nameof(SortedMembers));
     }
 
     // Properties
@@ -207,13 +227,8 @@ public class MembersListViewModel : ViewModelBase
 
             if (result.Success && result.Data is not null)
             {
-                var index = _members.ToList().FindIndex(m => m.UserId == EditingNicknameMember.UserId);
-                if (index >= 0)
-                {
-                    _members[index] = result.Data;
-                    this.RaisePropertyChanged(nameof(SortedMembers));
-                }
-
+                // Update store - collection will auto-update via DynamicData binding
+                _updateMemberNickname(communityId, EditingNicknameMember.UserId, nickname);
                 CancelNicknameEdit();
             }
             else
@@ -242,12 +257,8 @@ public class MembersListViewModel : ViewModelBase
             var result = await _apiClient.UpdateMemberRoleAsync(communityId, member.UserId, UserRole.Admin);
             if (result.Success && result.Data is not null)
             {
-                var index = _members.ToList().FindIndex(m => m.UserId == member.UserId);
-                if (index >= 0)
-                {
-                    _members[index] = result.Data;
-                    this.RaisePropertyChanged(nameof(SortedMembers));
-                }
+                // Update store - collection will auto-update via DynamicData binding
+                _updateMemberRole(communityId, member.UserId, UserRole.Admin);
             }
             else
             {
@@ -274,12 +285,8 @@ public class MembersListViewModel : ViewModelBase
             var result = await _apiClient.UpdateMemberRoleAsync(communityId, member.UserId, UserRole.Member);
             if (result.Success && result.Data is not null)
             {
-                var index = _members.ToList().FindIndex(m => m.UserId == member.UserId);
-                if (index >= 0)
-                {
-                    _members[index] = result.Data;
-                    this.RaisePropertyChanged(nameof(SortedMembers));
-                }
+                // Update store - collection will auto-update via DynamicData binding
+                _updateMemberRole(communityId, member.UserId, UserRole.Member);
             }
             else
             {
@@ -310,10 +317,8 @@ public class MembersListViewModel : ViewModelBase
                 var membersResult = await _apiClient.GetMembersAsync(communityId);
                 if (membersResult.Success && membersResult.Data is not null)
                 {
-                    _members.Clear();
-                    foreach (var m in membersResult.Data)
-                        _members.Add(m);
-                    this.RaisePropertyChanged(nameof(SortedMembers));
+                    // Update store - collection will auto-update via DynamicData binding
+                    _setMembers(communityId, membersResult.Data);
 
                     // Update current user's role
                     var currentMember = _members.FirstOrDefault(m => m.UserId == _currentUserId);

@@ -3,6 +3,7 @@ using Avalonia.Controls.ApplicationLifetimes;
 using Avalonia.Markup.Xaml;
 using Snacka.Client.Controls;
 using Snacka.Client.Services;
+using Snacka.Client.Stores;
 using Snacka.Client.ViewModels;
 using Snacka.Client.Views;
 
@@ -35,6 +36,19 @@ public partial class App : Application
             var controllerHostService = new ControllerHostService(signalR);
             var webRtc = new WebRtcService(signalR, settingsStore, apiClient);
 
+            // Initialize Redux-style stores
+            var stores = new StoreContainer(
+                PresenceStore: new PresenceStore(),
+                ChannelStore: new ChannelStore(),
+                MessageStore: new MessageStore(),
+                CommunityStore: new CommunityStore(),
+                VoiceStore: new VoiceStore(),
+                GamingStationStore: new GamingStationStore()
+            );
+
+            // SignalR event dispatcher (will be initialized after login with user ID)
+            var signalREventDispatcher = new SignalREventDispatcher(signalR);
+
             // Check for dev mode auto-login
             DevLoginConfig? devConfig = null;
             if (!string.IsNullOrEmpty(Program.DevServerUrl) &&
@@ -48,7 +62,7 @@ public partial class App : Application
                 );
             }
 
-            var viewModel = new MainWindowViewModel(apiClient, connectionStore, signalR, webRtc, settingsStore, audioDeviceService, videoDeviceService, screenCaptureService, controllerService, controllerStreamingService, controllerHostService, devConfig: devConfig);
+            var viewModel = new MainWindowViewModel(apiClient, connectionStore, signalR, webRtc, settingsStore, audioDeviceService, videoDeviceService, screenCaptureService, controllerService, controllerStreamingService, controllerHostService, stores, signalREventDispatcher, devConfig: devConfig);
 
             var window = new MainWindow
             {

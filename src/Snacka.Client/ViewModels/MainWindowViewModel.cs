@@ -1,6 +1,7 @@
 using System.Reactive;
 using Avalonia.Platform.Storage;
 using Snacka.Client.Services;
+using Snacka.Client.Stores;
 using ReactiveUI;
 
 namespace Snacka.Client.ViewModels;
@@ -19,6 +20,8 @@ public class MainWindowViewModel : ViewModelBase
     private readonly Services.IControllerStreamingService _controllerStreamingService;
     private readonly Services.IControllerHostService _controllerHostService;
     private readonly Services.IUpdateService _updateService;
+    private readonly StoreContainer _stores;
+    private readonly ISignalREventDispatcher _signalREventDispatcher;
 
     // Centralized conversation state - created on auth success and shared across ViewModels
     private IConversationStateService? _conversationStateService;
@@ -37,7 +40,7 @@ public class MainWindowViewModel : ViewModelBase
     // File picker provider (set from View)
     public Func<Task<IStorageFile?>>? ImageFilePickerProvider { get; set; }
 
-    public MainWindowViewModel(IApiClient apiClient, IServerConnectionStore connectionStore, ISignalRService signalR, IWebRtcService webRtc, Services.ISettingsStore settingsStore, Services.IAudioDeviceService audioDeviceService, Services.IVideoDeviceService videoDeviceService, Services.IScreenCaptureService screenCaptureService, Services.IControllerService controllerService, Services.IControllerStreamingService controllerStreamingService, Services.IControllerHostService controllerHostService, Services.IUpdateService? updateService = null, DevLoginConfig? devConfig = null)
+    public MainWindowViewModel(IApiClient apiClient, IServerConnectionStore connectionStore, ISignalRService signalR, IWebRtcService webRtc, Services.ISettingsStore settingsStore, Services.IAudioDeviceService audioDeviceService, Services.IVideoDeviceService videoDeviceService, Services.IScreenCaptureService screenCaptureService, Services.IControllerService controllerService, Services.IControllerStreamingService controllerStreamingService, Services.IControllerHostService controllerHostService, StoreContainer stores, ISignalREventDispatcher signalREventDispatcher, Services.IUpdateService? updateService = null, DevLoginConfig? devConfig = null)
     {
         _apiClient = apiClient;
         _connectionStore = connectionStore;
@@ -50,6 +53,8 @@ public class MainWindowViewModel : ViewModelBase
         _controllerService = controllerService;
         _controllerStreamingService = controllerStreamingService;
         _controllerHostService = controllerHostService;
+        _stores = stores;
+        _signalREventDispatcher = signalREventDispatcher;
         _updateService = updateService ?? new Services.UpdateService();
 
         // Initialize update commands
@@ -542,7 +547,18 @@ public class MainWindowViewModel : ViewModelBase
         (_conversationStateService as IDisposable)?.Dispose();
         _conversationStateService = new ConversationStateService(_apiClient, auth.UserId);
 
-        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, _settingsStore, _audioDeviceService, _controllerStreamingService, _controllerHostService, CurrentServer!.Url, auth, _conversationStateService, OnLogout, OnSwitchServer, OnOpenSettings, gifsEnabled: _currentServerInfo?.GifsEnabled ?? false);
+        // Initialize SignalR event dispatcher with stores and user ID
+        _signalREventDispatcher.Initialize(
+            _stores.ChannelStore,
+            _stores.CommunityStore,
+            _stores.MessageStore,
+            _stores.VoiceStore,
+            _stores.PresenceStore,
+            _stores.GamingStationStore,
+            auth.UserId
+        );
+
+        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, _settingsStore, _audioDeviceService, _controllerStreamingService, _controllerHostService, CurrentServer!.Url, auth, _conversationStateService, _stores, _signalREventDispatcher, OnLogout, OnSwitchServer, OnOpenSettings, gifsEnabled: _currentServerInfo?.GifsEnabled ?? false);
     }
 
     private void OnOpenSettings()

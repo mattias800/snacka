@@ -78,14 +78,14 @@ public class AutocompleteCaretTests
         // Simulate typing "/"
         manager.HandleTextChange("/");
 
-        // Act - select /gif
-        var suggestion = manager.Suggestions.First(s => s.DisplayText == "/gif");
+        // Act - select /shrug (always available, unlike /gif which requires gifsEnabled)
+        var suggestion = manager.Suggestions.First(s => s.DisplayText == "/shrug");
         var result = manager.Select(suggestion, "/");
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal("/gif ", result.Value.newText);
-        Assert.Equal(5, result.Value.cursorPosition); // "/gif " = 5 characters
+        Assert.Equal("/shrug ", result.Value.newText);
+        Assert.Equal(7, result.Value.cursorPosition); // "/shrug " = 7 characters
     }
 
     [Fact]
@@ -95,17 +95,17 @@ public class AutocompleteCaretTests
         var manager = new AutocompleteManager();
         manager.RegisterSource(new SlashCommandAutocompleteSource());
 
-        // Simulate typing "/gi"
-        manager.HandleTextChange("/gi");
+        // Simulate typing "/sh" (partial match for /shrug)
+        manager.HandleTextChange("/sh");
 
-        // Act - select /gif
-        var suggestion = manager.Suggestions.First(s => s.DisplayText == "/gif");
-        var result = manager.Select(suggestion, "/gi");
+        // Act - select /shrug (always available, unlike /gif which requires gifsEnabled)
+        var suggestion = manager.Suggestions.First(s => s.DisplayText == "/shrug");
+        var result = manager.Select(suggestion, "/sh");
 
         // Assert
         Assert.NotNull(result);
-        Assert.Equal("/gif ", result.Value.newText);
-        Assert.Equal(5, result.Value.cursorPosition); // "/gif " = 5 characters
+        Assert.Equal("/shrug ", result.Value.newText);
+        Assert.Equal(7, result.Value.cursorPosition); // "/shrug " = 7 characters
     }
 
     [Fact]

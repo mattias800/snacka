@@ -1,6 +1,8 @@
 using System.Collections.ObjectModel;
 using System.Reactive;
+using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using DynamicData;
 using Avalonia.Controls;
 using Avalonia.Threading;
 using Snacka.Client.Controls;
@@ -8,6 +10,7 @@ using Snacka.Client.Models;
 using Snacka.Client.Services;
 using Snacka.Client.Services.Autocomplete;
 using Snacka.Client.Services.HardwareVideo;
+using Snacka.Client.Stores;
 using Snacka.Shared.Models;
 using ReactiveUI;
 
@@ -23,6 +26,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private readonly IAudioDeviceService _audioDeviceService;
     private readonly IControllerStreamingService _controllerStreamingService;
     private readonly IControllerHostService _controllerHostService;
+    private readonly StoreContainer _stores;
+    private readonly ISignalREventDispatcher _signalREventDispatcher;
     private readonly AuthResponse _auth;
     private readonly Action _onLogout;
     private readonly Action? _onSwitchServer;
@@ -183,11 +188,21 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private ConnectionState _connectionState = ConnectionState.Connected;
     private int _reconnectSecondsRemaining;
 
+    // Store subscriptions (for Redux-style state management migration)
+    private readonly CompositeDisposable _storeSubscriptions = new();
+
+    // Store-backed bindable collections (for view binding migration)
+    private readonly ReadOnlyObservableCollection<ChannelResponse> _storeTextChannels;
+    private readonly ReadOnlyObservableCollection<ChannelResponse> _storeVoiceChannels;
+    private readonly ReadOnlyObservableCollection<MessageResponse> _storeMessages;
+    private readonly ReadOnlyObservableCollection<CommunityMemberResponse> _storeMembers;
+    private readonly ReadOnlyObservableCollection<CommunityResponse> _storeCommunities;
+
     // Community discovery (extracted ViewModel)
     private CommunityDiscoveryViewModel? _communityDiscovery;
     private bool _isWelcomeModalOpen;
 
-    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, IConversationStateService conversationStateService, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false)
+    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, IConversationStateService conversationStateService, StoreContainer stores, ISignalREventDispatcher signalREventDispatcher, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
         _conversationStateService = conversationStateService;
@@ -204,6 +219,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _onLogout = onLogout;
         _onSwitchServer = onSwitchServer;
         _onOpenSettings = onOpenSettings;
+        _stores = stores;
+        _signalREventDispatcher = signalREventDispatcher;
 
         // Load persisted mute/deafen state
         _isMuted = _settingsStore.Settings.IsMuted;
@@ -275,7 +292,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Subscribe to WebRTC connection status changes
         _webRtc.ConnectionStatusChanged += status =>
         {
-            Dispatcher.UIThread.Post(() => VoiceConnectionStatus = status);
+            Dispatcher.UIThread.Post(() =>
+            {
+                VoiceConnectionStatus = status;
+                // Also update voice store (for migration to Redux-style architecture)
+                _stores.VoiceStore.SetConnectionStatus(status);
+            });
         };
 
         // Subscribe to SignalR connection state changes
@@ -292,6 +314,99 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             });
         };
         ConnectionState = _signalR.State;
+
+        // Subscribe to store changes (for Redux-style state management migration)
+        // These subscriptions complement the existing SignalR handlers and will eventually replace them
+        _storeSubscriptions.Add(
+            _stores.PresenceStore.ConnectionStatus
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(status =>
+                {
+                    // Update ViewModel state from store (eventually this will be the only source)
+                    if (_connectionState != status)
+                    {
+                        ConnectionState = status;
+                    }
+                }));
+
+        _storeSubscriptions.Add(
+            _stores.PresenceStore.ReconnectSecondsRemaining
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(seconds =>
+                {
+                    if (_reconnectSecondsRemaining != seconds)
+                    {
+                        ReconnectSecondsRemaining = seconds;
+                        this.RaisePropertyChanged(nameof(ReconnectStatusText));
+                    }
+                }));
+
+        _storeSubscriptions.Add(
+            _stores.VoiceStore.ConnectionStatus
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(status =>
+                {
+                    if (_voiceConnectionStatus != status)
+                    {
+                        VoiceConnectionStatus = status;
+                    }
+                }));
+
+        // Create store-backed bindable collections for channels
+        // These use DynamicData to transform ChannelState -> ChannelResponse and bind to ReadOnlyObservableCollection
+        _storeSubscriptions.Add(
+            _stores.ChannelStore.Connect()
+                .Filter(c => c.Type == ChannelType.Text)
+                .Transform(ToChannelResponse)
+                .SortBy(c => c.Position)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Bind(out _storeTextChannels)
+                .Subscribe());
+
+        _storeSubscriptions.Add(
+            _stores.ChannelStore.Connect()
+                .Filter(c => c.Type == ChannelType.Voice)
+                .Transform(ToChannelResponse)
+                .SortBy(c => c.Position)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Bind(out _storeVoiceChannels)
+                .Subscribe());
+
+        // Create store-backed bindable collection for messages
+        // Filter to current channel and exclude thread replies (shown in thread view)
+        _storeSubscriptions.Add(
+            _stores.MessageStore.Connect()
+                .AutoRefreshOnObservable(_ => _stores.MessageStore.CurrentChannelId)
+                .Filter(m =>
+                {
+                    var currentChannelId = _stores.MessageStore.GetCurrentChannelId();
+                    return currentChannelId.HasValue &&
+                           m.ChannelId == currentChannelId.Value &&
+                           m.ThreadParentMessageId == null; // Exclude thread replies
+                })
+                .Transform(ToMessageResponse)
+                .SortBy(m => m.CreatedAt)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Bind(out _storeMessages)
+                .Subscribe());
+
+        // Create store-backed bindable collection for community members
+        _storeSubscriptions.Add(
+            _stores.CommunityStore.ConnectMembers()
+                .Transform(ToCommunityMemberResponse)
+                .SortBy(m => m.Username)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Bind(out _storeMembers)
+                .Subscribe());
+
+        // Create store-backed bindable collection for communities
+        _storeSubscriptions.Add(
+            _stores.CommunityStore.Connect()
+                .Transform(ToCommunityResponse)
+                .SortBy(c => c.Name)
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Bind(out _storeCommunities)
+                .Subscribe());
 
         Communities = new ObservableCollection<CommunityResponse>();
         Channels = new ObservableCollection<ChannelResponse>();
@@ -335,17 +450,20 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         };
 
-        // Create the members list ViewModel
+        // Create the members list ViewModel (using store-backed collection)
         _membersListViewModel = new MembersListViewModel(
             apiClient,
             auth.UserId,
-            Members,
+            _storeMembers,
             _myGamingStations,
             () => SelectedCommunity?.Id ?? Guid.Empty,
             member => StartDMWithMember(member),
             userId => _conversationStateService.GetUnreadCountForUser(userId),
             () => Task.FromResult(_currentVoiceChannel is not null),
             machineId => CommandStationJoinCurrentChannelAsync(machineId),
+            (communityId, userId, nickname) => _stores.CommunityStore.UpdateMemberNickname(communityId, userId, nickname),
+            (communityId, userId, role) => _stores.CommunityStore.UpdateMemberRole(communityId, userId, role),
+            (communityId, members) => _stores.CommunityStore.SetMembers(communityId, members),
             error => ErrorMessage = error);
 
         // Create the activity feed ViewModel
@@ -594,15 +712,12 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         _signalR.ChannelCreated += channel => Dispatcher.UIThread.Post(() =>
         {
+            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
+            // StoreTextChannels auto-updates via DynamicData binding
+
             if (SelectedCommunity is not null && channel.CommunityId == SelectedCommunity.Id)
             {
-                if (!Channels.Any(c => c.Id == channel.Id))
-                {
-                    Channels.Add(channel);
-                    this.RaisePropertyChanged(nameof(TextChannels));
-                }
-
-                // Add VoiceChannelViewModel for voice channels
+                // Add VoiceChannelViewModel for voice channels (view-specific, not in store)
                 if (channel.Type == ChannelType.Voice && !VoiceChannelViewModels.Any(v => v.Id == channel.Id))
                 {
                     var vm = CreateVoiceChannelViewModel(channel);
@@ -614,34 +729,27 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.ChannelUpdated += channel => Dispatcher.UIThread.Post(() =>
         {
-            var index = Channels.ToList().FindIndex(c => c.Id == channel.Id);
-            if (index >= 0)
-            {
-                Channels[index] = channel;
-                if (SelectedChannel?.Id == channel.Id)
-                    SelectedChannel = channel;
-            }
+            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
+            // Update SelectedChannel if it's the one that changed
+            if (SelectedChannel?.Id == channel.Id)
+                SelectedChannel = channel;
         });
 
         _signalR.ChannelDeleted += e => Dispatcher.UIThread.Post(() =>
         {
-            var channel = Channels.FirstOrDefault(c => c.Id == e.ChannelId);
-            if (channel is not null)
+            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
+
+            // Remove VoiceChannelViewModel if it was a voice channel (view-specific, not in store)
+            var voiceVm = VoiceChannelViewModels.FirstOrDefault(v => v.Id == e.ChannelId);
+            if (voiceVm is not null)
             {
-                Channels.Remove(channel);
-                this.RaisePropertyChanged(nameof(TextChannels));
-
-                // Remove VoiceChannelViewModel if it was a voice channel
-                var voiceVm = VoiceChannelViewModels.FirstOrDefault(v => v.Id == e.ChannelId);
-                if (voiceVm is not null)
-                {
-                    VoiceChannelViewModels.Remove(voiceVm);
-                    Console.WriteLine($"SignalR ChannelDeleted: Removed VoiceChannelViewModel for {voiceVm.Name}");
-                }
-
-                if (SelectedChannel?.Id == e.ChannelId && Channels.Count > 0)
-                    SelectedChannel = Channels[0];
+                VoiceChannelViewModels.Remove(voiceVm);
+                Console.WriteLine($"SignalR ChannelDeleted: Removed VoiceChannelViewModel for {voiceVm.Name}");
             }
+
+            // Select a different channel if the deleted one was selected
+            if (SelectedChannel?.Id == e.ChannelId && _storeTextChannels.Count > 0)
+                SelectedChannel = _storeTextChannels[0];
         });
 
         _signalR.ChannelsReordered += e => Dispatcher.UIThread.Post(() =>
@@ -659,14 +767,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
             Console.WriteLine($"SignalR ChannelsReordered: Received {e.Channels.Count} channels for community {e.CommunityId}");
 
-            // Update channel list with new order
-            Channels.Clear();
-            foreach (var channel in e.Channels)
-            {
-                Channels.Add(channel);
-            }
+            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
+            // StoreTextChannels auto-updates via DynamicData binding
 
-            // Update VoiceChannelViewModels positions and re-sort
+            // Update VoiceChannelViewModels positions and re-sort (view-specific, not in store)
             foreach (var voiceVm in VoiceChannelViewModels)
             {
                 var updatedChannel = e.Channels.FirstOrDefault(c => c.Id == voiceVm.Id);
@@ -684,7 +788,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 VoiceChannelViewModels.Add(vm);
             }
 
-            this.RaisePropertyChanged(nameof(TextChannels));
             this.RaisePropertyChanged(nameof(VoiceChannelViewModels));
         });
 
@@ -699,156 +802,118 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 this.RaisePropertyChanged(nameof(IsAnyoneTyping));
             }
 
-            if (SelectedChannel is not null && message.ChannelId == SelectedChannel.Id)
+            // Message list updates handled by SignalREventDispatcher -> MessageStore
+            // StoreMessages auto-updates via DynamicData binding
+
+            // Update unread count for channels not currently selected
+            if (SelectedChannel is null || message.ChannelId != SelectedChannel.Id)
             {
-                // Don't add if it's our own message (we already added it optimistically)
-                if (!Messages.Any(m => m.Id == message.Id))
-                    Messages.Add(message);
-            }
-            else
-            {
-                // Update unread count for channels not currently selected
-                var channelIndex = Channels.ToList().FindIndex(c => c.Id == message.ChannelId);
-                if (channelIndex >= 0 && message.AuthorId != _auth.UserId)
+                if (message.AuthorId != _auth.UserId)
                 {
-                    var channel = Channels[channelIndex];
-                    Channels[channelIndex] = channel with { UnreadCount = channel.UnreadCount + 1 };
+                    _stores.ChannelStore.IncrementUnreadCount(message.ChannelId);
                 }
             }
         });
 
         _signalR.MessageEdited += message => Dispatcher.UIThread.Post(() =>
         {
-            // Update in main message list
-            var index = Messages.ToList().FindIndex(m => m.Id == message.Id);
-            if (index >= 0)
-                Messages[index] = message;
+            // Message list updates handled by SignalREventDispatcher -> MessageStore
 
-            // Update in thread replies if thread is open
+            // Update in thread replies if thread is open (view-specific state)
             CurrentThread?.UpdateReply(message);
         });
 
         _signalR.MessageDeleted += e => Dispatcher.UIThread.Post(() =>
         {
-            var message = Messages.FirstOrDefault(m => m.Id == e.MessageId);
-            if (message is not null)
-                Messages.Remove(message);
+            // Message list updates handled by SignalREventDispatcher -> MessageStore
 
-            // Also remove from thread if open
+            // Also remove from thread if open (view-specific state)
             CurrentThread?.RemoveReply(e.MessageId);
         });
 
         // Thread events
         _signalR.ThreadReplyReceived += e => Dispatcher.UIThread.Post(() =>
         {
-            // If this thread is currently open, add the reply
+            // If this thread is currently open, add the reply (view-specific state)
             if (CurrentThread?.ParentMessage?.Id == e.ParentMessageId)
             {
                 CurrentThread.AddReply(e.Reply);
             }
 
-            // Update the parent message's reply count in the main message list
-            var index = Messages.ToList().FindIndex(m => m.Id == e.ParentMessageId);
-            if (index >= 0)
+            // Update the parent message's reply count in the store
+            var existingMessage = _stores.MessageStore.GetMessage(e.ParentMessageId);
+            if (existingMessage is not null)
             {
-                var message = Messages[index];
-                Messages[index] = message with
-                {
-                    ReplyCount = message.ReplyCount + 1,
-                    LastReplyAt = e.Reply.CreatedAt
-                };
+                _stores.MessageStore.UpdateThreadMetadata(
+                    e.ParentMessageId,
+                    existingMessage.ReplyCount + 1,
+                    e.Reply.CreatedAt);
             }
         });
 
-        _signalR.ThreadMetadataUpdated += e => Dispatcher.UIThread.Post(() =>
-        {
-            // Update the message's thread metadata in the main message list
-            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
-            if (index >= 0)
-            {
-                var message = Messages[index];
-                Messages[index] = message with
-                {
-                    ReplyCount = e.ReplyCount,
-                    LastReplyAt = e.LastReplyAt
-                };
-            }
-        });
+        // ThreadMetadataUpdated is handled by SignalREventDispatcher -> MessageStore
 
         _signalR.ReactionUpdated += e => Dispatcher.UIThread.Post(() =>
         {
-            // Helper to update reactions on a message
-            List<ReactionSummary> UpdateReactions(MessageResponse message)
-            {
-                var reactions = message.Reactions?.ToList() ?? new List<ReactionSummary>();
-                var reactionIndex = reactions.FindIndex(r => r.Emoji == e.Emoji);
+            // Main message list updates handled by SignalREventDispatcher -> MessageStore
 
-                if (e.Added)
-                {
-                    if (reactionIndex >= 0)
-                    {
-                        var existing = reactions[reactionIndex];
-                        var users = existing.Users.ToList();
-                        if (!users.Any(u => u.UserId == e.UserId))
-                            users.Add(new ReactionUser(e.UserId, e.Username, e.EffectiveDisplayName));
-                        reactions[reactionIndex] = existing with
-                        {
-                            Count = e.Count,
-                            HasReacted = existing.HasReacted || e.UserId == _auth.UserId,
-                            Users = users
-                        };
-                    }
-                    else
-                    {
-                        reactions.Add(new ReactionSummary(
-                            e.Emoji,
-                            e.Count,
-                            e.UserId == _auth.UserId,
-                            new List<ReactionUser> { new(e.UserId, e.Username, e.EffectiveDisplayName) }
-                        ));
-                    }
-                }
-                else
-                {
-                    if (reactionIndex >= 0)
-                    {
-                        if (e.Count == 0)
-                        {
-                            reactions.RemoveAt(reactionIndex);
-                        }
-                        else
-                        {
-                            var existing = reactions[reactionIndex];
-                            var users = existing.Users.Where(u => u.UserId != e.UserId).ToList();
-                            reactions[reactionIndex] = existing with
-                            {
-                                Count = e.Count,
-                                HasReacted = e.UserId == _auth.UserId ? false : existing.HasReacted,
-                                Users = users
-                            };
-                        }
-                    }
-                }
-                return reactions;
-            }
-
-            // Update in main message list
-            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
-            if (index >= 0)
-            {
-                var message = Messages[index];
-                var reactions = UpdateReactions(message);
-                Messages[index] = message with { Reactions = reactions.Count > 0 ? reactions : null };
-            }
-
-            // Update in thread replies if thread is open
+            // Update in thread replies if thread is open (view-specific state)
             if (CurrentThread != null)
             {
                 var replyIndex = CurrentThread.Replies.ToList().FindIndex(m => m.Id == e.MessageId);
                 if (replyIndex >= 0)
                 {
                     var reply = CurrentThread.Replies[replyIndex];
-                    var reactions = UpdateReactions(reply);
+                    var reactions = reply.Reactions?.ToList() ?? new List<ReactionSummary>();
+                    var reactionIndex = reactions.FindIndex(r => r.Emoji == e.Emoji);
+
+                    if (e.Added)
+                    {
+                        if (reactionIndex >= 0)
+                        {
+                            var existing = reactions[reactionIndex];
+                            var users = existing.Users.ToList();
+                            if (!users.Any(u => u.UserId == e.UserId))
+                                users.Add(new ReactionUser(e.UserId, e.Username, e.EffectiveDisplayName));
+                            reactions[reactionIndex] = existing with
+                            {
+                                Count = e.Count,
+                                HasReacted = existing.HasReacted || e.UserId == _auth.UserId,
+                                Users = users
+                            };
+                        }
+                        else
+                        {
+                            reactions.Add(new ReactionSummary(
+                                e.Emoji,
+                                e.Count,
+                                e.UserId == _auth.UserId,
+                                new List<ReactionUser> { new(e.UserId, e.Username, e.EffectiveDisplayName) }
+                            ));
+                        }
+                    }
+                    else
+                    {
+                        if (reactionIndex >= 0)
+                        {
+                            if (e.Count == 0)
+                            {
+                                reactions.RemoveAt(reactionIndex);
+                            }
+                            else
+                            {
+                                var existing = reactions[reactionIndex];
+                                var users = existing.Users.Where(u => u.UserId != e.UserId).ToList();
+                                reactions[reactionIndex] = existing with
+                                {
+                                    Count = e.Count,
+                                    HasReacted = e.UserId == _auth.UserId ? false : existing.HasReacted,
+                                    Users = users
+                                };
+                            }
+                        }
+                    }
+
                     CurrentThread.Replies[replyIndex] = reply with { Reactions = reactions.Count > 0 ? reactions : null };
                 }
             }
@@ -856,43 +921,21 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.MessagePinned += e => Dispatcher.UIThread.Post(() =>
         {
-            // Update message in the main list
-            var index = Messages.ToList().FindIndex(m => m.Id == e.MessageId);
-            if (index >= 0)
-            {
-                var message = Messages[index];
-                Messages[index] = message with
-                {
-                    IsPinned = e.IsPinned,
-                    PinnedAt = e.PinnedAt,
-                    PinnedByUsername = e.PinnedByUsername
-                };
-            }
+            // Message list updates handled by SignalREventDispatcher -> MessageStore
 
-            // Update pinned messages popup if open
+            // Update pinned messages popup if open (view-specific state)
             _pinnedMessagesPopup?.OnMessagePinStatusChanged(e.MessageId, e.IsPinned);
         });
 
-        _signalR.UserOnline += e => Dispatcher.UIThread.Post(() =>
-        {
-            var index = Members.ToList().FindIndex(m => m.UserId == e.UserId);
-            if (index >= 0)
-                Members[index] = Members[index] with { IsOnline = true };
-        });
-
-        _signalR.UserOffline += e => Dispatcher.UIThread.Post(() =>
-        {
-            var index = Members.ToList().FindIndex(m => m.UserId == e.UserId);
-            if (index >= 0)
-                Members[index] = Members[index] with { IsOnline = false };
-        });
+        // UserOnline/UserOffline events are now handled by SignalREventDispatcher -> CommunityStore
+        // StoreMembers auto-updates via DynamicData binding
 
         _signalR.CommunityMemberAdded += e =>
         {
             Console.WriteLine($"CommunityMemberAdded event received: communityId={e.CommunityId}, userId={e.UserId}");
             Console.WriteLine($"SelectedCommunity: {SelectedCommunity?.Id} ({SelectedCommunity?.Name})");
 
-            // If this is for the currently selected community, reload members
+            // If this is for the currently selected community, reload members into the store
             if (SelectedCommunity is not null && e.CommunityId == SelectedCommunity.Id)
             {
                 Console.WriteLine("Reloading members list...");
@@ -904,10 +947,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                         if (result.Success && result.Data is not null)
                         {
                             Console.WriteLine($"Loaded {result.Data.Count()} members");
-                            Members.Clear();
-                            foreach (var member in result.Data)
-                                Members.Add(member);
-                            this.RaisePropertyChanged(nameof(SortedMembers));
+                            // Update the store - StoreMembers will auto-update via DynamicData
+                            _stores.CommunityStore.SetMembers(SelectedCommunity.Id, result.Data);
                         }
                         else
                         {
@@ -926,19 +967,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         };
 
-        _signalR.CommunityMemberRemoved += e => Dispatcher.UIThread.Post(() =>
-        {
-            // If this is for the currently selected community, remove the member
-            if (SelectedCommunity is not null && e.CommunityId == SelectedCommunity.Id)
-            {
-                var member = Members.FirstOrDefault(m => m.UserId == e.UserId);
-                if (member is not null)
-                {
-                    Members.Remove(member);
-                    this.RaisePropertyChanged(nameof(SortedMembers));
-                }
-            }
-        });
+        // CommunityMemberRemoved event is now handled by SignalREventDispatcher -> CommunityStore
+        // StoreMembers auto-updates via DynamicData binding
 
         // Voice channel events - update VoiceChannelViewModels, VoiceParticipants, and VoiceChannelContent
         _signalR.VoiceParticipantJoined += e => Dispatcher.UIThread.Post(() =>
@@ -1420,6 +1450,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         if (SelectedCommunity is null) return;
 
+        // Update the community store with the selection (for migration to Redux-style architecture)
+        _stores.CommunityStore.SelectCommunity(SelectedCommunity.Id);
+
         // Join SignalR group for this community
         await _signalR.JoinServerAsync(SelectedCommunity.Id);
         await LoadChannelsAsync();
@@ -1434,6 +1467,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         if (SelectedChannel is not null && SelectedCommunity is not null)
         {
             _previousChannelId = SelectedChannel.Id;
+
+            // Update the channel store with the selection (for migration to Redux-style architecture)
+            _stores.ChannelStore.SelectChannel(SelectedChannel.Id);
+
             await _signalR.JoinChannelAsync(SelectedChannel.Id);
 
             // Mark channel as read and update the local unread count
@@ -1447,6 +1484,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 Channels[idx] = updated;
                 SelectedChannel = updated;
             }
+
+            // Also update unread count in the channel store
+            _stores.ChannelStore.UpdateUnreadCount(SelectedChannel.Id, 0);
         }
 
         await LoadMessagesAsync();
@@ -1773,6 +1813,67 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public string ReconnectStatusText => _reconnectSecondsRemaining > 0
         ? $"Reconnecting in {_reconnectSecondsRemaining}s..."
         : "Reconnecting...";
+
+    #region Store-Backed Observables (Redux-style state management)
+
+    /// <summary>
+    /// Observable total unread count from ChannelStore.
+    /// Views can bind to this for notification badges.
+    /// </summary>
+    public IObservable<int> TotalChannelUnreadCount => _stores.ChannelStore.TotalUnreadCount;
+
+    /// <summary>
+    /// Observable connection status from PresenceStore.
+    /// </summary>
+    public IObservable<ConnectionState> ConnectionStatusObservable => _stores.PresenceStore.ConnectionStatus;
+
+    /// <summary>
+    /// Observable voice connection status from VoiceStore.
+    /// </summary>
+    public IObservable<VoiceConnectionStatus> VoiceConnectionStatusObservable => _stores.VoiceStore.ConnectionStatus;
+
+    /// <summary>
+    /// Observable list of online user IDs from PresenceStore.
+    /// </summary>
+    public IObservable<IReadOnlyCollection<Guid>> OnlineUserIds => _stores.PresenceStore.OnlineUserIds;
+
+    /// <summary>
+    /// Observable voice participants for current channel from VoiceStore.
+    /// </summary>
+    public IObservable<IReadOnlyCollection<VoiceParticipantState>> VoiceParticipantsObservable =>
+        _stores.VoiceStore.CurrentChannelParticipants;
+
+    /// <summary>
+    /// Store-backed text channels collection.
+    /// Views can bind to this instead of the TextChannels computed property.
+    /// </summary>
+    public ReadOnlyObservableCollection<ChannelResponse> StoreTextChannels => _storeTextChannels;
+
+    /// <summary>
+    /// Store-backed voice channels collection.
+    /// Views can bind to this instead of getting VoiceChannelViewModels.
+    /// </summary>
+    public ReadOnlyObservableCollection<ChannelResponse> StoreVoiceChannels => _storeVoiceChannels;
+
+    /// <summary>
+    /// Store-backed messages collection for the current channel.
+    /// Views can bind to this instead of the Messages property.
+    /// </summary>
+    public ReadOnlyObservableCollection<MessageResponse> StoreMessages => _storeMessages;
+
+    /// <summary>
+    /// Store-backed members collection for the current community.
+    /// Views can bind to this instead of the Members property.
+    /// </summary>
+    public ReadOnlyObservableCollection<CommunityMemberResponse> StoreMembers => _storeMembers;
+
+    /// <summary>
+    /// Store-backed communities collection.
+    /// Views can bind to this instead of the Communities property.
+    /// </summary>
+    public ReadOnlyObservableCollection<CommunityResponse> StoreCommunities => _storeCommunities;
+
+    #endregion
 
     public ChannelResponse? EditingChannel
     {
@@ -2417,7 +2518,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     }
 
     // Computed properties for channel filtering
-    public IEnumerable<ChannelResponse> TextChannels => Channels.Where(c => c.Type == ChannelType.Text);
+    // Now using store-backed collection for reactive updates
+    public IEnumerable<ChannelResponse> TextChannels => _storeTextChannels;
 
     // Voice channels with reactive participant tracking
     public ObservableCollection<VoiceChannelViewModel> VoiceChannelViewModels
@@ -3042,6 +3144,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 foreach (var community in result.Data)
                     Communities.Add(community);
 
+                // Also populate the community store (for migration to Redux-style architecture)
+                _stores.CommunityStore.SetCommunities(result.Data);
+
                 // Notify HasNoCommunities property
                 this.RaisePropertyChanged(nameof(HasNoCommunities));
 
@@ -3103,8 +3208,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 foreach (var channel in channelsResult.Data)
                     Channels.Add(channel);
 
+                // Also populate the channel store (for migration to Redux-style architecture)
+                _stores.ChannelStore.SetChannels(channelsResult.Data);
+
                 // Notify computed properties
-                this.RaisePropertyChanged(nameof(TextChannels));
+                // TextChannels is now store-backed - auto-updates via ReadOnlyObservableCollection
 
                 // Create VoiceChannelViewModels for all voice channels
                 var voiceChannels = channelsResult.Data.Where(c => c.Type == ChannelType.Voice).ToList();
@@ -3136,6 +3244,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 Members.Clear();
                 foreach (var member in membersResult.Data)
                     Members.Add(member);
+
+                // Also populate the community store members (for migration to Redux-style architecture)
+                _stores.CommunityStore.SetMembers(SelectedCommunity.Id, membersResult.Data);
+
                 this.RaisePropertyChanged(nameof(SortedMembers));
                 _membersListViewModel?.NotifyMembersChanged();
 
@@ -3164,6 +3276,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 Messages.Clear();
                 foreach (var message in result.Data)
                     Messages.Add(message);
+
+                // Also populate the message store (for migration to Redux-style architecture)
+                _stores.MessageStore.SetMessages(SelectedChannel.Id, result.Data);
+                _stores.MessageStore.SetCurrentChannel(SelectedChannel.Id);
             }
         }
         finally
@@ -3462,7 +3578,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 if (!Channels.Any(c => c.Id == result.Data.Id))
                 {
                     Channels.Add(result.Data);
-                    this.RaisePropertyChanged(nameof(TextChannels));
+                    // TextChannels is now store-backed - auto-updates via ReadOnlyObservableCollection
                 }
                 SelectedChannel = result.Data;
             }
@@ -3671,7 +3787,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             VoiceChannelViewModels.Add(vm);
         }
 
-        this.RaisePropertyChanged(nameof(TextChannels));
+        // TextChannels is now store-backed - auto-updates via ReadOnlyObservableCollection
         this.RaisePropertyChanged(nameof(VoiceChannelViewModels));
     }
 
@@ -3691,7 +3807,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             VoiceChannelViewModels.Add(vm);
         }
 
-        this.RaisePropertyChanged(nameof(TextChannels));
+        // TextChannels is now store-backed - auto-updates via ReadOnlyObservableCollection
         this.RaisePropertyChanged(nameof(VoiceChannelViewModels));
     }
 
@@ -3898,6 +4014,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Show connecting state immediately for better UX
         CurrentVoiceChannel = channel;
         VoiceConnectionStatus = VoiceConnectionStatus.Connecting;
+        // Also update voice store (for migration to Redux-style architecture)
+        _stores.VoiceStore.SetConnectionStatus(VoiceConnectionStatus.Connecting);
 
         var participant = await _signalR.JoinVoiceChannelAsync(channel.Id);
         if (participant is not null)
@@ -3948,6 +4066,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             // Join failed - reset state
             CurrentVoiceChannel = null;
             VoiceConnectionStatus = VoiceConnectionStatus.Disconnected;
+            // Also update voice store (for migration to Redux-style architecture)
+            _stores.VoiceStore.SetConnectionStatus(VoiceConnectionStatus.Disconnected);
             Console.WriteLine($"Failed to join voice channel: {channel.Name}");
         }
     }
@@ -3987,6 +4107,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsCameraOn = false;
         IsScreenSharing = false;
 
+        // Clear voice store participants (for migration to Redux-style architecture)
+        _stores.VoiceStore.Clear();
+
         // Close voice video overlay and clear content view
         IsVoiceVideoOverlayOpen = false;
         SelectedVoiceChannelForViewing = null;
@@ -4014,6 +4137,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Persist to settings
         _settingsStore.Settings.IsMuted = IsMuted;
         _settingsStore.Save();
+
+        // Update voice store (for migration to Redux-style architecture)
+        _stores.VoiceStore.SetLocalMuted(IsMuted);
 
         // If in a voice channel, apply immediately
         if (CurrentVoiceChannel is not null)
@@ -4055,6 +4181,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Persist to settings
         _settingsStore.Settings.IsDeafened = IsDeafened;
         _settingsStore.Save();
+
+        // Update voice store (for migration to Redux-style architecture)
+        _stores.VoiceStore.SetLocalMuted(IsMuted);
+        _stores.VoiceStore.SetLocalDeafened(IsDeafened);
 
         // If in a voice channel, apply immediately
         if (CurrentVoiceChannel is not null)
@@ -4750,8 +4880,116 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     {
         HideSharerAnnotationOverlay();
         _typingCleanupTimer?.Dispose();
+        _storeSubscriptions.Dispose();
         _ = _signalR.DisposeAsync();
     }
+
+    #region Store State Conversion Helpers
+
+    /// <summary>
+    /// Converts a ChannelState (from store) to ChannelResponse (for view binding).
+    /// </summary>
+    private static ChannelResponse ToChannelResponse(ChannelState state) =>
+        new(
+            Id: state.Id,
+            Name: state.Name,
+            Topic: state.Topic,
+            CommunityId: state.CommunityId,
+            Type: state.Type,
+            Position: state.Position,
+            CreatedAt: state.CreatedAt,
+            UnreadCount: state.UnreadCount
+        );
+
+    /// <summary>
+    /// Converts a CommunityState (from store) to CommunityResponse (for view binding).
+    /// </summary>
+    private static CommunityResponse ToCommunityResponse(CommunityState state) =>
+        new(
+            Id: state.Id,
+            Name: state.Name,
+            Description: state.Description,
+            Icon: state.Icon,
+            OwnerId: state.OwnerId,
+            OwnerUsername: state.OwnerUsername,
+            OwnerEffectiveDisplayName: state.OwnerEffectiveDisplayName,
+            CreatedAt: state.CreatedAt,
+            MemberCount: state.MemberCount
+        );
+
+    /// <summary>
+    /// Converts a MessageState (from store) to MessageResponse (for view binding).
+    /// </summary>
+    private static MessageResponse ToMessageResponse(MessageState state) =>
+        new(
+            Id: state.Id,
+            Content: state.Content,
+            AuthorId: state.AuthorId,
+            AuthorUsername: state.AuthorUsername,
+            AuthorEffectiveDisplayName: state.AuthorEffectiveDisplayName,
+            AuthorAvatar: state.AuthorAvatar,
+            ChannelId: state.ChannelId,
+            CreatedAt: state.CreatedAt,
+            UpdatedAt: state.UpdatedAt,
+            IsEdited: state.IsEdited,
+            ReplyToId: state.ReplyToId,
+            ReplyTo: state.ReplyTo != null ? ToReplyPreview(state.ReplyTo) : null,
+            Reactions: state.Reactions.Select(ToReactionSummary).ToList(),
+            IsPinned: state.IsPinned,
+            PinnedAt: state.PinnedAt,
+            PinnedByUsername: state.PinnedByUsername,
+            PinnedByEffectiveDisplayName: state.PinnedByEffectiveDisplayName,
+            Attachments: state.Attachments.Select(ToAttachmentResponse).ToList(),
+            ThreadParentMessageId: state.ThreadParentMessageId,
+            ReplyCount: state.ReplyCount,
+            LastReplyAt: state.LastReplyAt
+        );
+
+    private static ReplyPreview ToReplyPreview(ReplyPreviewState state) =>
+        new(
+            Id: state.Id,
+            Content: state.Content,
+            AuthorId: state.AuthorId,
+            AuthorUsername: state.AuthorUsername,
+            AuthorEffectiveDisplayName: state.AuthorEffectiveDisplayName
+        );
+
+    private static ReactionSummary ToReactionSummary(ReactionState state) =>
+        new(
+            Emoji: state.Emoji,
+            Count: state.Count,
+            HasReacted: state.HasReacted,
+            Users: state.Users.Select(u => new ReactionUser(u.UserId, u.Username, u.EffectiveDisplayName)).ToList()
+        );
+
+    private static AttachmentResponse ToAttachmentResponse(AttachmentState state) =>
+        new(
+            Id: state.Id,
+            FileName: state.FileName,
+            ContentType: state.ContentType,
+            FileSize: state.FileSize,
+            IsImage: state.IsImage,
+            IsAudio: state.IsAudio,
+            Url: state.Url
+        );
+
+    /// <summary>
+    /// Converts a CommunityMemberState (from store) to CommunityMemberResponse (for view binding).
+    /// </summary>
+    private static CommunityMemberResponse ToCommunityMemberResponse(CommunityMemberState state) =>
+        new(
+            UserId: state.UserId,
+            Username: state.Username,
+            DisplayName: state.DisplayName,
+            DisplayNameOverride: state.DisplayNameOverride,
+            EffectiveDisplayName: state.EffectiveDisplayName,
+            Avatar: state.Avatar,
+            IsOnline: state.IsOnline,
+            Role: state.Role,
+            JoinedAt: state.JoinedAt
+        );
+
+    #endregion
 }
 
 /// <summary>
