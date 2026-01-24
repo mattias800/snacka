@@ -3,6 +3,7 @@ using ReactiveUI;
 using Snacka.Client.Services;
 using Snacka.Client.Services.HardwareVideo;
 using Snacka.Client.Services.WebRtc;
+using Snacka.Client.Stores;
 using Snacka.Shared.Models;
 
 namespace Snacka.Client.ViewModels;
@@ -10,14 +11,15 @@ namespace Snacka.Client.ViewModels;
 /// <summary>
 /// ViewModel for the fullscreen video overlay.
 /// Handles fullscreen video display, GPU rendering, annotations, and controller streaming.
+/// Reads current voice channel from VoiceStore (Redux-style).
 /// </summary>
 public class VideoFullscreenViewModel : ReactiveObject, IDisposable
 {
     private readonly IWebRtcService _webRtc;
     private readonly AnnotationService _annotationService;
     private readonly IControllerStreamingService _controllerStreamingService;
+    private readonly IVoiceStore _voiceStore;
     private readonly Guid _currentUserId;
-    private readonly Func<Guid?> _getCurrentVoiceChannelId;
 
     private bool _isOpen;
     private VideoStreamViewModel? _stream;
@@ -39,14 +41,14 @@ public class VideoFullscreenViewModel : ReactiveObject, IDisposable
         IWebRtcService webRtc,
         AnnotationService annotationService,
         IControllerStreamingService controllerStreamingService,
-        Guid currentUserId,
-        Func<Guid?> getCurrentVoiceChannelId)
+        IVoiceStore voiceStore,
+        Guid currentUserId)
     {
         _webRtc = webRtc;
         _annotationService = annotationService;
         _controllerStreamingService = controllerStreamingService;
+        _voiceStore = voiceStore;
         _currentUserId = currentUserId;
-        _getCurrentVoiceChannelId = getCurrentVoiceChannelId;
 
         // Subscribe to annotation events
         _annotationService.StrokeAdded += OnAnnotationStrokeAdded;
@@ -285,7 +287,7 @@ public class VideoFullscreenViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task ToggleControllerAccessAsync(VideoStreamViewModel stream)
     {
-        var channelId = _getCurrentVoiceChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
         if (channelId == null) return;
         if (stream.StreamType != VideoStreamType.ScreenShare) return;
         if (stream.UserId == _currentUserId) return;
@@ -306,7 +308,7 @@ public class VideoFullscreenViewModel : ReactiveObject, IDisposable
 
     public async Task AddAnnotationStrokeAsync(DrawingStroke stroke)
     {
-        var channelId = _getCurrentVoiceChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
         if (channelId == null || Stream == null) return;
 
         await _annotationService.AddStrokeAsync(channelId.Value, Stream.UserId, stroke);
@@ -314,7 +316,7 @@ public class VideoFullscreenViewModel : ReactiveObject, IDisposable
 
     public async Task UpdateAnnotationStrokeAsync(DrawingStroke stroke)
     {
-        var channelId = _getCurrentVoiceChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
         if (channelId == null || Stream == null) return;
 
         await _annotationService.UpdateStrokeAsync(channelId.Value, Stream.UserId, stroke);
@@ -322,7 +324,7 @@ public class VideoFullscreenViewModel : ReactiveObject, IDisposable
 
     public async Task ClearAnnotationsAsync()
     {
-        var channelId = _getCurrentVoiceChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
         if (channelId == null || Stream == null) return;
 
         await _annotationService.ClearStrokesAsync(channelId.Value, Stream.UserId);

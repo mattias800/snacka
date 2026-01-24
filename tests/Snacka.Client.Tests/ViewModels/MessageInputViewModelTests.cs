@@ -12,6 +12,7 @@ public class MessageInputViewModelTests
     private readonly Mock<IApiClient> _apiClientMock;
     private readonly Mock<ISignalRService> _signalRMock;
     private readonly Mock<IMessageStore> _messageStoreMock;
+    private readonly Mock<IChannelStore> _channelStoreMock;
     private readonly Guid _userId = Guid.NewGuid();
     private readonly Guid _channelId = Guid.NewGuid();
 
@@ -20,6 +21,8 @@ public class MessageInputViewModelTests
         _apiClientMock = new Mock<IApiClient>();
         _signalRMock = new Mock<ISignalRService>();
         _messageStoreMock = new Mock<IMessageStore>();
+        _channelStoreMock = new Mock<IChannelStore>();
+        _channelStoreMock.Setup(s => s.GetSelectedChannelId()).Returns(_channelId);
     }
 
     private MessageResponse CreateMessageResponse(
@@ -55,21 +58,15 @@ public class MessageInputViewModelTests
     }
 
     private MessageInputViewModel CreateViewModel(
-        Func<Guid?>? getCurrentChannelId = null,
-        Func<ChannelResponse?>? getSelectedChannel = null,
         Func<IEnumerable<CommunityMemberResponse>>? getMembers = null,
         bool gifsEnabled = false)
     {
-        var channel = new ChannelResponse(
-            _channelId, "test-channel", null, Guid.NewGuid(), ChannelType.Text, 0, DateTime.UtcNow, 0);
-
         return new MessageInputViewModel(
             _apiClientMock.Object,
             _signalRMock.Object,
             _messageStoreMock.Object,
+            _channelStoreMock.Object,
             _userId,
-            getCurrentChannelId ?? (() => _channelId),
-            getSelectedChannel ?? (() => channel),
             getMembers ?? (() => Array.Empty<CommunityMemberResponse>()),
             gifsEnabled);
     }

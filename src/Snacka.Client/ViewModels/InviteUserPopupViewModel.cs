@@ -2,17 +2,19 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using ReactiveUI;
 using Snacka.Client.Services;
+using Snacka.Client.Stores;
 
 namespace Snacka.Client.ViewModels;
 
 /// <summary>
 /// ViewModel for the invite user popup.
 /// Handles searching for users and sending community invites.
+/// Reads current community from CommunityStore (Redux-style).
 /// </summary>
 public class InviteUserPopupViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
-    private readonly Func<Guid?> _getSelectedCommunityId;
+    private readonly ICommunityStore _communityStore;
 
     private bool _isOpen;
     private string _searchQuery = string.Empty;
@@ -22,10 +24,10 @@ public class InviteUserPopupViewModel : ViewModelBase
     private string? _statusMessage;
     private bool _isStatusError;
 
-    public InviteUserPopupViewModel(IApiClient apiClient, Func<Guid?> getSelectedCommunityId)
+    public InviteUserPopupViewModel(IApiClient apiClient, ICommunityStore communityStore)
     {
         _apiClient = apiClient;
-        _getSelectedCommunityId = getSelectedCommunityId;
+        _communityStore = communityStore;
 
         OpenCommand = ReactiveCommand.Create(Open);
         CloseCommand = ReactiveCommand.Create(Close);
@@ -80,7 +82,7 @@ public class InviteUserPopupViewModel : ViewModelBase
 
     private void Open()
     {
-        var communityId = _getSelectedCommunityId();
+        var communityId = _communityStore.GetSelectedCommunityId();
         if (communityId == null) return;
 
         SearchQuery = string.Empty;
@@ -99,7 +101,7 @@ public class InviteUserPopupViewModel : ViewModelBase
 
     public async Task SearchUsersAsync(string query)
     {
-        var communityId = _getSelectedCommunityId();
+        var communityId = _communityStore.GetSelectedCommunityId();
         if (communityId == null) return;
 
         IsSearching = true;
@@ -137,7 +139,7 @@ public class InviteUserPopupViewModel : ViewModelBase
 
     private async Task InviteUserAsync(UserSearchResult user)
     {
-        var communityId = _getSelectedCommunityId();
+        var communityId = _communityStore.GetSelectedCommunityId();
         if (communityId == null) return;
 
         StatusMessage = null;

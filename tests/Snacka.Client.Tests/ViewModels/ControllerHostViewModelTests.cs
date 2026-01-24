@@ -1,6 +1,7 @@
 using System.Collections.ObjectModel;
 using Moq;
 using Snacka.Client.Services;
+using Snacka.Client.Stores;
 using Snacka.Client.ViewModels;
 using Xunit;
 
@@ -9,6 +10,7 @@ namespace Snacka.Client.Tests.ViewModels;
 public class ControllerHostViewModelTests
 {
     private readonly Mock<IControllerHostService> _controllerHostServiceMock;
+    private readonly Mock<IVoiceStore> _voiceStoreMock;
     private readonly ObservableCollection<ControllerAccessRequest> _pendingRequests;
     private readonly ObservableCollection<ActiveControllerSession> _activeSessions;
 
@@ -20,13 +22,16 @@ public class ControllerHostViewModelTests
         _controllerHostServiceMock = new Mock<IControllerHostService>();
         _controllerHostServiceMock.Setup(x => x.PendingRequests).Returns(_pendingRequests);
         _controllerHostServiceMock.Setup(x => x.ActiveSessions).Returns(_activeSessions);
+
+        _voiceStoreMock = new Mock<IVoiceStore>();
+        _voiceStoreMock.Setup(s => s.GetCurrentChannelId()).Returns(Guid.NewGuid());
     }
 
-    private ControllerHostViewModel CreateViewModel(Func<Guid?>? getChannelId = null)
+    private ControllerHostViewModel CreateViewModel()
     {
         return new ControllerHostViewModel(
             _controllerHostServiceMock.Object,
-            getChannelId ?? (() => Guid.NewGuid()));
+            _voiceStoreMock.Object);
     }
 
     #region Constructor Tests

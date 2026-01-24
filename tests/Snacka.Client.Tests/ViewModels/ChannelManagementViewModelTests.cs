@@ -12,6 +12,7 @@ public class ChannelManagementViewModelTests
 {
     private readonly Mock<IChannelCoordinator> _channelCoordinatorMock;
     private readonly Mock<IChannelStore> _channelStoreMock;
+    private readonly Mock<ICommunityStore> _communityStoreMock;
     private readonly Guid _communityId = Guid.NewGuid();
     private readonly Guid _channelId = Guid.NewGuid();
 
@@ -19,11 +20,12 @@ public class ChannelManagementViewModelTests
     {
         _channelCoordinatorMock = new Mock<IChannelCoordinator>();
         _channelStoreMock = new Mock<IChannelStore>();
+        _communityStoreMock = new Mock<ICommunityStore>();
     }
 
-    private CommunityResponse CreateCommunity(Guid? id = null, string name = "Test Community")
+    private CommunityState CreateCommunityState(Guid? id = null, string name = "Test Community")
     {
-        return new CommunityResponse(
+        return new CommunityState(
             Id: id ?? _communityId,
             Name: name,
             Description: "A test community",
@@ -35,43 +37,42 @@ public class ChannelManagementViewModelTests
             MemberCount: 1);
     }
 
-    private ChannelResponse CreateChannel(
+    private ChannelState CreateChannelState(
         Guid? id = null,
         string name = "test-channel",
         Guid? communityId = null)
     {
-        return new ChannelResponse(
+        return new ChannelState(
             id ?? _channelId,
             name,
             null,
-            communityId ?? _communityId,
             ChannelType.Text,
+            communityId ?? _communityId,
             0,
-            DateTime.UtcNow,
-            0);
+            0,
+            DateTime.UtcNow);
     }
 
     private ChannelManagementViewModel CreateViewModel(
-        CommunityResponse? selectedCommunity = null,
-        ChannelResponse? selectedChannel = null,
-        List<ChannelResponse>? allChannels = null,
-        List<ChannelResponse>? textChannels = null)
+        CommunityState? selectedCommunity = null,
+        ChannelState? selectedChannel = null,
+        List<ChannelState>? allChannels = null,
+        List<ChannelState>? textChannels = null)
     {
-        var community = selectedCommunity ?? CreateCommunity();
-        var channel = selectedChannel ?? CreateChannel();
-        var allCh = allChannels ?? new List<ChannelResponse> { channel };
+        var community = selectedCommunity ?? CreateCommunityState();
+        var channel = selectedChannel ?? CreateChannelState();
+        var allCh = allChannels ?? new List<ChannelState> { channel };
         var textCh = textChannels ?? allCh.Where(c => c.Type == ChannelType.Text).ToList();
 
-        ChannelResponse? currentSelectedChannel = channel;
+        _communityStoreMock.Setup(s => s.GetSelectedCommunity()).Returns(community);
+        _channelStoreMock.Setup(s => s.GetSelectedChannel()).Returns(channel);
+        _channelStoreMock.Setup(s => s.GetAllChannels()).Returns(allCh);
+        _channelStoreMock.Setup(s => s.GetTextChannels()).Returns(textCh);
 
         return new ChannelManagementViewModel(
             _channelCoordinatorMock.Object,
             _channelStoreMock.Object,
-            () => community,
-            () => currentSelectedChannel,
-            ch => currentSelectedChannel = ch,
-            () => allCh,
-            () => textCh,
+            _communityStoreMock.Object,
             () => null);  // VoiceChannelViewModelManager - not needed for these tests
     }
 
@@ -118,7 +119,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var vm = CreateViewModel();
-        var channel = CreateChannel(name: "my-channel");
+        var channel = CreateChannelState(name: "my-channel");
 
         // Act
         vm.StartEditChannel(channel);
@@ -133,7 +134,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var vm = CreateViewModel();
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
 
         vm.StartEditChannel(channel);
         Assert.NotNull(vm.EditingChannel);
@@ -152,7 +153,7 @@ public class ChannelManagementViewModelTests
         // Arrange
         var vm = CreateViewModel();
         var channelId = Guid.NewGuid();
-        var channel = CreateChannel(id: channelId, name: "old-name");
+        var channel = CreateChannelState(id: channelId, name: "old-name");
 
         var channelState = new ChannelState(
             channelId, "new-name", null, ChannelType.Text, _communityId, 0, 0, DateTime.UtcNow);
@@ -194,7 +195,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var vm = CreateViewModel();
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
 
         vm.StartEditChannel(channel);
         vm.EditingChannelName = "new-name";
@@ -222,7 +223,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var vm = CreateViewModel();
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
 
         // Act
         vm.RequestDeleteChannel(channel);
@@ -237,7 +238,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var vm = CreateViewModel();
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
 
         vm.RequestDeleteChannel(channel);
         Assert.NotNull(vm.ChannelPendingDelete);
@@ -255,8 +256,8 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var channel = CreateChannel(id: channelId);
-        var otherChannel = CreateChannel(id: Guid.NewGuid(), name: "other-channel");
+        var channel = CreateChannelState(id: channelId);
+        var otherChannel = CreateChannelState(id: Guid.NewGuid(), name: "other-channel");
         var vm = CreateViewModel(
             selectedChannel: channel,
             allChannels: new List<ChannelResponse> { channel, otherChannel },
@@ -280,7 +281,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var vm = CreateViewModel();
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
 
         vm.RequestDeleteChannel(channel);
 
@@ -319,8 +320,8 @@ public class ChannelManagementViewModelTests
     public async Task ReorderChannelsAsync_ReordersChannels()
     {
         // Arrange
-        var channel1 = CreateChannel(id: Guid.NewGuid(), name: "channel-1");
-        var channel2 = CreateChannel(id: Guid.NewGuid(), name: "channel-2");
+        var channel1 = CreateChannelState(id: Guid.NewGuid(), name: "channel-1");
+        var channel2 = CreateChannelState(id: Guid.NewGuid(), name: "channel-2");
         var vm = CreateViewModel(allChannels: new List<ChannelResponse> { channel1, channel2 });
 
         var newOrder = new List<Guid> { channel2.Id, channel1.Id };
@@ -339,7 +340,7 @@ public class ChannelManagementViewModelTests
     public async Task ReorderChannelsAsync_OnError_RaisesErrorEvent()
     {
         // Arrange
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
         var vm = CreateViewModel(allChannels: new List<ChannelResponse> { channel });
 
         var newOrder = new List<Guid> { channel.Id };
@@ -362,7 +363,7 @@ public class ChannelManagementViewModelTests
     public async Task ReorderChannelsAsync_SetsPendingReorderCommunityId()
     {
         // Arrange
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
         var vm = CreateViewModel(allChannels: new List<ChannelResponse> { channel });
 
         var newOrder = new List<Guid> { channel.Id };
@@ -400,7 +401,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var vm = CreateViewModel();
-        var channel = CreateChannel();
+        var channel = CreateChannelState();
 
         vm.StartEditChannel(channel);
         vm.EditingChannelName = "new-name";

@@ -44,15 +44,15 @@ public class VoiceControlViewModelTests
         _voiceStoreMock.Setup(x => x.ConnectionStatus).Returns(_connectionStatusSubject);
     }
 
-    private VoiceControlViewModel CreateViewModel(Func<Guid?>? getCurrentChannelId = null)
+    private VoiceControlViewModel CreateViewModel(Guid? channelId = null)
     {
+        _voiceStoreMock.Setup(s => s.GetCurrentChannelId()).Returns(channelId);
         return new VoiceControlViewModel(
             _voiceStoreMock.Object,
             _settingsStoreMock.Object,
             _webRtcMock.Object,
             _signalRMock.Object,
-            _userId,
-            getCurrentChannelId ?? (() => null));
+            _userId);
     }
 
     #region Initialization Tests
@@ -117,7 +117,7 @@ public class VoiceControlViewModelTests
     public async Task ToggleMuteAsync_WhenNotInVoiceChannel_OnlyUpdatesLocalState()
     {
         // Arrange
-        var vm = CreateViewModel(() => null);
+        var vm = CreateViewModel();
 
         // Act
         await vm.ToggleMuteAsync();
@@ -136,7 +136,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
         _signalRMock.Setup(x => x.UpdateVoiceStateAsync(channelId, It.IsAny<VoiceStateUpdate>()))
             .Returns(Task.CompletedTask);
 
@@ -154,7 +154,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
         _isMutedSubject.OnNext(false); // Start unmuted
 
         var participant = new VoiceParticipantState(
@@ -201,38 +201,21 @@ public class VoiceControlViewModelTests
     }
 
     [Fact]
-    public async Task ToggleMuteAsync_InVoiceChannel_CallsOnLocalStateChanged()
+    public async Task ToggleMuteAsync_InVoiceChannel_UpdatesVoiceStore()
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var callbackCalled = false;
-        VoiceStateUpdate? receivedState = null;
-        Guid receivedUserId = Guid.Empty;
 
         _signalRMock.Setup(x => x.UpdateVoiceStateAsync(channelId, It.IsAny<VoiceStateUpdate>()))
             .Returns(Task.CompletedTask);
 
-        var vm = new VoiceControlViewModel(
-            _voiceStoreMock.Object,
-            _settingsStoreMock.Object,
-            _webRtcMock.Object,
-            _signalRMock.Object,
-            _userId,
-            () => channelId,
-            (userId, state) =>
-            {
-                callbackCalled = true;
-                receivedUserId = userId;
-                receivedState = state;
-            });
+        var vm = CreateViewModel(channelId);
 
         // Act
         await vm.ToggleMuteAsync();
 
         // Assert
-        Assert.True(callbackCalled);
-        Assert.Equal(_userId, receivedUserId);
-        Assert.True(receivedState?.IsMuted);
+        _voiceStoreMock.Verify(x => x.SetLocalMuted(true), Times.Once);
     }
 
     #endregion
@@ -243,7 +226,7 @@ public class VoiceControlViewModelTests
     public async Task ToggleDeafenAsync_WhenNotInVoiceChannel_OnlyUpdatesLocalState()
     {
         // Arrange
-        var vm = CreateViewModel(() => null);
+        var vm = CreateViewModel();
 
         // Act
         await vm.ToggleDeafenAsync();
@@ -263,7 +246,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
         _signalRMock.Setup(x => x.UpdateVoiceStateAsync(channelId, It.IsAny<VoiceStateUpdate>()))
             .Returns(Task.CompletedTask);
 
@@ -298,7 +281,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
         _isDeafenedSubject.OnNext(false); // Start undeafened
 
         var participant = new VoiceParticipantState(
@@ -333,7 +316,7 @@ public class VoiceControlViewModelTests
     public async Task ToggleCameraAsync_WhenNotInVoiceChannel_DoesNothing()
     {
         // Arrange
-        var vm = CreateViewModel(() => null);
+        var vm = CreateViewModel();
 
         // Act
         await vm.ToggleCameraAsync();
@@ -348,7 +331,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
         _webRtcMock.Setup(x => x.SetCameraAsync(true)).Returns(Task.CompletedTask);
         _signalRMock.Setup(x => x.UpdateVoiceStateAsync(channelId, It.IsAny<VoiceStateUpdate>()))
             .Returns(Task.CompletedTask);
@@ -369,7 +352,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
         _webRtcMock.Setup(x => x.SetCameraAsync(true)).ThrowsAsync(new Exception("Camera error"));
 
         // Act
@@ -420,7 +403,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
         _signalRMock.Setup(x => x.UpdateVoiceStateAsync(channelId, It.IsAny<VoiceStateUpdate>()))
             .Returns(Task.CompletedTask);
 
@@ -664,7 +647,7 @@ public class VoiceControlViewModelTests
     {
         // Arrange
         var channelId = Guid.NewGuid();
-        var vm = CreateViewModel(() => channelId);
+        var vm = CreateViewModel(channelId);
 
         // Act & Assert
         Assert.True(vm.IsInVoiceChannel);
@@ -674,7 +657,7 @@ public class VoiceControlViewModelTests
     public void IsInVoiceChannel_ReturnsFalse_WhenNoChannelId()
     {
         // Arrange
-        var vm = CreateViewModel(() => null);
+        var vm = CreateViewModel();
 
         // Act & Assert
         Assert.False(vm.IsInVoiceChannel);

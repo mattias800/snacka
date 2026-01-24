@@ -2,25 +2,27 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using ReactiveUI;
 using Snacka.Client.Services;
+using Snacka.Client.Stores;
 
 namespace Snacka.Client.ViewModels;
 
 /// <summary>
 /// ViewModel for the pinned messages popup.
 /// Handles loading and displaying pinned messages for a channel.
+/// Reads current channel from ChannelStore (Redux-style).
 /// </summary>
 public class PinnedMessagesPopupViewModel : ViewModelBase
 {
     private readonly IApiClient _apiClient;
-    private readonly Func<Guid?> _getSelectedChannelId;
+    private readonly IChannelStore _channelStore;
 
     private bool _isOpen;
     private ObservableCollection<MessageResponse> _messages = new();
 
-    public PinnedMessagesPopupViewModel(IApiClient apiClient, Func<Guid?> getSelectedChannelId)
+    public PinnedMessagesPopupViewModel(IApiClient apiClient, IChannelStore channelStore)
     {
         _apiClient = apiClient;
-        _getSelectedChannelId = getSelectedChannelId;
+        _channelStore = channelStore;
 
         ShowCommand = ReactiveCommand.CreateFromTask(ShowAsync);
         CloseCommand = ReactiveCommand.Create(Close);
@@ -43,7 +45,7 @@ public class PinnedMessagesPopupViewModel : ViewModelBase
 
     private async Task ShowAsync()
     {
-        var channelId = _getSelectedChannelId();
+        var channelId = _channelStore.GetSelectedChannelId();
         if (channelId == null) return;
 
         await LoadMessagesAsync(channelId.Value);
@@ -76,7 +78,7 @@ public class PinnedMessagesPopupViewModel : ViewModelBase
         if (isPinned)
         {
             // Reload to get the new pinned message
-            var channelId = _getSelectedChannelId();
+            var channelId = _channelStore.GetSelectedChannelId();
             if (channelId != null)
                 _ = LoadMessagesAsync(channelId.Value);
         }

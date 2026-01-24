@@ -44,9 +44,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isLoading;
     private bool _isMessagesLoading;
     private string? _errorMessage;
-    private ChannelResponse? _editingChannel;
+    private ChannelState? _editingChannel;
     private string _editingChannelName = string.Empty;
-    private ChannelResponse? _channelPendingDelete;
+    private ChannelState? _channelPendingDelete;
     private MessageResponse? _editingMessage;
     private string _editingMessageContent = string.Empty;
     private MessageResponse? _replyingToMessage;
@@ -287,8 +287,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _webRtc,
             _annotationService,
             _controllerStreamingService,
-            _auth.UserId,
-            () => CurrentVoiceChannel?.Id);
+            _stores.VoiceStore,
+            _auth.UserId);
         _videoFullscreen.GpuFrameReceived += (w, h, data) => GpuFullscreenFrameReceived?.Invoke(w, h, data);
 
         // Subscribe to WebRTC connection status changes
@@ -482,37 +482,33 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Create the members list ViewModel (using store-backed collection)
         _membersListViewModel = new MembersListViewModel(
             apiClient,
+            _stores.CommunityStore,
+            _stores.VoiceStore,
             auth.UserId,
             _storeMembers,
             _myGamingStations,
-            () => SelectedCommunity?.Id ?? Guid.Empty,
             member => StartDMWithMember(member),
             userId => _conversationStateService.GetUnreadCountForUser(userId),
-            () => Task.FromResult(_currentVoiceChannel is not null),
             machineId => CommandStationJoinCurrentChannelAsync(machineId),
-            (communityId, userId, nickname) => _stores.CommunityStore.UpdateMemberNickname(communityId, userId, nickname),
-            (communityId, userId, role) => _stores.CommunityStore.UpdateMemberRole(communityId, userId, role),
-            (communityId, members) => _stores.CommunityStore.SetMembers(communityId, members),
             error => ErrorMessage = error);
 
         // Create the activity feed ViewModel
         _activityFeed = new ActivityFeedViewModel(
             signalR,
             apiClient,
+            _stores.CommunityStore,
             auth.UserId,
-            () => SelectedCommunity?.Id,
-            () => CanManageChannels,
             LoadCommunitiesAsync,
             (userId, displayName) => OpenDmFromActivity(userId, displayName));
 
         // Create extracted popup ViewModels
         _pinnedMessagesPopup = new PinnedMessagesPopupViewModel(
             apiClient,
-            () => SelectedChannel?.Id);
+            _stores.ChannelStore);
 
         _inviteUserPopup = new InviteUserPopupViewModel(
             apiClient,
-            () => SelectedCommunity?.Id);
+            _stores.CommunityStore);
 
         _communityDiscovery = new CommunityDiscoveryViewModel(
             apiClient,
@@ -536,15 +532,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _gamingStation.ErrorOccurred += error => ErrorMessage = error;
 
         // Create voice control ViewModel
-        // Note: VoiceChannelContentViewModel now updates reactively from VoiceStore, so no callback needed
+        // Reads current voice channel from VoiceStore (Redux-style)
         _voiceControl = new VoiceControlViewModel(
             _stores.VoiceStore,
             settingsStore,
             webRtc,
             signalR,
-            auth.UserId,
-            () => CurrentVoiceChannel?.Id,
-            (_, _) => { } /* VoiceChannelContentViewModel subscribes to VoiceStore directly */);
+            auth.UserId);
 
         // Sync VoiceControlViewModel state with local fields (for backwards compatibility)
         _voiceControl.PropertyChanged += (_, e) =>
@@ -631,9 +625,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             apiClient,
             signalR,
             _stores.MessageStore,
+            _stores.ChannelStore,
             auth.UserId,
-            () => SelectedChannel?.Id,
-            () => SelectedChannel,
             () => _storeMembers,
             _isGifsEnabled);
 
@@ -682,11 +675,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _channelManagementVm = new ChannelManagementViewModel(
             _channelCoordinator,
             _stores.ChannelStore,
-            () => SelectedCommunity,
-            () => SelectedChannel,
-            channel => SelectedChannel = channel,
-            () => _storeAllChannels.ToList(),
-            () => _storeTextChannels.ToList(),
+            _stores.CommunityStore,
             () => _voiceChannelManager);
 
         // Sync ChannelManagementViewModel state with local fields
@@ -734,7 +723,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Create controller host ViewModel
         _controllerHost = new ControllerHostViewModel(
             _controllerHostService,
-            () => _currentVoiceChannel?.Id);
+            _stores.VoiceStore);
 
         // Create thread panel ViewModel (handles its own SignalR event subscriptions)
         _threadPanel = new ThreadPanelViewModel(_apiClient, _stores.MessageStore, _signalR, _auth.UserId);
@@ -1695,7 +1684,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     #endregion
 
-    public ChannelResponse? EditingChannel
+    public ChannelState? EditingChannel
     {
         get => _editingChannel;
         set
@@ -1728,7 +1717,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// <summary>
     /// The channel pending deletion (shown in confirmation dialog).
     /// </summary>
-    public ChannelResponse? ChannelPendingDelete
+    public ChannelState? ChannelPendingDelete
     {
         get => _channelPendingDelete;
         set
@@ -2414,10 +2403,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<CommunityResponse, Unit> SelectCommunityCommand { get; }
     public ReactiveCommand<ChannelResponse, Unit> SelectChannelCommand { get; }
     public ReactiveCommand<Unit, Unit> CreateChannelCommand { get; }
-    public ReactiveCommand<ChannelResponse, Unit> StartEditChannelCommand { get; }
+    public ReactiveCommand<ChannelState, Unit> StartEditChannelCommand { get; }
     public ReactiveCommand<Unit, Unit> SaveChannelNameCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelEditChannelCommand { get; }
-    public ReactiveCommand<ChannelResponse, Unit> DeleteChannelCommand { get; }
+    public ReactiveCommand<ChannelState, Unit> DeleteChannelCommand { get; }
     public ReactiveCommand<Unit, Unit> ConfirmDeleteChannelCommand { get; }
     public ReactiveCommand<Unit, Unit> CancelDeleteChannelCommand { get; }
     public ReactiveCommand<List<Guid>, Unit> ReorderChannelsCommand { get; }

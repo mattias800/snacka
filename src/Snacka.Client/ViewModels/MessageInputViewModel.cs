@@ -12,16 +12,16 @@ namespace Snacka.Client.ViewModels;
 /// <summary>
 /// ViewModel for message input, editing, reply, and autocomplete functionality.
 /// Encapsulates all message composition state and commands.
+/// Reads current channel from ChannelStore (Redux-style).
 /// </summary>
 public class MessageInputViewModel : ReactiveObject, IDisposable
 {
     private readonly IApiClient _apiClient;
     private readonly ISignalRService _signalR;
     private readonly IMessageStore _messageStore;
+    private readonly IChannelStore _channelStore;
     private readonly AutocompleteManager _autocomplete = new();
     private readonly Guid _userId;
-    private readonly Func<Guid?> _getCurrentChannelId;
-    private readonly Func<ChannelResponse?> _getSelectedChannel;
 
     private string _messageInput = string.Empty;
     private MessageResponse? _editingMessage;
@@ -47,23 +47,22 @@ public class MessageInputViewModel : ReactiveObject, IDisposable
 
     /// <summary>
     /// Creates a new MessageInputViewModel.
+    /// Reads current channel from ChannelStore (Redux-style).
     /// </summary>
     public MessageInputViewModel(
         IApiClient apiClient,
         ISignalRService signalR,
         IMessageStore messageStore,
+        IChannelStore channelStore,
         Guid userId,
-        Func<Guid?> getCurrentChannelId,
-        Func<ChannelResponse?> getSelectedChannel,
         Func<IEnumerable<CommunityMemberResponse>> getMembers,
         bool gifsEnabled = false)
     {
         _apiClient = apiClient;
         _signalR = signalR;
         _messageStore = messageStore;
+        _channelStore = channelStore;
         _userId = userId;
-        _getCurrentChannelId = getCurrentChannelId;
-        _getSelectedChannel = getSelectedChannel;
 
         // Register autocomplete sources
         _autocomplete.RegisterSource(new MentionAutocompleteSource(getMembers, userId));
@@ -114,7 +113,7 @@ public class MessageInputViewModel : ReactiveObject, IDisposable
             }
 
             // Send typing indicator (throttled)
-            var channelId = _getCurrentChannelId();
+            var channelId = _channelStore.GetSelectedChannelId();
             if (!string.IsNullOrEmpty(value) && channelId is not null)
             {
                 var now = DateTime.UtcNow;
@@ -249,8 +248,8 @@ public class MessageInputViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task SendMessageAsync()
     {
-        var selectedChannel = _getSelectedChannel();
-        if (selectedChannel is null) return;
+        var channelId = _channelStore.GetSelectedChannelId();
+        if (channelId is null) return;
 
         // Allow empty content if there are attachments
         if (string.IsNullOrWhiteSpace(MessageInput) && !HasPendingAttachments) return;
@@ -299,7 +298,7 @@ public class MessageInputViewModel : ReactiveObject, IDisposable
                 ContentType = a.ContentType
             }).ToList();
 
-            result = await _apiClient.SendMessageWithAttachmentsAsync(selectedChannel.Id, content, replyToId, files);
+            result = await _apiClient.SendMessageWithAttachmentsAsync(channelId.Value, content, replyToId, files);
 
             // Clear pending attachments (streams are now consumed)
             _pendingAttachments.Clear();
@@ -308,7 +307,7 @@ public class MessageInputViewModel : ReactiveObject, IDisposable
         else
         {
             // Send text-only message
-            result = await _apiClient.SendMessageAsync(selectedChannel.Id, content, replyToId);
+            result = await _apiClient.SendMessageAsync(channelId.Value, content, replyToId);
         }
 
         if (result.Success && result.Data is not null)
@@ -348,14 +347,14 @@ public class MessageInputViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task SaveMessageEditAsync()
     {
-        var selectedChannel = _getSelectedChannel();
-        if (EditingMessage is null || selectedChannel is null || string.IsNullOrWhiteSpace(EditingMessageContent))
+        var channelId = _channelStore.GetSelectedChannelId();
+        if (EditingMessage is null || channelId is null || string.IsNullOrWhiteSpace(EditingMessageContent))
             return;
 
         IsLoading = true;
         try
         {
-            var result = await _apiClient.UpdateMessageAsync(selectedChannel.Id, EditingMessage.Id, EditingMessageContent.Trim());
+            var result = await _apiClient.UpdateMessageAsync(channelId.Value, EditingMessage.Id, EditingMessageContent.Trim());
 
             if (result.Success && result.Data is not null)
             {
@@ -379,13 +378,13 @@ public class MessageInputViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task DeleteMessageAsync(MessageResponse message)
     {
-        var selectedChannel = _getSelectedChannel();
-        if (selectedChannel is null) return;
+        var channelId = _channelStore.GetSelectedChannelId();
+        if (channelId is null) return;
 
         IsLoading = true;
         try
         {
-            var result = await _apiClient.DeleteMessageAsync(selectedChannel.Id, message.Id);
+            var result = await _apiClient.DeleteMessageAsync(channelId.Value, message.Id);
 
             if (result.Success)
             {

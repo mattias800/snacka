@@ -68,6 +68,21 @@ public interface IChannelStore : IStore<ChannelState, Guid>
     /// </summary>
     Guid? GetSelectedChannelId();
 
+    /// <summary>
+    /// Gets the currently selected channel state synchronously.
+    /// </summary>
+    ChannelState? GetSelectedChannel();
+
+    /// <summary>
+    /// Gets all channels synchronously.
+    /// </summary>
+    IReadOnlyList<ChannelState> GetAllChannels();
+
+    /// <summary>
+    /// Gets all text channels synchronously, sorted by position.
+    /// </summary>
+    IReadOnlyList<ChannelState> GetTextChannels();
+
     // Actions
     void SetChannels(IEnumerable<ChannelResponse> channels);
     void SelectChannel(Guid? channelId);
@@ -146,6 +161,24 @@ public sealed class ChannelStore : IChannelStore, IDisposable
     }
 
     public Guid? GetSelectedChannelId() => _selectedChannelId.Value;
+
+    public ChannelState? GetSelectedChannel()
+    {
+        var selectedId = _selectedChannelId.Value;
+        if (selectedId is null) return null;
+        var lookup = _channelCache.Lookup(selectedId.Value);
+        return lookup.HasValue ? lookup.Value : null;
+    }
+
+    public IReadOnlyList<ChannelState> GetAllChannels() =>
+        _channelCache.Items.OrderBy(c => c.Position).ToList().AsReadOnly();
+
+    public IReadOnlyList<ChannelState> GetTextChannels() =>
+        _channelCache.Items
+            .Where(c => c.Type == ChannelType.Text)
+            .OrderBy(c => c.Position)
+            .ToList()
+            .AsReadOnly();
 
     public void SetChannels(IEnumerable<ChannelResponse> channels)
     {

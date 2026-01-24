@@ -1,6 +1,7 @@
 using Moq;
 using Snacka.Client.Services;
 using Snacka.Client.Services.WebRtc;
+using Snacka.Client.Stores;
 using Snacka.Client.ViewModels;
 using Snacka.Shared.Models;
 
@@ -12,17 +13,17 @@ public class VideoFullscreenViewModelTests : IDisposable
     private readonly Mock<IControllerStreamingService> _mockControllerStreaming;
     private readonly AnnotationService _annotationService;
     private readonly Mock<ISignalRService> _mockSignalR;
+    private readonly Mock<IVoiceStore> _mockVoiceStore;
     private readonly Guid _currentUserId;
-    private Guid? _currentVoiceChannelId;
 
     public VideoFullscreenViewModelTests()
     {
         _mockWebRtc = new Mock<IWebRtcService>();
         _mockControllerStreaming = new Mock<IControllerStreamingService>();
         _mockSignalR = new Mock<ISignalRService>();
+        _mockVoiceStore = new Mock<IVoiceStore>();
         _annotationService = new AnnotationService(_mockSignalR.Object);
         _currentUserId = Guid.NewGuid();
-        _currentVoiceChannelId = null;
     }
 
     public void Dispose()
@@ -36,8 +37,8 @@ public class VideoFullscreenViewModelTests : IDisposable
             _mockWebRtc.Object,
             _annotationService,
             _mockControllerStreaming.Object,
-            _currentUserId,
-            () => _currentVoiceChannelId
+            _mockVoiceStore.Object,
+            _currentUserId
         );
     }
 

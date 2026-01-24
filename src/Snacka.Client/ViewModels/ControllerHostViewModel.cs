@@ -3,25 +3,27 @@ using System.Reactive;
 using Avalonia.Threading;
 using ReactiveUI;
 using Snacka.Client.Services;
+using Snacka.Client.Stores;
 
 namespace Snacka.Client.ViewModels;
 
 /// <summary>
 /// ViewModel for managing controller access requests and active sessions.
 /// Handles accepting/declining requests, stopping sessions, and muting.
+/// Reads current voice channel from VoiceStore (Redux-style).
 /// </summary>
 public class ControllerHostViewModel : ReactiveObject, IDisposable
 {
     private readonly IControllerHostService _controllerHostService;
-    private readonly Func<Guid?> _getCurrentVoiceChannelId;
+    private readonly IVoiceStore _voiceStore;
     private byte _selectedControllerSlot;
 
     public ControllerHostViewModel(
         IControllerHostService controllerHostService,
-        Func<Guid?> getCurrentVoiceChannelId)
+        IVoiceStore voiceStore)
     {
         _controllerHostService = controllerHostService;
-        _getCurrentVoiceChannelId = getCurrentVoiceChannelId;
+        _voiceStore = voiceStore;
 
         // Create commands
         AcceptRequestCommand = ReactiveCommand.CreateFromTask<ControllerAccessRequest>(AcceptRequestAsync);
@@ -116,7 +118,7 @@ public class ControllerHostViewModel : ReactiveObject, IDisposable
 
     private async Task AcceptRequestAsync(ControllerAccessRequest request)
     {
-        var channelId = _getCurrentVoiceChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
         if (channelId == null) return;
 
         try

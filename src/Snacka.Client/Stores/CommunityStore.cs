@@ -88,6 +88,21 @@ public interface ICommunityStore : IStore<CommunityState, Guid>
     /// </summary>
     UserRole? GetCurrentUserRole(Guid currentUserId);
 
+    /// <summary>
+    /// Gets the currently selected community ID synchronously.
+    /// </summary>
+    Guid? GetSelectedCommunityId();
+
+    /// <summary>
+    /// Gets the currently selected community state synchronously.
+    /// </summary>
+    CommunityState? GetSelectedCommunity();
+
+    /// <summary>
+    /// Gets all current community members synchronously.
+    /// </summary>
+    IReadOnlyList<CommunityMemberState> GetCurrentMembers();
+
     // Actions
     void SetCommunities(IEnumerable<CommunityResponse> communities);
     void SelectCommunity(Guid? communityId);
@@ -230,6 +245,19 @@ public sealed class CommunityStore : ICommunityStore, IDisposable
         var member = _memberCache.Items.FirstOrDefault(m => m.CommunityId == communityId.Value && m.UserId == currentUserId);
         return member?.Role;
     }
+
+    public Guid? GetSelectedCommunityId() => _selectedCommunityId.Value;
+
+    public CommunityState? GetSelectedCommunity()
+    {
+        var selectedId = _selectedCommunityId.Value;
+        if (selectedId is null) return null;
+        var lookup = _communityCache.Lookup(selectedId.Value);
+        return lookup.HasValue ? lookup.Value : null;
+    }
+
+    public IReadOnlyList<CommunityMemberState> GetCurrentMembers() =>
+        GetCurrentCommunityMembersInternal().ToList().AsReadOnly();
 
     public void SetCommunities(IEnumerable<CommunityResponse> communities)
     {

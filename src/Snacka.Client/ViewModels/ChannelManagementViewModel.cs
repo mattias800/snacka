@@ -9,21 +9,18 @@ namespace Snacka.Client.ViewModels;
 /// <summary>
 /// ViewModel for channel management operations (editing, deletion, reordering).
 /// Encapsulates channel CRUD state and commands.
+/// Reads state from ChannelStore and CommunityStore (Redux-style).
 /// </summary>
 public class ChannelManagementViewModel : ReactiveObject, IDisposable
 {
     private readonly IChannelCoordinator _channelCoordinator;
     private readonly IChannelStore _channelStore;
-    private readonly Func<CommunityResponse?> _getSelectedCommunity;
-    private readonly Func<ChannelResponse?> _getSelectedChannel;
-    private readonly Action<ChannelResponse?> _setSelectedChannel;
-    private readonly Func<IReadOnlyList<ChannelResponse>> _getAllChannels;
-    private readonly Func<IReadOnlyList<ChannelResponse>> _getTextChannels;
+    private readonly ICommunityStore _communityStore;
     private readonly Func<VoiceChannelViewModelManager?> _getVoiceChannelManager;
 
-    private ChannelResponse? _editingChannel;
+    private ChannelState? _editingChannel;
     private string _editingChannelName = string.Empty;
-    private ChannelResponse? _channelPendingDelete;
+    private ChannelState? _channelPendingDelete;
     private Guid? _pendingReorderCommunityId;
     private bool _isLoading;
 
@@ -39,31 +36,24 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
 
     /// <summary>
     /// Creates a new ChannelManagementViewModel.
+    /// Reads state from ChannelStore and CommunityStore (Redux-style).
     /// </summary>
     public ChannelManagementViewModel(
         IChannelCoordinator channelCoordinator,
         IChannelStore channelStore,
-        Func<CommunityResponse?> getSelectedCommunity,
-        Func<ChannelResponse?> getSelectedChannel,
-        Action<ChannelResponse?> setSelectedChannel,
-        Func<IReadOnlyList<ChannelResponse>> getAllChannels,
-        Func<IReadOnlyList<ChannelResponse>> getTextChannels,
+        ICommunityStore communityStore,
         Func<VoiceChannelViewModelManager?> getVoiceChannelManager)
     {
         _channelCoordinator = channelCoordinator;
         _channelStore = channelStore;
-        _getSelectedCommunity = getSelectedCommunity;
-        _getSelectedChannel = getSelectedChannel;
-        _setSelectedChannel = setSelectedChannel;
-        _getAllChannels = getAllChannels;
-        _getTextChannels = getTextChannels;
+        _communityStore = communityStore;
         _getVoiceChannelManager = getVoiceChannelManager;
 
         // Create commands
-        StartEditChannelCommand = ReactiveCommand.Create<ChannelResponse>(StartEditChannel);
+        StartEditChannelCommand = ReactiveCommand.Create<ChannelState>(StartEditChannel);
         SaveChannelNameCommand = ReactiveCommand.CreateFromTask(SaveChannelNameAsync);
         CancelEditChannelCommand = ReactiveCommand.Create(CancelEditChannel);
-        DeleteChannelCommand = ReactiveCommand.Create<ChannelResponse>(RequestDeleteChannel);
+        DeleteChannelCommand = ReactiveCommand.Create<ChannelState>(RequestDeleteChannel);
         ConfirmDeleteChannelCommand = ReactiveCommand.CreateFromTask(ConfirmDeleteChannelAsync);
         CancelDeleteChannelCommand = ReactiveCommand.Create(CancelDeleteChannel);
         ReorderChannelsCommand = ReactiveCommand.CreateFromTask<List<Guid>>(ReorderChannelsAsync);
@@ -76,7 +66,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// The channel currently being edited (null if not editing).
     /// </summary>
-    public ChannelResponse? EditingChannel
+    public ChannelState? EditingChannel
     {
         get => _editingChannel;
         set => this.RaiseAndSetIfChanged(ref _editingChannel, value);
@@ -94,7 +84,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// The channel pending deletion (shown in confirmation dialog).
     /// </summary>
-    public ChannelResponse? ChannelPendingDelete
+    public ChannelState? ChannelPendingDelete
     {
         get => _channelPendingDelete;
         set
@@ -142,7 +132,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Command to start editing a channel.
     /// </summary>
-    public ReactiveCommand<ChannelResponse, Unit> StartEditChannelCommand { get; }
+    public ReactiveCommand<ChannelState, Unit> StartEditChannelCommand { get; }
 
     /// <summary>
     /// Command to save the channel name edit.
@@ -157,7 +147,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Command to request channel deletion (shows confirmation).
     /// </summary>
-    public ReactiveCommand<ChannelResponse, Unit> DeleteChannelCommand { get; }
+    public ReactiveCommand<ChannelState, Unit> DeleteChannelCommand { get; }
 
     /// <summary>
     /// Command to confirm channel deletion.
@@ -191,7 +181,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Starts editing a channel.
     /// </summary>
-    public void StartEditChannel(ChannelResponse channel)
+    public void StartEditChannel(ChannelState channel)
     {
         EditingChannel = channel;
         EditingChannelName = channel.Name;
@@ -211,7 +201,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task SaveChannelNameAsync()
     {
-        var selectedCommunity = _getSelectedCommunity();
+        var selectedCommunity = _communityStore.GetSelectedCommunity();
         if (EditingChannel is null || selectedCommunity is null || string.IsNullOrWhiteSpace(EditingChannelName))
             return;
 
@@ -223,14 +213,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
 
             if (success)
             {
-                // Update selected channel if it was the one being edited
-                var updatedChannelState = _channelStore.GetChannel(EditingChannel.Id);
-                var selectedChannel = _getSelectedChannel();
-                if (selectedChannel?.Id == EditingChannel.Id && updatedChannelState is not null)
-                {
-                    _setSelectedChannel(ToChannelResponse(updatedChannelState));
-                }
-
+                // The store is already updated by the coordinator, no need to update selection
                 EditingChannel = null;
                 EditingChannelName = string.Empty;
             }
@@ -248,7 +231,7 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Requests channel deletion (shows confirmation dialog).
     /// </summary>
-    public void RequestDeleteChannel(ChannelResponse channel)
+    public void RequestDeleteChannel(ChannelState channel)
     {
         ChannelPendingDelete = channel;
     }
@@ -266,11 +249,11 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task ConfirmDeleteChannelAsync()
     {
-        var selectedCommunity = _getSelectedCommunity();
+        var selectedCommunity = _communityStore.GetSelectedCommunity();
         if (ChannelPendingDelete is null || selectedCommunity is null) return;
 
         var channel = ChannelPendingDelete;
-        var selectedChannel = _getSelectedChannel();
+        var selectedChannel = _channelStore.GetSelectedChannel();
 
         // Check if this is the currently selected channel
         var wasSelected = selectedChannel?.Id == channel.Id;
@@ -281,17 +264,21 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
             var success = await _channelCoordinator.DeleteChannelAsync(channel.Id);
             if (success)
             {
-                var allChannels = _getAllChannels();
-                var textChannels = _getTextChannels();
-
                 // If the deleted channel was selected, select another one
-                if (wasSelected && allChannels.Count > 0)
+                if (wasSelected)
                 {
-                    _setSelectedChannel(textChannels.FirstOrDefault() ?? allChannels.FirstOrDefault());
-                }
-                else if (wasSelected)
-                {
-                    _setSelectedChannel(null);
+                    var allChannels = _channelStore.GetAllChannels();
+                    var textChannels = _channelStore.GetTextChannels();
+
+                    if (allChannels.Count > 0)
+                    {
+                        var newSelection = textChannels.FirstOrDefault() ?? allChannels.FirstOrDefault();
+                        _channelStore.SelectChannel(newSelection?.Id);
+                    }
+                    else
+                    {
+                        _channelStore.SelectChannel(null);
+                    }
                 }
 
                 // Clear the pending delete
@@ -313,13 +300,13 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task ReorderChannelsAsync(List<Guid> channelIds)
     {
-        var selectedCommunity = _getSelectedCommunity();
+        var selectedCommunity = _communityStore.GetSelectedCommunity();
         if (selectedCommunity is null) return;
 
         var voiceChannelManager = _getVoiceChannelManager();
 
         // Store original order for rollback
-        var originalChannels = _getAllChannels().ToList();
+        var originalChannels = _channelStore.GetAllChannels().ToList();
         var originalVoiceOrder = voiceChannelManager?.CaptureOrder() ?? new List<VoiceChannelViewModel>();
 
         // Apply optimistically - update UI immediately
@@ -372,8 +359,8 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
             .ToDictionary(x => x.id, x => x.index);
 
         // Create updated channels with new positions and update the store
-        var updatedChannels = _getAllChannels()
-            .Select(c => c with { Position = positionLookup.GetValueOrDefault(c.Id, int.MaxValue) })
+        var updatedChannels = _channelStore.GetAllChannels()
+            .Select(c => ToChannelResponse(c with { Position = positionLookup.GetValueOrDefault(c.Id, int.MaxValue) }))
             .ToList();
         _channelStore.ReorderChannels(updatedChannels);
 
@@ -382,12 +369,12 @@ public class ChannelManagementViewModel : ReactiveObject, IDisposable
     }
 
     private void RollbackChannelOrder(
-        List<ChannelResponse> originalChannels,
+        List<ChannelState> originalChannels,
         List<VoiceChannelViewModel> originalVoiceOrder,
         VoiceChannelViewModelManager? voiceChannelManager)
     {
         // Restore channels in the store
-        _channelStore.SetChannels(originalChannels);
+        _channelStore.SetChannels(originalChannels.Select(ToChannelResponse));
 
         // Restore VoiceChannelViewModels
         voiceChannelManager?.RestoreOrder(originalVoiceOrder);

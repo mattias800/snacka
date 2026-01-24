@@ -18,8 +18,6 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
     private readonly IWebRtcService _webRtc;
     private readonly ISignalRService _signalR;
     private readonly Guid _userId;
-    private readonly Func<Guid?> _getCurrentChannelId;
-    private readonly Action<Guid, VoiceStateUpdate>? _onLocalStateChanged;
     private readonly CompositeDisposable _subscriptions = new();
 
     private bool _isMuted;
@@ -31,30 +29,25 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
 
     /// <summary>
     /// Creates a new VoiceControlViewModel.
+    /// Reads current voice channel from VoiceStore (Redux-style).
     /// </summary>
     /// <param name="voiceStore">Voice state store for reactive state.</param>
     /// <param name="settingsStore">Settings store for persisting mute/deafen state.</param>
     /// <param name="webRtc">WebRTC service for applying audio/video state.</param>
     /// <param name="signalR">SignalR service for broadcasting state changes.</param>
     /// <param name="userId">Current user ID.</param>
-    /// <param name="getCurrentChannelId">Function to get current voice channel ID.</param>
-    /// <param name="onLocalStateChanged">Optional callback for immediate UI feedback when local state changes.</param>
     public VoiceControlViewModel(
         IVoiceStore voiceStore,
         ISettingsStore settingsStore,
         IWebRtcService webRtc,
         ISignalRService signalR,
-        Guid userId,
-        Func<Guid?> getCurrentChannelId,
-        Action<Guid, VoiceStateUpdate>? onLocalStateChanged = null)
+        Guid userId)
     {
         _voiceStore = voiceStore;
         _settingsStore = settingsStore;
         _webRtc = webRtc;
         _signalR = signalR;
         _userId = userId;
-        _getCurrentChannelId = getCurrentChannelId;
-        _onLocalStateChanged = onLocalStateChanged;
 
         // Initialize local state from settings
         _isMuted = _settingsStore.Settings.IsMuted;
@@ -261,7 +254,7 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
     /// <summary>
     /// Whether the user is in a voice channel.
     /// </summary>
-    public bool IsInVoiceChannel => _getCurrentChannelId() is not null;
+    public bool IsInVoiceChannel => _voiceStore.GetCurrentChannelId() is not null;
 
     #endregion
 
@@ -291,7 +284,7 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task ToggleMuteAsync()
     {
-        var channelId = _getCurrentChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
 
         // Check if server-muted (cannot unmute if server-muted)
         if (channelId is not null && !IsMuted)
@@ -313,11 +306,11 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
         if (channelId is not null)
         {
             _webRtc.SetMuted(IsMuted);
-            await _signalR.UpdateVoiceStateAsync(channelId.Value, new VoiceStateUpdate(IsMuted: IsMuted));
-
-            // Notify for immediate UI feedback
             var state = new VoiceStateUpdate(IsMuted: IsMuted);
-            _onLocalStateChanged?.Invoke(_userId, state);
+            await _signalR.UpdateVoiceStateAsync(channelId.Value, state);
+
+            // Update VoiceStore for immediate UI feedback (Redux-style)
+            _voiceStore.UpdateVoiceState(channelId.Value, _userId, state);
         }
     }
 
@@ -326,7 +319,7 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task ToggleDeafenAsync()
     {
-        var channelId = _getCurrentChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
 
         // Check if server-deafened (cannot undeafen if server-deafened)
         if (channelId is not null && !IsDeafened)
@@ -357,11 +350,11 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
         {
             _webRtc.SetMuted(IsMuted);
             _webRtc.SetDeafened(IsDeafened);
-            await _signalR.UpdateVoiceStateAsync(channelId.Value, new VoiceStateUpdate(IsMuted: IsMuted, IsDeafened: IsDeafened));
-
-            // Notify for immediate UI feedback
             var state = new VoiceStateUpdate(IsMuted: IsMuted, IsDeafened: IsDeafened);
-            _onLocalStateChanged?.Invoke(_userId, state);
+            await _signalR.UpdateVoiceStateAsync(channelId.Value, state);
+
+            // Update VoiceStore for immediate UI feedback (Redux-style)
+            _voiceStore.UpdateVoiceState(channelId.Value, _userId, state);
         }
     }
 
@@ -370,7 +363,7 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
     /// </summary>
     public async Task ToggleCameraAsync()
     {
-        var channelId = _getCurrentChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
         if (channelId is null) return;
 
         try
@@ -382,11 +375,11 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
             // Update voice store
             _voiceStore.SetLocalCameraOn(newState);
 
-            await _signalR.UpdateVoiceStateAsync(channelId.Value, new VoiceStateUpdate(IsCameraOn: newState));
-
-            // Notify for immediate UI feedback
             var state = new VoiceStateUpdate(IsCameraOn: newState);
-            _onLocalStateChanged?.Invoke(_userId, state);
+            await _signalR.UpdateVoiceStateAsync(channelId.Value, state);
+
+            // Update VoiceStore for immediate UI feedback (Redux-style)
+            _voiceStore.UpdateVoiceState(channelId.Value, _userId, state);
         }
         catch
         {
@@ -410,14 +403,15 @@ public class VoiceControlViewModel : ReactiveObject, IDisposable
         // Update voice store
         _voiceStore.SetLocalMuted(IsMuted);
 
-        var channelId = _getCurrentChannelId();
+        var channelId = _voiceStore.GetCurrentChannelId();
         if (channelId is not null)
         {
             _webRtc.SetMuted(IsMuted);
-            await _signalR.UpdateVoiceStateAsync(channelId.Value, new VoiceStateUpdate(IsMuted: IsMuted));
-
             var state = new VoiceStateUpdate(IsMuted: IsMuted);
-            _onLocalStateChanged?.Invoke(_userId, state);
+            await _signalR.UpdateVoiceStateAsync(channelId.Value, state);
+
+            // Update VoiceStore for immediate UI feedback (Redux-style)
+            _voiceStore.UpdateVoiceState(channelId.Value, _userId, state);
         }
     }
 

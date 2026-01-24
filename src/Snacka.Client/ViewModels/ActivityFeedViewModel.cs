@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Reactive;
 using ReactiveUI;
 using Snacka.Client.Services;
+using Snacka.Client.Stores;
 
 namespace Snacka.Client.ViewModels;
 
@@ -91,14 +92,14 @@ public record ActivityItem(
 
 /// <summary>
 /// ViewModel for the activity/notifications feed.
+/// Reads current community from CommunityStore (Redux-style).
 /// </summary>
 public class ActivityFeedViewModel : ViewModelBase
 {
     private readonly ISignalRService _signalR;
     private readonly IApiClient _apiClient;
+    private readonly ICommunityStore _communityStore;
     private readonly Guid _currentUserId;
-    private readonly Func<Guid?> _getCurrentCommunityId;
-    private readonly Func<bool> _canManageServer;
     private readonly Func<Task> _onCommunitiesChanged;
     private readonly Action<Guid, string>? _onOpenDm;
 
@@ -108,17 +109,15 @@ public class ActivityFeedViewModel : ViewModelBase
     public ActivityFeedViewModel(
         ISignalRService signalR,
         IApiClient apiClient,
+        ICommunityStore communityStore,
         Guid currentUserId,
-        Func<Guid?> getCurrentCommunityId,
-        Func<bool> canManageServer,
         Func<Task> onCommunitiesChanged,
         Action<Guid, string>? onOpenDm = null)
     {
         _signalR = signalR;
         _apiClient = apiClient;
+        _communityStore = communityStore;
         _currentUserId = currentUserId;
-        _getCurrentCommunityId = getCurrentCommunityId;
-        _canManageServer = canManageServer;
         _onCommunitiesChanged = onCommunitiesChanged;
         _onOpenDm = onOpenDm;
 
@@ -161,7 +160,7 @@ public class ActivityFeedViewModel : ViewModelBase
         // User joined community
         _signalR.CommunityMemberAdded += e => Avalonia.Threading.Dispatcher.UIThread.Post(() =>
         {
-            var currentCommunityId = _getCurrentCommunityId();
+            var currentCommunityId = _communityStore.GetSelectedCommunityId();
             if (currentCommunityId == e.CommunityId)
             {
                 AddActivity(new ActivityItem(
