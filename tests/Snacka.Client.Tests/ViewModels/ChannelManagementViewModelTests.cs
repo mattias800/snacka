@@ -260,8 +260,8 @@ public class ChannelManagementViewModelTests
         var otherChannel = CreateChannelState(id: Guid.NewGuid(), name: "other-channel");
         var vm = CreateViewModel(
             selectedChannel: channel,
-            allChannels: new List<ChannelResponse> { channel, otherChannel },
-            textChannels: new List<ChannelResponse> { channel, otherChannel });
+            allChannels: new List<ChannelState> { channel, otherChannel },
+            textChannels: new List<ChannelState> { channel, otherChannel });
 
         vm.RequestDeleteChannel(channel);
 
@@ -322,7 +322,7 @@ public class ChannelManagementViewModelTests
         // Arrange
         var channel1 = CreateChannelState(id: Guid.NewGuid(), name: "channel-1");
         var channel2 = CreateChannelState(id: Guid.NewGuid(), name: "channel-2");
-        var vm = CreateViewModel(allChannels: new List<ChannelResponse> { channel1, channel2 });
+        var vm = CreateViewModel(allChannels: new List<ChannelState> { channel1, channel2 });
 
         var newOrder = new List<Guid> { channel2.Id, channel1.Id };
 
@@ -341,7 +341,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var channel = CreateChannelState();
-        var vm = CreateViewModel(allChannels: new List<ChannelResponse> { channel });
+        var vm = CreateViewModel(allChannels: new List<ChannelState> { channel });
 
         var newOrder = new List<Guid> { channel.Id };
 
@@ -364,7 +364,7 @@ public class ChannelManagementViewModelTests
     {
         // Arrange
         var channel = CreateChannelState();
-        var vm = CreateViewModel(allChannels: new List<ChannelResponse> { channel });
+        var vm = CreateViewModel(allChannels: new List<ChannelState> { channel });
 
         var newOrder = new List<Guid> { channel.Id };
 

@@ -99,6 +99,11 @@ public interface IVoiceStore : IStore<VoiceParticipantState, Guid>
     /// </summary>
     Guid? GetCurrentChannelId();
 
+    /// <summary>
+    /// Gets the voice-on-other-device state synchronously.
+    /// </summary>
+    (Guid? ChannelId, string? ChannelName) GetVoiceOnOtherDevice();
+
     // Actions
     void SetCurrentChannel(Guid? channelId);
     void SetConnectionStatus(VoiceConnectionStatus status);
@@ -209,6 +214,8 @@ public sealed class VoiceStore : IVoiceStore, IDisposable
     }
 
     public Guid? GetCurrentChannelId() => _currentChannelId.Value;
+
+    public (Guid? ChannelId, string? ChannelName) GetVoiceOnOtherDevice() => _voiceOnOtherDevice.Value;
 
     public void SetCurrentChannel(Guid? channelId)
     {

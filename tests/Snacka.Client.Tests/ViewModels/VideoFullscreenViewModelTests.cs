@@ -447,7 +447,7 @@ public class VideoFullscreenViewModelTests : IDisposable
     public async Task ToggleControllerAccessAsync_WithCameraStream_DoesNothing()
     {
         // Arrange
-        _currentVoiceChannelId = Guid.NewGuid();
+        _mockVoiceStore.Setup(s => s.GetCurrentChannelId()).Returns(Guid.NewGuid());
         var vm = CreateViewModel();
         var stream = CreateVideoStream(streamType: VideoStreamType.Camera);
         vm.Open(stream);
@@ -465,7 +465,7 @@ public class VideoFullscreenViewModelTests : IDisposable
     public async Task ToggleControllerAccessAsync_WithOwnScreenShare_DoesNothing()
     {
         // Arrange
-        _currentVoiceChannelId = Guid.NewGuid();
+        _mockVoiceStore.Setup(s => s.GetCurrentChannelId()).Returns(Guid.NewGuid());
         var vm = CreateViewModel();
         var stream = CreateVideoStream(userId: _currentUserId, streamType: VideoStreamType.ScreenShare);
         vm.Open(stream);
@@ -485,7 +485,7 @@ public class VideoFullscreenViewModelTests : IDisposable
         // Arrange
         var hostId = Guid.NewGuid();
         var channelId = Guid.NewGuid();
-        _currentVoiceChannelId = channelId;
+        _mockVoiceStore.Setup(s => s.GetCurrentChannelId()).Returns(channelId);
         _mockControllerStreaming.Setup(x => x.IsStreaming).Returns(true);
         _mockControllerStreaming.Setup(x => x.StreamingHostUserId).Returns(hostId);
         _mockControllerStreaming.Setup(x => x.StopStreamingAsync()).Returns(Task.CompletedTask);
@@ -507,7 +507,7 @@ public class VideoFullscreenViewModelTests : IDisposable
         // Arrange
         var hostId = Guid.NewGuid();
         var channelId = Guid.NewGuid();
-        _currentVoiceChannelId = channelId;
+        _mockVoiceStore.Setup(s => s.GetCurrentChannelId()).Returns(channelId);
         _mockControllerStreaming.Setup(x => x.IsStreaming).Returns(false);
         _mockControllerStreaming.Setup(x => x.RequestAccessAsync(It.IsAny<Guid>(), It.IsAny<Guid>()))
             .Returns(Task.CompletedTask);
@@ -547,7 +547,7 @@ public class VideoFullscreenViewModelTests : IDisposable
     public async Task AddAnnotationStrokeAsync_WhenNotInVoiceChannel_DoesNothing()
     {
         // Arrange
-        _currentVoiceChannelId = null;
+        _mockVoiceStore.Setup(s => s.GetCurrentChannelId()).Returns((Guid?)null);
         var vm = CreateViewModel();
         var sharerId = Guid.NewGuid();
         var stream = CreateVideoStream(userId: sharerId);
@@ -574,7 +574,7 @@ public class VideoFullscreenViewModelTests : IDisposable
     public async Task ClearAnnotationsAsync_WhenNotInVoiceChannel_DoesNothing()
     {
         // Arrange
-        _currentVoiceChannelId = null;
+        _mockVoiceStore.Setup(s => s.GetCurrentChannelId()).Returns((Guid?)null);
         var vm = CreateViewModel();
         var stream = CreateVideoStream();
         vm.Open(stream);

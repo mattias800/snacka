@@ -60,9 +60,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isSpeaking;
     private VoiceConnectionStatus _voiceConnectionStatus = VoiceConnectionStatus.Disconnected;
 
-    // Multi-device voice state (tracks when user is in voice on another device)
-    private Guid? _voiceOnOtherDeviceChannelId;
-    private string? _voiceOnOtherDeviceChannelName;
+    // Multi-device voice state is now tracked by VoiceStore
 
     // Voice channels with participant tracking (managed by VoiceChannelViewModelManager)
     private VoiceChannelViewModelManager? _voiceChannelManager;
@@ -352,6 +350,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                     {
                         VoiceConnectionStatus = status;
                     }
+                }));
+
+        // Subscribe to voice-on-other-device state changes
+        _storeSubscriptions.Add(
+            _stores.VoiceStore.VoiceOnOtherDevice
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(_ =>
+                {
+                    this.RaisePropertyChanged(nameof(VoiceOnOtherDeviceChannelId));
+                    this.RaisePropertyChanged(nameof(VoiceOnOtherDeviceChannelName));
+                    this.RaisePropertyChanged(nameof(IsInVoiceOnOtherDevice));
                 }));
 
         // Create store-backed bindable collections for channels
@@ -991,12 +1000,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // now handled by VoiceChannelContentViewModel which subscribes to SignalR events directly
         // VoiceChannelViewModels auto-update via VoiceStore subscription
 
-        // Multi-device voice events
-        _signalR.VoiceSessionActiveOnOtherDevice += e => Dispatcher.UIThread.Post(() =>
-        {
-            VoiceOnOtherDeviceChannelId = e.ChannelId;
-            VoiceOnOtherDeviceChannelName = e.ChannelName;
-        });
+        // VoiceSessionActiveOnOtherDevice is handled by SignalREventDispatcher -> VoiceStore
 
         _signalR.DisconnectedFromVoice += e => Dispatcher.UIThread.Post(async () =>
         {
@@ -1021,9 +1025,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 IsVoiceVideoOverlayOpen = false;
                 SelectedVoiceChannelForViewing = null;
 
-                // Track that we're now in voice on another device
-                VoiceOnOtherDeviceChannelId = e.ChannelId;
-                VoiceOnOtherDeviceChannelName = voiceChannelVm?.Name;
+                // Track that we're now in voice on another device (via VoiceStore)
+                _stores.VoiceStore.SetVoiceOnOtherDevice(e.ChannelId, voiceChannelVm?.Name);
             }
         });
 
@@ -1957,25 +1960,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     /// <summary>
     /// Channel ID where the user is in voice on another device (null if not in voice elsewhere).
+    /// Backed by VoiceStore.
     /// </summary>
-    public Guid? VoiceOnOtherDeviceChannelId
-    {
-        get => _voiceOnOtherDeviceChannelId;
-        set
-        {
-            this.RaiseAndSetIfChanged(ref _voiceOnOtherDeviceChannelId, value);
-            this.RaisePropertyChanged(nameof(IsInVoiceOnOtherDevice));
-        }
-    }
+    public Guid? VoiceOnOtherDeviceChannelId => _stores.VoiceStore.GetVoiceOnOtherDevice().ChannelId;
 
     /// <summary>
     /// Name of the channel where the user is in voice on another device.
+    /// Backed by VoiceStore.
     /// </summary>
-    public string? VoiceOnOtherDeviceChannelName
-    {
-        get => _voiceOnOtherDeviceChannelName;
-        set => this.RaiseAndSetIfChanged(ref _voiceOnOtherDeviceChannelName, value);
-    }
+    public string? VoiceOnOtherDeviceChannelName => _stores.VoiceStore.GetVoiceOnOtherDevice().ChannelName;
 
     /// <summary>
     /// Whether the user is in a voice channel on another device.
@@ -2618,8 +2611,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         if (channel.Type != ChannelType.Voice) return;
 
         // Clear "in voice on other device" state since we're joining from this device
-        VoiceOnOtherDeviceChannelId = null;
-        VoiceOnOtherDeviceChannelName = null;
+        _stores.VoiceStore.SetVoiceOnOtherDevice(null, null);
 
         // Leave current voice channel if any
         if (CurrentVoiceChannel is not null)

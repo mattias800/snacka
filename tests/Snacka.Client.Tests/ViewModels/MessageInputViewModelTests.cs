@@ -148,7 +148,8 @@ public class MessageInputViewModelTests
     public void MessageInput_WhenNotInChannel_DoesNotSendTypingIndicator()
     {
         // Arrange
-        var vm = CreateViewModel(getCurrentChannelId: () => null);
+        _channelStoreMock.Setup(s => s.GetSelectedChannelId()).Returns((Guid?)null);
+        var vm = CreateViewModel();
 
         // Act
         vm.MessageInput = "Hello";
@@ -165,7 +166,8 @@ public class MessageInputViewModelTests
     public async Task SendMessageAsync_WhenNoChannel_DoesNotSend()
     {
         // Arrange
-        var vm = CreateViewModel(getSelectedChannel: () => null);
+        _channelStoreMock.Setup(s => s.GetSelectedChannelId()).Returns((Guid?)null);
+        var vm = CreateViewModel();
         vm.MessageInput = "Hello";
 
         // Act
