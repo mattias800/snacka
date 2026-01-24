@@ -59,7 +59,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private bool _isScreenSharing;
     private bool _isSpeaking;
     private VoiceConnectionStatus _voiceConnectionStatus = VoiceConnectionStatus.Disconnected;
-    private ObservableCollection<VoiceParticipantResponse> _voiceParticipants = new();
 
     // Multi-device voice state (tracks when user is in voice on another device)
     private Guid? _voiceOnOtherDeviceChannelId;
@@ -958,38 +957,20 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // CommunityMemberRemoved event is now handled by SignalREventDispatcher -> CommunityStore
         // StoreMembers auto-updates via DynamicData binding
 
-        // Voice channel events - VoiceChannelViewModels now auto-update via VoiceStore subscription
-        // We still need to update VoiceParticipants and _voiceChannelContent (UI-specific)
+        // Voice channel events - VoiceChannelViewModels auto-update via VoiceStore subscription
+        // We still need to update _voiceChannelContent for video grid
         _signalR.VoiceParticipantJoined += e => Dispatcher.UIThread.Post(() =>
         {
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription
-            // VoiceStore is updated by SignalREventDispatcher
-
-            // Update current VoiceParticipants if this is our channel (for voice controls panel)
             if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
             {
-                if (!VoiceParticipants.Any(p => p.UserId == e.Participant.UserId))
-                    VoiceParticipants.Add(e.Participant);
-
-                // Update video grid
                 _voiceChannelContent?.AddParticipant(e.Participant);
             }
         });
 
         _signalR.VoiceParticipantLeft += e => Dispatcher.UIThread.Post(() =>
         {
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription
-
-            // Update current VoiceParticipants if this is our channel (for voice controls panel)
             if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
             {
-                var participant = VoiceParticipants.FirstOrDefault(p => p.UserId == e.UserId);
-                if (participant is not null)
-                    VoiceParticipants.Remove(participant);
-
-                // Update video grid
                 _voiceChannelContent?.RemoveParticipant(e.UserId);
 
                 // Close fullscreen if viewing this user's stream
@@ -1002,26 +983,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.VoiceStateChanged += e => Dispatcher.UIThread.Post(() =>
         {
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription
-
-            // Update current VoiceParticipants if this is our channel
             if (CurrentVoiceChannel is not null && e.ChannelId == CurrentVoiceChannel.Id)
             {
-                var index = VoiceParticipants.ToList().FindIndex(p => p.UserId == e.UserId);
-                if (index >= 0)
-                {
-                    var current = VoiceParticipants[index];
-                    VoiceParticipants[index] = current with
-                    {
-                        IsMuted = e.State.IsMuted ?? current.IsMuted,
-                        IsDeafened = e.State.IsDeafened ?? current.IsDeafened,
-                        IsScreenSharing = e.State.IsScreenSharing ?? current.IsScreenSharing,
-                        IsCameraOn = e.State.IsCameraOn ?? current.IsCameraOn
-                    };
-                }
-
-                // Update video grid
                 _voiceChannelContent?.UpdateParticipantState(e.UserId, e.State);
             }
         });
@@ -1067,7 +1030,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
                 // Clear local state
                 CurrentVoiceChannel = null;
-                VoiceParticipants.Clear();
                 IsCameraOn = false;
                 IsScreenSharing = false;
                 IsVoiceVideoOverlayOpen = false;
@@ -2490,12 +2452,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public bool IsVoiceConnecting => VoiceConnectionStatus == VoiceConnectionStatus.Connecting;
     public bool IsVoiceConnected => VoiceConnectionStatus == VoiceConnectionStatus.Connected;
 
-    public ObservableCollection<VoiceParticipantResponse> VoiceParticipants
-    {
-        get => _voiceParticipants;
-        set => this.RaiseAndSetIfChanged(ref _voiceParticipants, value);
-    }
-
     // Computed properties for channel filtering
     // Now using store-backed collection for reactive updates
     public IEnumerable<ChannelResponse> TextChannels => _storeTextChannels;
@@ -3085,12 +3041,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var result = await _apiClient.GetCommunitiesAsync();
-            if (result.Success && result.Data is not null)
+            var success = await _communityCoordinator.LoadCommunitiesAsync();
+            if (success)
             {
-                // Update store - StoreCommunities will auto-update via DynamicData binding
-                _stores.CommunityStore.SetCommunities(result.Data);
-
                 // Notify HasNoCommunities property
                 this.RaisePropertyChanged(nameof(HasNoCommunities));
 
@@ -3106,7 +3059,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                ErrorMessage = result.Error;
+                ErrorMessage = "Failed to load communities";
             }
         }
         finally
@@ -3378,16 +3331,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     private async Task CreateCommunityAsync()
     {
-        var result = await _apiClient.CreateCommunityAsync("New Community", null);
-        if (result.Success && result.Data is not null)
+        var community = await _communityCoordinator.CreateCommunityAsync("New Community", null);
+        if (community is not null)
         {
-            // Add to store - StoreCommunities will auto-update via DynamicData binding
-            _stores.CommunityStore.AddCommunity(result.Data);
-            SelectedCommunity = result.Data;
+            SelectedCommunity = community;
         }
         else
         {
-            ErrorMessage = result.Error;
+            ErrorMessage = "Failed to create community";
         }
     }
 
@@ -3409,16 +3360,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 counter++;
             } while (existingNames.Contains(channelName));
 
-            var result = await _apiClient.CreateChannelAsync(SelectedCommunity.Id, channelName, null);
-            if (result.Success && result.Data is not null)
+            var channel = await _channelCoordinator.CreateChannelAsync(SelectedCommunity.Id, channelName, null, ChannelType.Text);
+            if (channel is not null)
             {
-                // Add to store - uses AddOrUpdate so duplicates are handled
-                _stores.ChannelStore.AddChannel(result.Data);
-                SelectedChannel = result.Data;
+                SelectedChannel = channel;
             }
             else
             {
-                ErrorMessage = result.Error;
+                ErrorMessage = "Failed to create channel";
             }
         }
         finally
@@ -3447,16 +3396,15 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsLoading = true;
         try
         {
-            var result = await _apiClient.UpdateChannelAsync(SelectedCommunity.Id, EditingChannel.Id, EditingChannelName.Trim(), null);
+            var success = await _channelCoordinator.UpdateChannelAsync(SelectedCommunity.Id, EditingChannel.Id, EditingChannelName.Trim(), null);
 
-            if (result.Success && result.Data is not null)
+            if (success)
             {
-                _stores.ChannelStore.UpdateChannel(result.Data);
-
                 // Update selected channel if it was the one being edited
-                if (SelectedChannel?.Id == EditingChannel.Id)
+                var updatedChannelState = _stores.ChannelStore.GetChannel(EditingChannel.Id);
+                if (SelectedChannel?.Id == EditingChannel.Id && updatedChannelState is not null)
                 {
-                    SelectedChannel = result.Data;
+                    SelectedChannel = ToChannelResponse(updatedChannelState);
                 }
 
                 EditingChannel = null;
@@ -3464,7 +3412,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                ErrorMessage = result.Error;
+                ErrorMessage = "Failed to update channel";
             }
         }
         finally
@@ -3495,11 +3443,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsLoading = true;
         try
         {
-            var result = await _apiClient.DeleteChannelAsync(channel.Id);
-            if (result.Success)
+            var success = await _channelCoordinator.DeleteChannelAsync(channel.Id);
+            if (success)
             {
-                _stores.ChannelStore.RemoveChannel(channel.Id);
-
                 // If the deleted channel was selected, select another one
                 if (wasSelected && _storeAllChannels.Count > 0)
                 {
@@ -3515,7 +3461,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
             else
             {
-                ErrorMessage = result.Error;
+                ErrorMessage = "Failed to delete channel";
             }
         }
         finally
@@ -3541,11 +3487,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         try
         {
-            var result = await _apiClient.ReorderChannelsAsync(SelectedCommunity.Id, channelIds);
-            if (!result.Success || result.Data is null)
+            var success = await _channelCoordinator.ReorderChannelsAsync(SelectedCommunity.Id, channelIds);
+            if (!success)
             {
                 // Server rejected - rollback to original order
-                ErrorMessage = result.Error ?? "Failed to reorder channels";
+                ErrorMessage = "Failed to reorder channels";
                 RollbackChannelOrder(originalChannels, originalVoiceOrder);
                 _pendingReorderCommunityId = null;
             }
@@ -3757,22 +3703,19 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 counter++;
             } while (existingNames.Contains(channelName));
 
-            var result = await _apiClient.CreateChannelAsync(SelectedCommunity.Id, channelName, null, ChannelType.Voice);
-            if (result.Success && result.Data is not null)
+            var channel = await _channelCoordinator.CreateChannelAsync(SelectedCommunity.Id, channelName, null, ChannelType.Voice);
+            if (channel is not null)
             {
-                // Add to store
-                _stores.ChannelStore.AddChannel(result.Data);
-
-                // Add to VoiceChannelViewModels
-                if (!VoiceChannelViewModels.Any(v => v.Id == result.Data.Id))
+                // Add to VoiceChannelViewModels (coordinator already updated store)
+                if (!VoiceChannelViewModels.Any(v => v.Id == channel.Id))
                 {
-                    var vm = CreateVoiceChannelViewModel(result.Data);
+                    var vm = CreateVoiceChannelViewModel(channel);
                     VoiceChannelViewModels.Add(vm);
                 }
             }
             else
             {
-                ErrorMessage = result.Error;
+                ErrorMessage = "Failed to create voice channel";
             }
         }
         finally
@@ -3816,18 +3759,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             // Load existing participants (includes ourselves)
             var participants = await _signalR.GetVoiceParticipantsAsync(channel.Id);
 
-            // Update VoiceParticipants (for voice controls panel)
-            VoiceParticipants.Clear();
-            foreach (var p in participants)
-            {
-                VoiceParticipants.Add(p);
-            }
-
             // Update VoiceStore - VoiceChannelViewModel will receive updates via its subscription
             _stores.VoiceStore.SetParticipants(channel.Id, participants);
 
-            // Update VoiceChannelContent for video grid display (but don't auto-navigate to it)
-            // User can open the video overlay manually via ShowVoiceVideoOverlayCommand
+            // Update VoiceChannelContent for video grid display
             _voiceChannelContent?.SetParticipants(participants);
 
             // Start WebRTC connections to all existing participants
@@ -3867,7 +3802,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // VoiceChannelViewModel will be updated via VoiceStore subscription when Clear() is called
 
         CurrentVoiceChannel = null;
-        VoiceParticipants.Clear();
         // Note: IsMuted and IsDeafened are persisted and NOT reset when leaving
         IsCameraOn = false;
         IsScreenSharing = false;
@@ -4068,58 +4002,44 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     /// <summary>
     /// Server mute/unmute a user (admin action).
+    /// Delegates to VoiceCoordinator.
     /// </summary>
     private async Task ServerMuteUserAsync(VoiceParticipantViewModel participant)
     {
         if (CurrentVoiceChannel is null || !CanManageVoice) return;
-        if (participant.UserId == _auth.UserId) return; // Cannot server mute yourself
+        if (participant.UserId == _auth.UserId) return;
 
-        try
-        {
-            var newServerMuted = !participant.IsServerMuted;
-            await _signalR.ServerMuteUserAsync(CurrentVoiceChannel.Id, participant.UserId, newServerMuted);
-        }
-        catch
-        {
-            // Server mute failure - ignore
-        }
+        await _voiceCoordinator.ServerMuteUserAsync(
+            CurrentVoiceChannel.Id,
+            participant.UserId,
+            !participant.IsServerMuted);
     }
 
     /// <summary>
     /// Server deafen/undeafen a user (admin action).
+    /// Delegates to VoiceCoordinator.
     /// </summary>
     private async Task ServerDeafenUserAsync(VoiceParticipantViewModel participant)
     {
         if (CurrentVoiceChannel is null || !CanManageVoice) return;
-        if (participant.UserId == _auth.UserId) return; // Cannot server deafen yourself
+        if (participant.UserId == _auth.UserId) return;
 
-        try
-        {
-            var newServerDeafened = !participant.IsServerDeafened;
-            await _signalR.ServerDeafenUserAsync(CurrentVoiceChannel.Id, participant.UserId, newServerDeafened);
-        }
-        catch
-        {
-            // Server deafen failure - ignore
-        }
+        await _voiceCoordinator.ServerDeafenUserAsync(
+            CurrentVoiceChannel.Id,
+            participant.UserId,
+            !participant.IsServerDeafened);
     }
 
     /// <summary>
     /// Move a user to a different voice channel (admin action).
+    /// Delegates to VoiceCoordinator.
     /// </summary>
     private async Task MoveUserToChannelAsync((VoiceParticipantViewModel Participant, VoiceChannelViewModel TargetChannel) args)
     {
         if (!CanManageVoice) return;
-        if (args.Participant.UserId == _auth.UserId) return; // Cannot move yourself via this action
+        if (args.Participant.UserId == _auth.UserId) return;
 
-        try
-        {
-            await _signalR.MoveUserAsync(args.Participant.UserId, args.TargetChannel.Id);
-        }
-        catch
-        {
-            // Move user failure - ignore
-        }
+        await _voiceCoordinator.MoveUserAsync(args.Participant.UserId, args.TargetChannel.Id);
     }
 
     /// <summary>
