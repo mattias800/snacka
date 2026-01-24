@@ -584,7 +584,17 @@ public class MainWindowViewModel : ViewModelBase
             _settingsStore,
             auth.UserId);
 
-        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, _settingsStore, _audioDeviceService, _controllerStreamingService, _controllerHostService, CurrentServer!.Url, auth, _conversationStateService, _stores, _signalREventDispatcher, channelCoordinator, communityCoordinator, voiceCoordinator, OnLogout, OnSwitchServer, OnOpenSettings, gifsEnabled: _currentServerInfo?.GifsEnabled ?? false);
+        var messageCoordinator = new MessageCoordinator(
+            _apiClient,
+            _stores.MessageStore);
+
+        var gamingStationCommandHandler = new GamingStationCommandHandler(
+            _signalR,
+            _stores.ChannelStore,
+            _stores.VoiceStore,
+            _settingsStore);
+
+        CurrentView = new MainAppViewModel(_apiClient, _signalR, _webRtc, _screenCaptureService, _settingsStore, _audioDeviceService, _controllerStreamingService, _controllerHostService, CurrentServer!.Url, auth, _conversationStateService, _stores, _signalREventDispatcher, channelCoordinator, communityCoordinator, voiceCoordinator, messageCoordinator, gamingStationCommandHandler, OnLogout, OnSwitchServer, OnOpenSettings, gifsEnabled: _currentServerInfo?.GifsEnabled ?? false);
     }
 
     private void OnOpenSettings()

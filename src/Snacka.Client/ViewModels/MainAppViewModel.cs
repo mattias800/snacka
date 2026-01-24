@@ -32,6 +32,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private readonly IChannelCoordinator _channelCoordinator;
     private readonly ICommunityCoordinator _communityCoordinator;
     private readonly IVoiceCoordinator _voiceCoordinator;
+    private readonly IMessageCoordinator _messageCoordinator;
+    private readonly IGamingStationCommandHandler _gamingStationCommandHandler;
     private readonly AuthResponse _auth;
     private readonly Action _onLogout;
     private readonly Action? _onSwitchServer;
@@ -176,7 +178,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Audio device quick selector (extracted ViewModel)
     private AudioDeviceQuickSelectViewModel? _audioDeviceQuickSelect;
 
-    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, IConversationStateService conversationStateService, StoreContainer stores, ISignalREventDispatcher signalREventDispatcher, IChannelCoordinator channelCoordinator, ICommunityCoordinator communityCoordinator, IVoiceCoordinator voiceCoordinator, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false)
+    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, IConversationStateService conversationStateService, StoreContainer stores, ISignalREventDispatcher signalREventDispatcher, IChannelCoordinator channelCoordinator, ICommunityCoordinator communityCoordinator, IVoiceCoordinator voiceCoordinator, IMessageCoordinator messageCoordinator, IGamingStationCommandHandler gamingStationCommandHandler, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false)
     {
         _apiClient = apiClient;
         _conversationStateService = conversationStateService;
@@ -198,6 +200,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _channelCoordinator = channelCoordinator;
         _communityCoordinator = communityCoordinator;
         _voiceCoordinator = voiceCoordinator;
+        _messageCoordinator = messageCoordinator;
+        _gamingStationCommandHandler = gamingStationCommandHandler;
 
         // Load persisted mute/deafen state
         _isMuted = _settingsStore.Settings.IsMuted;
@@ -880,6 +884,18 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Set up SignalR event handlers
         SetupSignalRHandlers();
 
+        // Initialize the gaming station command handler with callbacks
+        _gamingStationCommandHandler.Initialize(
+            isGamingStationEnabled: () => IsGamingStationEnabled,
+            joinVoiceChannel: JoinVoiceChannelAsync,
+            leaveVoiceChannel: LeaveVoiceChannelAsync,
+            getScreenShare: () => _screenShare,
+            reportGamingStationStatus: async () =>
+            {
+                await ReportGamingStationStatusAsync();
+                this.RaisePropertyChanged(nameof(IsGamingStationEnabled));
+            });
+
         // Connect to SignalR and load servers on initialization
         Observable.FromAsync(InitializeAsync).Subscribe();
     }
@@ -1109,86 +1125,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             .Subscribe(_ => this.RaisePropertyChanged(nameof(TotalDmUnreadCount)));
 
         // GamingStationStatusChanged now handled by GamingStationViewModel directly
-
-        // Gaming Station command events (this client is a gaming station receiving commands)
-        _signalR.StationCommandJoinChannel += e => Dispatcher.UIThread.Post(async () =>
-        {
-
-            // Only execute if this client is a gaming station
-            if (!IsGamingStationEnabled) return;
-
-            // Try to find the channel in our loaded channels
-            var channel = _storeAllChannels.FirstOrDefault(c => c.Id == e.ChannelId);
-            if (channel is null)
-            {
-                // Channel not in current community, create a minimal ChannelResponse for joining
-                // This allows gaming stations to join channels even if they're not viewing that community
-                channel = new ChannelResponse(
-                    Id: e.ChannelId,
-                    Name: e.ChannelName,
-                    Topic: null,
-                    CommunityId: Guid.Empty,
-                    Type: ChannelType.Voice,
-                    Position: 0,
-                    CreatedAt: DateTime.UtcNow
-                );
-            }
-
-            await JoinVoiceChannelAsync(channel);
-        });
-
-        _signalR.StationCommandLeaveChannel += e => Dispatcher.UIThread.Post(async () =>
-        {
-
-            // Only execute if this client is a gaming station
-            if (!IsGamingStationEnabled) return;
-
-            await LeaveVoiceChannelAsync();
-        });
-
-        _signalR.StationCommandStartScreenShare += e => Dispatcher.UIThread.Post(async () =>
-        {
-            // Only execute if this client is a gaming station and in a voice channel
-            if (!IsGamingStationEnabled || CurrentVoiceChannel is null) return;
-
-            await _screenShare?.StartFromStationCommandAsync()!;
-        });
-
-        _signalR.StationCommandStopScreenShare += e => Dispatcher.UIThread.Post(async () =>
-        {
-            // Only execute if this client is a gaming station
-            if (!IsGamingStationEnabled) return;
-
-            await _screenShare?.StopScreenShareAsync()!;
-        });
-
-        _signalR.StationCommandDisable += e => Dispatcher.UIThread.Post(async () =>
-        {
-
-            // Disable gaming station mode in settings
-            _settingsStore.Settings.IsGamingStationEnabled = false;
-            _settingsStore.Save();
-
-            // Report the status change to the server
-            await ReportGamingStationStatusAsync();
-
-            this.RaisePropertyChanged(nameof(IsGamingStationEnabled));
-        });
-
-        // Gaming Station input events (when this client is a gaming station receiving input from owner)
-        _signalR.StationKeyboardInputReceived += e =>
-        {
-            if (!IsGamingStationEnabled) return;
-            // TODO: Inject keyboard input using platform-specific APIs
-            // Phase 3+ implementation
-        };
-
-        _signalR.StationMouseInputReceived += e =>
-        {
-            if (!IsGamingStationEnabled) return;
-            // TODO: Inject mouse input using platform-specific APIs
-            // Phase 3+ implementation
-        };
+        // Gaming Station command events now handled by IGamingStationCommandHandler
 
         // Channel typing cleanup now handled by TypingStore
         // DM typing cleanup is handled internally by DMContentViewModel
@@ -2782,15 +2719,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         var (message, emoji) = args;
         var hasReacted = message.Reactions?.FirstOrDefault(r => r.Emoji == emoji)?.HasReacted ?? false;
-
-        if (hasReacted)
-        {
-            await _apiClient.RemoveReactionAsync(SelectedChannel.Id, message.Id, emoji);
-        }
-        else
-        {
-            await _apiClient.AddReactionAsync(SelectedChannel.Id, message.Id, emoji);
-        }
+        await _messageCoordinator.ToggleReactionAsync(SelectedChannel.Id, message.Id, emoji, hasReacted);
     }
 
     private async Task AddReactionAsync((MessageResponse Message, string Emoji) args)
@@ -2798,21 +2727,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         if (SelectedChannel is null) return;
 
         var (message, emoji) = args;
-        await _apiClient.AddReactionAsync(SelectedChannel.Id, message.Id, emoji);
+        await _messageCoordinator.AddReactionAsync(SelectedChannel.Id, message.Id, emoji);
     }
 
     private async Task TogglePinAsync(MessageResponse message)
     {
         if (SelectedChannel is null) return;
-
-        if (message.IsPinned)
-        {
-            await _apiClient.UnpinMessageAsync(SelectedChannel.Id, message.Id);
-        }
-        else
-        {
-            await _apiClient.PinMessageAsync(SelectedChannel.Id, message.Id);
-        }
+        await _messageCoordinator.TogglePinAsync(SelectedChannel.Id, message.Id, message.IsPinned);
     }
 
     /// <summary>
