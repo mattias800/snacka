@@ -21,6 +21,16 @@ public interface IChannelCoordinator
     Task<ChannelResponse?> CreateChannelAsync(Guid communityId, string name, string? topic, ChannelType type);
 
     /// <summary>
+    /// Creates a new text channel with an auto-generated unique name.
+    /// </summary>
+    Task<ChannelResponse?> CreateTextChannelWithAutoNameAsync(Guid communityId);
+
+    /// <summary>
+    /// Creates a new voice channel with an auto-generated unique name.
+    /// </summary>
+    Task<ChannelResponse?> CreateVoiceChannelWithAutoNameAsync(Guid communityId);
+
+    /// <summary>
     /// Updates a channel's name and/or topic.
     /// </summary>
     Task<bool> UpdateChannelAsync(Guid communityId, Guid channelId, string? name, string? topic);
@@ -128,6 +138,39 @@ public class ChannelCoordinator : IChannelCoordinator
         }
 
         return null;
+    }
+
+    public async Task<ChannelResponse?> CreateTextChannelWithAutoNameAsync(Guid communityId)
+    {
+        var existingNames = _channelStore.GetTextChannels()
+            .Select(c => c.Name)
+            .ToHashSet();
+
+        var channelName = GenerateUniqueName("new-channel", existingNames, "-");
+        return await CreateChannelAsync(communityId, channelName, null, ChannelType.Text);
+    }
+
+    public async Task<ChannelResponse?> CreateVoiceChannelWithAutoNameAsync(Guid communityId)
+    {
+        var existingNames = _channelStore.GetAllChannels()
+            .Where(c => c.Type == ChannelType.Voice)
+            .Select(c => c.Name)
+            .ToHashSet();
+
+        var channelName = GenerateUniqueName("Voice", existingNames, " ");
+        return await CreateChannelAsync(communityId, channelName, null, ChannelType.Voice);
+    }
+
+    private static string GenerateUniqueName(string baseName, HashSet<string> existingNames, string separator)
+    {
+        var counter = 1;
+        string name;
+        do
+        {
+            name = $"{baseName}{separator}{counter}";
+            counter++;
+        } while (existingNames.Contains(name));
+        return name;
     }
 
     public async Task<bool> UpdateChannelAsync(Guid communityId, Guid channelId, string? name, string? topic)

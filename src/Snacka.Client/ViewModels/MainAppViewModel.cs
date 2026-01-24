@@ -214,10 +214,13 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             }
         };
 
-        // Create voice channel ViewModel manager
+        // Create voice channel ViewModel manager (subscribes to SignalR events for channel lifecycle)
         _voiceChannelManager = new VoiceChannelViewModelManager(
             _stores.VoiceStore,
+            _signalR,
             auth.UserId,
+            getPendingReorderCommunityId: () => _channelManagementVm?.PendingReorderCommunityId,
+            clearPendingReorder: () => _channelManagementVm?.ClearPendingReorder(),
             onVolumeChanged: (userId, volume) => _webRtc.SetUserVolume(userId, volume),
             getInitialVolume: userId => _webRtc.GetUserVolume(userId));
 
@@ -771,21 +774,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     private void SetupSignalRHandlers()
     {
-        _signalR.ChannelCreated += channel => Dispatcher.UIThread.Post(() =>
-        {
-            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
-            // StoreTextChannels auto-updates via DynamicData binding
-
-            if (SelectedCommunity is not null && channel.CommunityId == SelectedCommunity.Id)
-            {
-                // Add VoiceChannelViewModel for voice channels (view-specific, not in store)
-                _voiceChannelManager?.AddChannel(channel);
-            }
-        });
+        // ChannelCreated: VoiceChannelViewModels handled by VoiceChannelViewModelManager
+        // ChannelStore updated by SignalREventDispatcher
 
         _signalR.ChannelUpdated += channel => Dispatcher.UIThread.Post(() =>
         {
-            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
             // Update SelectedChannel if it's the one that changed
             if (SelectedChannel?.Id == channel.Id)
                 SelectedChannel = channel;
@@ -793,34 +786,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         _signalR.ChannelDeleted += e => Dispatcher.UIThread.Post(() =>
         {
-            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
-
-            // Remove VoiceChannelViewModel if it was a voice channel (view-specific, not in store)
-            _voiceChannelManager?.RemoveChannel(e.ChannelId);
+            // VoiceChannelViewModels handled by VoiceChannelViewModelManager
+            // ChannelStore updated by SignalREventDispatcher
 
             // Select a different channel if the deleted one was selected
             if (SelectedChannel?.Id == e.ChannelId && _storeTextChannels.Count > 0)
                 SelectedChannel = _storeTextChannels[0];
         });
 
-        _signalR.ChannelsReordered += e => Dispatcher.UIThread.Post(() =>
-        {
-            // Only update if it's for the current community
-            if (SelectedCommunity?.Id != e.CommunityId) return;
-
-            // Skip if we just initiated this reorder (we already updated optimistically)
-            if (_channelManagementVm?.PendingReorderCommunityId == e.CommunityId)
-            {
-                _channelManagementVm?.ClearPendingReorder();
-                return;
-            }
-
-            // Channel list updates handled by SignalREventDispatcher -> ChannelStore
-            // StoreTextChannels auto-updates via DynamicData binding
-
-            // Update VoiceChannelViewModels positions and re-sort (view-specific, not in store)
-            _voiceChannelManager?.UpdatePositions(e.Channels);
-        });
+        // ChannelsReordered: VoiceChannelViewModels handled by VoiceChannelViewModelManager
+        // ChannelStore updated by SignalREventDispatcher
 
         // MessageReceived handled entirely by SignalREventDispatcher -> MessageStore, TypingStore, ChannelStore
         // MessageEdited, MessageDeleted, ThreadReplyReceived, ReactionUpdated handled by ThreadPanelViewModel
@@ -1036,6 +1011,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private async Task SetupVoiceChannelViewModelsAsync()
     {
         var voiceChannels = _storeVoiceChannels.ToList();
+
+        // Set current community for filtering SignalR events
+        _voiceChannelManager?.SetCurrentCommunity(SelectedCommunity?.Id);
 
         // Initialize the manager with voice channels
         _voiceChannelManager?.Initialize(voiceChannels);
@@ -2080,18 +2058,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsLoading = true;
         try
         {
-            // Generate unique name based on existing text channels
-            var existingNames = TextChannels.Select(c => c.Name).ToHashSet();
-            var baseName = "new-channel";
-            var counter = 1;
-            string channelName;
-            do
-            {
-                channelName = $"{baseName}-{counter}";
-                counter++;
-            } while (existingNames.Contains(channelName));
-
-            var channel = await _channelCoordinator.CreateChannelAsync(SelectedCommunity.Id, channelName, null, ChannelType.Text);
+            var channel = await _channelCoordinator.CreateTextChannelWithAutoNameAsync(SelectedCommunity.Id);
             if (channel is not null)
             {
                 SelectedChannel = channel;
@@ -2115,18 +2082,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         IsLoading = true;
         try
         {
-            // Generate unique name based on existing voice channels
-            var existingNames = VoiceChannelViewModels.Select(c => c.Name).ToHashSet();
-            var baseName = "Voice";
-            var counter = 1;
-            string channelName;
-            do
-            {
-                channelName = $"{baseName} {counter}";
-                counter++;
-            } while (existingNames.Contains(channelName));
-
-            var channel = await _channelCoordinator.CreateChannelAsync(SelectedCommunity.Id, channelName, null, ChannelType.Voice);
+            var channel = await _channelCoordinator.CreateVoiceChannelWithAutoNameAsync(SelectedCommunity.Id);
             if (channel is not null)
             {
                 // Add to VoiceChannelViewModels (coordinator already updated store)
@@ -2365,6 +2321,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _videoFullscreen?.Dispose();
         _controllerHost?.Dispose();
         _threadPanel?.Dispose();
+        _voiceChannelManager?.Dispose();
         _typingSubscription?.Dispose();
         _storeSubscriptions.Dispose();
         _ = _signalR.DisposeAsync();

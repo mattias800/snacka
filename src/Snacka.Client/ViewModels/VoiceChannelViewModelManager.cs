@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using Avalonia.Threading;
 using ReactiveUI;
 using Snacka.Client.Services;
 using Snacka.Client.Stores;
@@ -9,13 +10,20 @@ namespace Snacka.Client.ViewModels;
 /// <summary>
 /// Manages the collection of VoiceChannelViewModels for the sidebar.
 /// Handles creation, destruction, reordering, and drag-drop preview state.
+/// Subscribes to SignalR events directly for channel lifecycle management.
 /// </summary>
-public class VoiceChannelViewModelManager : ReactiveObject
+public class VoiceChannelViewModelManager : ReactiveObject, IDisposable
 {
     private readonly IVoiceStore _voiceStore;
+    private readonly ISignalRService _signalR;
     private readonly Guid _currentUserId;
     private readonly Action<Guid, float>? _onVolumeChanged;
     private readonly Func<Guid, float>? _getInitialVolume;
+    private readonly Func<Guid?> _getPendingReorderCommunityId;
+    private readonly Action _clearPendingReorder;
+
+    // Current community filter
+    private Guid? _currentCommunityId;
 
     // Drag preview state
     private List<VoiceChannelViewModel>? _originalOrder;
@@ -25,15 +33,71 @@ public class VoiceChannelViewModelManager : ReactiveObject
 
     public VoiceChannelViewModelManager(
         IVoiceStore voiceStore,
+        ISignalRService signalR,
         Guid currentUserId,
+        Func<Guid?> getPendingReorderCommunityId,
+        Action clearPendingReorder,
         Action<Guid, float>? onVolumeChanged = null,
         Func<Guid, float>? getInitialVolume = null)
     {
         _voiceStore = voiceStore;
+        _signalR = signalR;
         _currentUserId = currentUserId;
+        _getPendingReorderCommunityId = getPendingReorderCommunityId;
+        _clearPendingReorder = clearPendingReorder;
         _onVolumeChanged = onVolumeChanged;
         _getInitialVolume = getInitialVolume;
         ViewModels = new ObservableCollection<VoiceChannelViewModel>();
+
+        // Subscribe to SignalR events
+        _signalR.ChannelCreated += OnChannelCreated;
+        _signalR.ChannelDeleted += OnChannelDeleted;
+        _signalR.ChannelsReordered += OnChannelsReordered;
+    }
+
+    private void OnChannelCreated(ChannelResponse channel)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            if (_currentCommunityId.HasValue && channel.CommunityId == _currentCommunityId.Value)
+            {
+                AddChannel(channel);
+            }
+        });
+    }
+
+    private void OnChannelDeleted(ChannelDeletedEvent e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            RemoveChannel(e.ChannelId);
+        });
+    }
+
+    private void OnChannelsReordered(ChannelsReorderedEvent e)
+    {
+        Dispatcher.UIThread.Post(() =>
+        {
+            // Only update if it's for the current community
+            if (_currentCommunityId != e.CommunityId) return;
+
+            // Skip if we just initiated this reorder (we already updated optimistically)
+            if (_getPendingReorderCommunityId() == e.CommunityId)
+            {
+                _clearPendingReorder();
+                return;
+            }
+
+            UpdatePositions(e.Channels);
+        });
+    }
+
+    /// <summary>
+    /// Sets the current community ID for filtering channel events.
+    /// </summary>
+    public void SetCurrentCommunity(Guid? communityId)
+    {
+        _currentCommunityId = communityId;
     }
 
     public ObservableCollection<VoiceChannelViewModel> ViewModels { get; }
@@ -235,4 +299,12 @@ public class VoiceChannelViewModelManager : ReactiveObject
     }
 
     #endregion
+
+    public void Dispose()
+    {
+        _signalR.ChannelCreated -= OnChannelCreated;
+        _signalR.ChannelDeleted -= OnChannelDeleted;
+        _signalR.ChannelsReordered -= OnChannelsReordered;
+        Clear();
+    }
 }
