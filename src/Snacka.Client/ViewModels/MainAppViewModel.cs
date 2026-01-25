@@ -301,42 +301,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         };
         ConnectionState = _signalR.State;
 
-        // Subscribe to store changes (for Redux-style state management migration)
-        // These subscriptions complement the existing SignalR handlers and will eventually replace them
-        _storeSubscriptions.Add(
-            _stores.PresenceStore.ConnectionStatus
-                .ObserveOn(RxApp.MainThreadScheduler)
-                .Subscribe(status =>
-                {
-                    // Update ViewModel state from store (eventually this will be the only source)
-                    if (_connectionState != status)
-                    {
-                        ConnectionState = status;
-                    }
-                }));
-
-        _storeSubscriptions.Add(
-            _stores.PresenceStore.ReconnectSecondsRemaining
-                .ObserveOn(RxApp.MainThreadScheduler)
-                .Subscribe(seconds =>
-                {
-                    if (_reconnectSecondsRemaining != seconds)
-                    {
-                        ReconnectSecondsRemaining = seconds;
-                        this.RaisePropertyChanged(nameof(ReconnectStatusText));
-                    }
-                }));
-
-        // Subscribe to voice-on-other-device state changes
-        _storeSubscriptions.Add(
-            _stores.VoiceStore.VoiceOnOtherDevice
-                .ObserveOn(RxApp.MainThreadScheduler)
-                .Subscribe(_ =>
-                {
-                    this.RaisePropertyChanged(nameof(VoiceOnOtherDeviceChannelId));
-                    this.RaisePropertyChanged(nameof(VoiceOnOtherDeviceChannelName));
-                    this.RaisePropertyChanged(nameof(IsInVoiceOnOtherDevice));
-                }));
+        // Set up non-binding store subscriptions (presence, voice-on-other-device, etc.)
+        SetupStoreSubscriptions();
 
         // Create store-backed bindable collections for channels
         // These use DynamicData to transform ChannelState -> ChannelResponse and bind to ReadOnlyObservableCollection
@@ -401,36 +367,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 .ObserveOn(RxApp.MainThreadScheduler)
                 .Bind(out _storeCommunities)
                 .Subscribe());
-
-        // Sync SelectedChannel from store to ViewModel (store → ViewModel)
-        _storeSubscriptions.Add(
-            _stores.ChannelStore.SelectedChannel
-                .ObserveOn(RxApp.MainThreadScheduler)
-                .Subscribe(state =>
-                {
-                    var response = state is not null ? ToChannelResponse(state) : null;
-                    if (_selectedChannel?.Id != response?.Id)
-                    {
-                        _selectedChannel = response;
-                        this.RaisePropertyChanged(nameof(SelectedChannel));
-                    }
-                }));
-
-        // Sync SelectedCommunity from store to ViewModel (store → ViewModel)
-        _storeSubscriptions.Add(
-            _stores.CommunityStore.SelectedCommunity
-                .ObserveOn(RxApp.MainThreadScheduler)
-                .Subscribe(state =>
-                {
-                    var response = state is not null ? ToCommunityResponse(state) : null;
-                    if (_selectedCommunity?.Id != response?.Id)
-                    {
-                        _selectedCommunity = response;
-                        this.RaisePropertyChanged(nameof(SelectedCommunity));
-                        this.RaisePropertyChanged(nameof(IsVoiceInDifferentCommunity));
-                        this.RaisePropertyChanged(nameof(VoiceCommunityName));
-                    }
-                }));
 
         // Initialize GIF ViewModels (only if GIFs are enabled)
         if (_isGifsEnabled)
@@ -623,7 +559,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Create thread panel ViewModel (handles its own SignalR event subscriptions)
         _threadPanel = new ThreadPanelViewModel(_apiClient, _stores.MessageStore, _signalR, _auth.UserId);
 
-        // Commands
+        // Initialize all commands
+        #region Commands
+        // App navigation commands
         LogoutCommand = ReactiveCommand.Create(_onLogout);
         SwitchServerCommand = _onSwitchServer is not null
             ? ReactiveCommand.Create(_onSwitchServer)
@@ -631,12 +569,17 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         OpenSettingsCommand = _onOpenSettings is not null
             ? ReactiveCommand.Create(_onOpenSettings)
             : null;
-        OpenGamingStationsCommand = _gamingStation.OpenCommand;
+
+        // Gaming station commands (delegated to GamingStationViewModel)
+        OpenGamingStationsCommand = _gamingStation!.OpenCommand;
         RegisterStationCommand = _gamingStation.RegisterCommand;
         ConnectToStationCommand = _gamingStation.ConnectCommand;
         ManageStationCommand = _gamingStation.ManageCommand;
         DisconnectFromStationCommand = _gamingStation.DisconnectCommand;
         ToggleStationFullscreenCommand = _gamingStation.ToggleFullscreenCommand;
+        DisableGamingStationCommand = _gamingStation.DisableCommand;
+
+        // Community commands
         CreateCommunityCommand = ReactiveCommand.CreateFromTask(CreateCommunityAsync);
         RefreshCommunitiesCommand = ReactiveCommand.CreateFromTask(LoadCommunitiesAsync);
         SelectCommunityCommand = ReactiveCommand.Create<CommunityResponse>(community =>
@@ -644,24 +587,25 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _gamingStation?.Close();
             SelectedCommunity = community;
         });
+
+        // Channel commands
         SelectChannelCommand = ReactiveCommand.Create<ChannelResponse>(channel =>
         {
-            // Close the DM view when selecting a text channel
             _dmContent?.Close();
-            // Clear voice channel viewing when selecting a text channel
             SelectedVoiceChannelForViewing = null;
-            // Close gaming stations view
             _gamingStation?.Close();
             SelectedChannel = channel;
         });
 
-        // Channel creation canExecute - prevents rapid clicks
         var canCreateChannel = this.WhenAnyValue(
             x => x.SelectedCommunity,
             x => x.IsLoading,
             (community, isLoading) => community is not null && !isLoading);
 
         CreateChannelCommand = ReactiveCommand.CreateFromTask(CreateChannelAsync, canCreateChannel);
+        CreateVoiceChannelCommand = ReactiveCommand.CreateFromTask(CreateVoiceChannelAsync, canCreateChannel);
+
+        // Message commands
         ToggleReactionCommand = ReactiveCommand.CreateFromTask<(MessageResponse Message, string Emoji)>(ToggleReactionAsync);
         AddReactionCommand = ReactiveCommand.CreateFromTask<(MessageResponse Message, string Emoji)>(AddReactionAsync);
         TogglePinCommand = ReactiveCommand.CreateFromTask<MessageResponse>(TogglePinAsync);
@@ -673,7 +617,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         CloseInviteUserPopupCommand = _inviteUserPopup!.CloseCommand;
         InviteUserCommand = _inviteUserPopup!.InviteUserCommand;
 
-        // Recent DMs commands (sidebar section)
+        // Recent DMs commands
         SelectRecentDmCommand = ReactiveCommand.Create<ConversationSummaryResponse>(SelectRecentDm);
         ToggleRecentDmsExpandedCommand = ReactiveCommand.Create(() => { IsRecentDmsExpanded = !IsRecentDmsExpanded; });
 
@@ -684,30 +628,29 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         RefreshDiscoverableCommunitiesCommand = _communityDiscovery!.OpenCommand;
 
         // Welcome modal commands (delegated to WelcomeModalViewModel)
-        CloseWelcomeModalCommand = _welcomeModal.CloseCommand;
+        CloseWelcomeModalCommand = _welcomeModal!.CloseCommand;
         WelcomeBrowseCommunitiesCommand = _welcomeModal.BrowseCommunitiesCommand;
         WelcomeCreateCommunityCommand = _welcomeModal.CreateCommunityCommand;
 
         // Controller access request commands (delegated to ControllerHostViewModel)
-        AcceptControllerRequestCommand = _controllerHost.AcceptRequestCommand;
+        AcceptControllerRequestCommand = _controllerHost!.AcceptRequestCommand;
         DeclineControllerRequestCommand = _controllerHost.DeclineRequestCommand;
         StopControllerSessionCommand = _controllerHost.StopSessionCommand;
         ToggleMuteControllerSessionCommand = _controllerHost.ToggleMuteSessionCommand;
 
         // Thread commands (delegated to ThreadPanelViewModel)
-        OpenThreadCommand = _threadPanel.OpenCommand;
+        OpenThreadCommand = _threadPanel!.OpenCommand;
         CloseThreadCommand = _threadPanel.CloseCommand;
 
         // Voice commands
-        CreateVoiceChannelCommand = ReactiveCommand.CreateFromTask(CreateVoiceChannelAsync, canCreateChannel);
         JoinVoiceChannelCommand = ReactiveCommand.CreateFromTask<ChannelResponse>(JoinVoiceChannelAsync);
         LeaveVoiceChannelCommand = ReactiveCommand.CreateFromTask(LeaveVoiceChannelAsync);
-        ToggleMuteCommand = _voiceControl.ToggleMuteCommand;
+        ToggleMuteCommand = _voiceControl!.ToggleMuteCommand;
         ToggleDeafenCommand = _voiceControl.ToggleDeafenCommand;
         ToggleCameraCommand = _voiceControl.ToggleCameraCommand;
-        ToggleScreenShareCommand = _screenShare.ToggleScreenShareCommand;
+        ToggleScreenShareCommand = _screenShare!.ToggleScreenShareCommand;
 
-        // Voice video overlay commands (show/hide video grid while navigating)
+        // Voice video overlay commands
         ShowVoiceVideoOverlayCommand = ReactiveCommand.Create(() =>
         {
             if (CurrentVoiceChannel != null)
@@ -721,13 +664,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             IsVoiceVideoOverlayOpen = false;
         });
 
-        // Gaming station commands (delegate to GamingStationViewModel)
-        DisableGamingStationCommand = _gamingStation.DisableCommand;
-
         // Admin voice commands
         ServerMuteUserCommand = ReactiveCommand.CreateFromTask<VoiceParticipantViewModel>(ServerMuteUserAsync);
         ServerDeafenUserCommand = ReactiveCommand.CreateFromTask<VoiceParticipantViewModel>(ServerDeafenUserAsync);
         MoveUserToChannelCommand = ReactiveCommand.CreateFromTask<(VoiceParticipantViewModel, VoiceChannelViewModel)>(MoveUserToChannelAsync);
+        #endregion
 
         // React to community selection changes
         this.WhenAnyValue(x => x.SelectedCommunity)
@@ -777,6 +718,74 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         // Load recent DMs for the sidebar
         await LoadRecentDmsAsync();
+    }
+
+    private void SetupStoreSubscriptions()
+    {
+        // Subscribe to presence store changes
+        _storeSubscriptions.Add(
+            _stores.PresenceStore.ConnectionStatus
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(status =>
+                {
+                    if (_connectionState != status)
+                    {
+                        ConnectionState = status;
+                    }
+                }));
+
+        _storeSubscriptions.Add(
+            _stores.PresenceStore.ReconnectSecondsRemaining
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(seconds =>
+                {
+                    if (_reconnectSecondsRemaining != seconds)
+                    {
+                        ReconnectSecondsRemaining = seconds;
+                        this.RaisePropertyChanged(nameof(ReconnectStatusText));
+                    }
+                }));
+
+        // Subscribe to voice-on-other-device state changes
+        _storeSubscriptions.Add(
+            _stores.VoiceStore.VoiceOnOtherDevice
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(_ =>
+                {
+                    this.RaisePropertyChanged(nameof(VoiceOnOtherDeviceChannelId));
+                    this.RaisePropertyChanged(nameof(VoiceOnOtherDeviceChannelName));
+                    this.RaisePropertyChanged(nameof(IsInVoiceOnOtherDevice));
+                }));
+
+        // Sync SelectedChannel from store to ViewModel (store → ViewModel)
+        _storeSubscriptions.Add(
+            _stores.ChannelStore.SelectedChannel
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(state =>
+                {
+                    var response = state is not null ? ToChannelResponse(state) : null;
+                    if (_selectedChannel?.Id != response?.Id)
+                    {
+                        _selectedChannel = response;
+                        this.RaisePropertyChanged(nameof(SelectedChannel));
+                    }
+                }));
+
+        // Sync SelectedCommunity from store to ViewModel (store → ViewModel)
+        _storeSubscriptions.Add(
+            _stores.CommunityStore.SelectedCommunity
+                .ObserveOn(RxApp.MainThreadScheduler)
+                .Subscribe(state =>
+                {
+                    var response = state is not null ? ToCommunityResponse(state) : null;
+                    if (_selectedCommunity?.Id != response?.Id)
+                    {
+                        _selectedCommunity = response;
+                        this.RaisePropertyChanged(nameof(SelectedCommunity));
+                        this.RaisePropertyChanged(nameof(IsVoiceInDifferentCommunity));
+                        this.RaisePropertyChanged(nameof(VoiceCommunityName));
+                    }
+                }));
     }
 
     private void SetupSignalRHandlers()
