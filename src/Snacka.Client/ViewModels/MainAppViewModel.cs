@@ -98,6 +98,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Thread panel ViewModel (encapsulates thread display and updates)
     private ThreadPanelViewModel? _threadPanel;
 
+    // SignalR UI event manager (handles UI-specific SignalR event subscriptions)
+    private SignalRUiEventManager? _signalRUiEventManager;
+
     /// <summary>
     /// Fired when an NV12 frame should be rendered to GPU fullscreen view.
     /// Args: (width, height, nv12Data)
@@ -679,8 +682,37 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         #region SignalR and Initialization
 
-        // Set up SignalR event handlers
-        SetupSignalRHandlers();
+        // Set up SignalR UI event manager (handles UI-specific SignalR events)
+        _signalRUiEventManager = new SignalRUiEventManager(
+            _signalR,
+            _webRtc,
+            _stores,
+            _communityCoordinator,
+            _voiceCoordinator,
+            _conversationStateService,
+            _auth.UserId,
+            new SignalRUiCallbacks(
+                GetSelectedChannel: () => SelectedChannel,
+                SetSelectedChannel: c => SelectedChannel = c,
+                GetSelectedCommunity: () => SelectedCommunity,
+                GetCurrentVoiceChannel: () => CurrentVoiceChannel,
+                SetCurrentVoiceChannelNull: () => CurrentVoiceChannel = null,
+                ClearVoiceOverlayState: () =>
+                {
+                    IsVoiceVideoOverlayOpen = false;
+                    SelectedVoiceChannelForViewing = null;
+                },
+                GetChannelById: id => _storeAllChannels.FirstOrDefault(c => c.Id == id),
+                GetFirstTextChannel: () => _storeTextChannels.Count > 0 ? _storeTextChannels[0] : null,
+                LeaveVoiceChannelAsync: LeaveVoiceChannelAsync,
+                JoinVoiceChannelAsync: JoinVoiceChannelAsync,
+                RaiseTotalDmUnreadCountChanged: () => this.RaisePropertyChanged(nameof(TotalDmUnreadCount))
+            ),
+            _screenShare,
+            _voiceControl,
+            _videoFullscreen,
+            _pinnedMessagesPopup);
+        _signalRUiEventManager.Setup();
 
         // Initialize the gaming station command handler with callbacks
         _gamingStationCommandHandler.Initialize(
@@ -785,157 +817,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                         this.RaisePropertyChanged(nameof(VoiceCommunityName));
                     }
                 }));
-    }
-
-    private void SetupSignalRHandlers()
-    {
-        // ChannelCreated: VoiceChannelViewModels handled by VoiceChannelViewModelManager
-        // ChannelStore updated by SignalREventDispatcher
-
-        _signalR.ChannelUpdated += channel => Dispatcher.UIThread.Post(() =>
-        {
-            // Update SelectedChannel if it's the one that changed
-            if (SelectedChannel?.Id == channel.Id)
-                SelectedChannel = channel;
-        });
-
-        _signalR.ChannelDeleted += e => Dispatcher.UIThread.Post(() =>
-        {
-            // VoiceChannelViewModels handled by VoiceChannelViewModelManager
-            // ChannelStore updated by SignalREventDispatcher
-
-            // Select a different channel if the deleted one was selected
-            if (SelectedChannel?.Id == e.ChannelId && _storeTextChannels.Count > 0)
-                SelectedChannel = _storeTextChannels[0];
-        });
-
-        // ChannelsReordered: VoiceChannelViewModels handled by VoiceChannelViewModelManager
-        // ChannelStore updated by SignalREventDispatcher
-
-        // MessageReceived handled entirely by SignalREventDispatcher -> MessageStore, TypingStore, ChannelStore
-        // MessageEdited, MessageDeleted, ThreadReplyReceived, ReactionUpdated handled by ThreadPanelViewModel
-        // ThreadMetadataUpdated handled by SignalREventDispatcher -> MessageStore
-
-        _signalR.MessagePinned += e => Dispatcher.UIThread.Post(() =>
-        {
-            // Update pinned messages popup if open (view-specific; store update via SignalREventDispatcher)
-            _pinnedMessagesPopup?.OnMessagePinStatusChanged(e.MessageId, e.IsPinned);
-        });
-
-        // UserOnline/UserOffline handled by SignalREventDispatcher -> CommunityStore/PresenceStore
-
-        _signalR.CommunityMemberAdded += e =>
-        {
-            // If this is for the currently selected community, reload members via coordinator
-            if (SelectedCommunity is not null && e.CommunityId == SelectedCommunity.Id)
-            {
-                _ = _communityCoordinator.ReloadMembersAsync(SelectedCommunity.Id);
-            }
-        };
-
-        // CommunityMemberRemoved event is now handled by SignalREventDispatcher -> CommunityStore
-        // StoreMembers auto-updates via DynamicData binding
-
-        // Voice channel events (VoiceParticipantJoined, VoiceParticipantLeft, VoiceStateChanged, SpeakingStateChanged)
-        // now handled by VoiceChannelContentViewModel which subscribes to SignalR events directly
-        // VoiceChannelViewModels auto-update via VoiceStore subscription
-
-        // VoiceSessionActiveOnOtherDevice is handled by SignalREventDispatcher -> VoiceStore
-
-        _signalR.DisconnectedFromVoice += e => Dispatcher.UIThread.Post(async () =>
-        {
-            // Let coordinator handle WebRTC/screen share cleanup
-            _screenShare?.ForceStop();
-            var channelName = await _voiceCoordinator.HandleForcedDisconnectAsync(e.ChannelId);
-
-            if (channelName != null)
-            {
-                // Clear UI-specific state
-                CurrentVoiceChannel = null;
-                _voiceControl?.ResetTransientState();
-                IsVoiceVideoOverlayOpen = false;
-                SelectedVoiceChannelForViewing = null;
-
-                // Track that we're in voice on another device
-                _stores.VoiceStore.SetVoiceOnOtherDevice(e.ChannelId, channelName);
-            }
-        });
-
-        // Local speaking detection - broadcast to others and update own state
-        _webRtc.SpeakingChanged += isSpeaking => Dispatcher.UIThread.Post(async () =>
-        {
-            // Update local speaking state via VoiceControlViewModel
-            _voiceControl?.UpdateSpeakingState(isSpeaking);
-
-            // Capture channel reference to avoid race condition during leave
-            var currentChannel = CurrentVoiceChannel;
-            if (currentChannel is not null)
-            {
-                // Broadcast to others - VoiceStore will be updated via SignalR event response
-                await _signalR.UpdateSpeakingStateAsync(currentChannel.Id, isSpeaking);
-
-                // VoiceChannelViewModel and VoiceChannelContentViewModel auto-update via VoiceStore subscription
-            }
-        });
-
-        // Admin voice state changed (server mute/deafen)
-        _signalR.ServerVoiceStateChanged += e => Dispatcher.UIThread.Post(() =>
-        {
-
-            // VoiceChannelViewModel auto-updates via VoiceStore subscription
-
-            // If this is the current user being server-muted, update local state
-            if (e.TargetUserId == _auth.UserId)
-            {
-                _voiceControl?.HandleServerVoiceStateUpdate(e.IsServerMuted, e.IsServerDeafened);
-
-                // Apply to WebRTC
-                if (e.IsServerMuted == true)
-                    _webRtc.SetMuted(true);
-                if (e.IsServerDeafened == true)
-                    _webRtc.SetMuted(true);
-            }
-        });
-
-        // User moved by admin - only handle current user (other users handled by VoiceParticipantLeft/Joined events)
-        _signalR.UserMoved += e => Dispatcher.UIThread.Post(async () =>
-        {
-            if (e.UserId == _auth.UserId)
-            {
-                // Leave current channel and join new one (updates view state)
-                await LeaveVoiceChannelAsync();
-                var channel = _storeAllChannels.FirstOrDefault(c => c.Id == e.ToChannelId);
-                if (channel != null)
-                {
-                    await JoinVoiceChannelAsync(channel);
-                }
-            }
-        });
-
-        // Video stream stopped - close fullscreen if viewing that stream
-        _signalR.VideoStreamStopped += e => Dispatcher.UIThread.Post(() =>
-        {
-            // If we're viewing this stream in fullscreen, close it
-            if (_videoFullscreen?.IsOpen == true && _videoFullscreen?.Stream?.UserId == e.UserId)
-            {
-                _videoFullscreen?.Close();
-            }
-        });
-
-        // Typing indicator events now handled by SignalREventDispatcher -> TypingStore
-        // UI subscribes to store via _typingSubscription (set up in SubscribeToTypingStore)
-
-        // Conversation events handled by ConversationStateService directly (subscribes to SignalR)
-        // Subscribe to unread count changes to update UI
-        _conversationStateService.TotalUnreadCount
-            .ObserveOn(RxApp.MainThreadScheduler)
-            .Subscribe(_ => this.RaisePropertyChanged(nameof(TotalDmUnreadCount)));
-
-        // GamingStationStatusChanged now handled by GamingStationViewModel directly
-        // Gaming Station command events now handled by IGamingStationCommandHandler
-
-        // Channel typing cleanup now handled by TypingStore
-        // DM typing cleanup is handled internally by DMContentViewModel
     }
 
     /// <summary>
@@ -2052,6 +1933,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     public void Dispose()
     {
+        _signalRUiEventManager?.Dispose();
         _sharerAnnotationOverlay?.Dispose();
         _messageInputVm?.Dispose();
         _screenShare?.Dispose();
