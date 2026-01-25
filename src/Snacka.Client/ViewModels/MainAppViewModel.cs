@@ -43,7 +43,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private CommunityResponse? _selectedCommunity;
     private ChannelResponse? _selectedChannel;
     private bool _isLoading;
-    private bool _isMessagesLoading;
     private string? _errorMessage;
 
     // Voice channel state (channel object needed for UI; voice control state delegated to VoiceControlViewModel)
@@ -63,8 +62,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
     // Inline DM ViewModel (encapsulates all DM state and logic)
     private DMContentViewModel? _dmContent;
-
-    // Screen share picker state
 
     // Voice video overlay state (for viewing video grid while navigating elsewhere)
     private bool _isVoiceVideoOverlayOpen;
@@ -1079,12 +1076,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         set => this.RaiseAndSetIfChanged(ref _isLoading, value);
     }
 
-    public bool IsMessagesLoading
-    {
-        get => _isMessagesLoading;
-        set => this.RaiseAndSetIfChanged(ref _isMessagesLoading, value);
-    }
-
     public string? ErrorMessage
     {
         get => _errorMessage;
@@ -2064,8 +2055,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             Role: state.Role,
             JoinedAt: state.JoinedAt
         );
-
-    private void SortVoiceChannelViewModelsByPosition() => _voiceChannelManager?.SortByPosition();
 
     #endregion
 }

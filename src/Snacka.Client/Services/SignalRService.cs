@@ -790,11 +790,35 @@ public class SignalRService : ISignalRService
     public event Action<StationKeyboardInputEvent>? StationKeyboardInputReceived;
     public event Action<StationMouseInputEvent>? StationMouseInputReceived;
 
+    /// <summary>
+    /// Registers all SignalR event handlers. Split into logical domain methods for maintainability.
+    /// </summary>
     private void RegisterHandlers()
     {
         if (_hubConnection is null) return;
 
-        _hubConnection.On<ChannelResponse>("ChannelCreated", channel =>
+        RegisterChannelHandlers();
+        RegisterMessageHandlers();
+        RegisterConversationHandlers();
+        RegisterPresenceHandlers();
+        RegisterCommunityHandlers();
+        RegisterVoiceHandlers();
+        RegisterWebRtcHandlers();
+        RegisterVideoHandlers();
+        RegisterTypingHandlers();
+        RegisterSsrcHandlers();
+        RegisterThreadHandlers();
+        RegisterNotificationHandlers();
+        RegisterControllerHandlers();
+        RegisterGamingStationHandlers();
+        RegisterConnectionStateHandlers();
+    }
+
+    #region Channel Handlers
+
+    private void RegisterChannelHandlers()
+    {
+        _hubConnection!.On<ChannelResponse>("ChannelCreated", channel =>
         {
             Console.WriteLine($"SignalR: ChannelCreated - {channel.Name}");
             ChannelCreated?.Invoke(channel);
@@ -817,8 +841,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: ChannelsReordered - {e.Channels.Count} channels");
             ChannelsReordered?.Invoke(e);
         });
+    }
 
-        _hubConnection.On<MessageResponse>("ReceiveChannelMessage", message =>
+    #endregion
+
+    #region Message Handlers
+
+    private void RegisterMessageHandlers()
+    {
+        _hubConnection!.On<MessageResponse>("ReceiveChannelMessage", message =>
         {
             Console.WriteLine($"SignalR: ReceiveChannelMessage from {message.AuthorUsername}");
             MessageReceived?.Invoke(message);
@@ -847,9 +878,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: MessagePinned - {e.MessageId} {(e.IsPinned ? "pinned" : "unpinned")}");
             MessagePinned?.Invoke(e);
         });
+    }
 
-        // Conversation events
-        _hubConnection.On<ConversationResponse>("ConversationCreated", conversation =>
+    #endregion
+
+    #region Conversation Handlers
+
+    private void RegisterConversationHandlers()
+    {
+        _hubConnection!.On<ConversationResponse>("ConversationCreated", conversation =>
         {
             Console.WriteLine($"SignalR: ConversationCreated - {conversation.Id}");
             ConversationCreated?.Invoke(conversation);
@@ -907,9 +944,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: RemovedFromConversation - {conversationId}");
             RemovedFromConversation?.Invoke(conversationId);
         });
+    }
 
-        // User presence events
-        _hubConnection.On<UserPresenceEvent>("UserOnline", e =>
+    #endregion
+
+    #region Presence Handlers
+
+    private void RegisterPresenceHandlers()
+    {
+        _hubConnection!.On<UserPresenceEvent>("UserOnline", e =>
         {
             Console.WriteLine($"SignalR: UserOnline - {e.Username}");
             UserOnline?.Invoke(e);
@@ -920,9 +963,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: UserOffline - {e.Username}");
             UserOffline?.Invoke(e);
         });
+    }
 
-        // Community member events
-        _hubConnection.On<Guid, Guid>("CommunityMemberAdded", (communityId, userId) =>
+    #endregion
+
+    #region Community Handlers
+
+    private void RegisterCommunityHandlers()
+    {
+        _hubConnection!.On<Guid, Guid>("CommunityMemberAdded", (communityId, userId) =>
         {
             Console.WriteLine($"SignalR: CommunityMemberAdded - user {userId} joined community {communityId}");
             CommunityMemberAdded?.Invoke(new CommunityMemberAddedEvent(communityId, userId));
@@ -934,8 +983,26 @@ public class SignalRService : ISignalRService
             CommunityMemberRemoved?.Invoke(new CommunityMemberRemovedEvent(communityId, userId));
         });
 
-        // Voice channel events
-        _hubConnection.On<VoiceParticipantJoinedEvent>("VoiceParticipantJoined", e =>
+        _hubConnection.On<CommunityInviteReceivedEvent>("CommunityInviteReceived", e =>
+        {
+            Console.WriteLine($"SignalR: CommunityInviteReceived - invite to {e.CommunityName} from {e.InvitedByUsername}");
+            CommunityInviteReceived?.Invoke(e);
+        });
+
+        _hubConnection.On<CommunityInviteRespondedEvent>("CommunityInviteResponded", e =>
+        {
+            Console.WriteLine($"SignalR: CommunityInviteResponded - {e.InvitedUserUsername} {e.Status} invite to community {e.CommunityId}");
+            CommunityInviteResponded?.Invoke(e);
+        });
+    }
+
+    #endregion
+
+    #region Voice Handlers
+
+    private void RegisterVoiceHandlers()
+    {
+        _hubConnection!.On<VoiceParticipantJoinedEvent>("VoiceParticipantJoined", e =>
         {
             Console.WriteLine($"SignalR: VoiceParticipantJoined - {e.Participant.Username} joined channel {e.ChannelId}");
             VoiceParticipantJoined?.Invoke(e);
@@ -958,7 +1025,6 @@ public class SignalRService : ISignalRService
             SpeakingStateChanged?.Invoke(e);
         });
 
-        // Multi-device voice events
         _hubConnection.On<VoiceSessionActiveOnOtherDeviceEvent>("VoiceSessionActiveOnOtherDevice", e =>
         {
             Console.WriteLine($"SignalR: VoiceSessionActiveOnOtherDevice - user is in voice on another device (channel {e.ChannelId}, {e.ChannelName})");
@@ -971,7 +1037,6 @@ public class SignalRService : ISignalRService
             DisconnectedFromVoice?.Invoke(e);
         });
 
-        // Admin voice action events
         _hubConnection.On<ServerVoiceStateChangedEvent>("ServerVoiceStateChanged", e =>
         {
             Console.WriteLine($"SignalR: ServerVoiceStateChanged - user {e.TargetUserId} in channel {e.ChannelId}, serverMuted={e.IsServerMuted}, serverDeafened={e.IsServerDeafened}");
@@ -983,9 +1048,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: UserMoved - {e.Username} moved from {e.FromChannelId} to {e.ToChannelId} by {e.AdminUsername}");
             UserMoved?.Invoke(e);
         });
+    }
 
-        // WebRTC signaling events
-        _hubConnection.On<WebRtcOfferEvent>("WebRtcOffer", e =>
+    #endregion
+
+    #region WebRTC Handlers
+
+    private void RegisterWebRtcHandlers()
+    {
+        _hubConnection!.On<WebRtcOfferEvent>("WebRtcOffer", e =>
         {
             Console.WriteLine($"SignalR: WebRtcOffer received from {e.FromUserId}");
             WebRtcOfferReceived?.Invoke(e);
@@ -1003,7 +1074,6 @@ public class SignalRService : ISignalRService
             IceCandidateReceived?.Invoke(e);
         });
 
-        // SFU signaling events
         _hubConnection.On<SfuOfferEvent>("SfuOffer", e =>
         {
             Console.WriteLine($"SignalR: SfuOffer received for channel {e.ChannelId}");
@@ -1015,9 +1085,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: SfuIceCandidate received");
             SfuIceCandidateReceived?.Invoke(e);
         });
+    }
 
-        // Video stream signaling events
-        _hubConnection.On<VideoStreamStartedEvent>("VideoStreamStarted", e =>
+    #endregion
+
+    #region Video Handlers
+
+    private void RegisterVideoHandlers()
+    {
+        _hubConnection!.On<VideoStreamStartedEvent>("VideoStreamStarted", e =>
         {
             Console.WriteLine($"SignalR: VideoStreamStarted - {e.Username} started {e.StreamType} in channel {e.ChannelId}");
             VideoStreamStarted?.Invoke(e);
@@ -1029,15 +1105,20 @@ public class SignalRService : ISignalRService
             VideoStreamStopped?.Invoke(e);
         });
 
-        // Drawing annotation events
         _hubConnection.On<AnnotationMessage>("ReceiveAnnotation", message =>
         {
             Console.WriteLine($"SignalR: ReceiveAnnotation ({message.Action}) for screen share by {message.SharerUserId}");
             AnnotationReceived?.Invoke(message);
         });
+    }
 
-        // Typing indicator events
-        _hubConnection.On<TypingEvent>("UserTyping", e =>
+    #endregion
+
+    #region Typing Handlers
+
+    private void RegisterTypingHandlers()
+    {
+        _hubConnection!.On<TypingEvent>("UserTyping", e =>
         {
             UserTyping?.Invoke(e);
         });
@@ -1046,9 +1127,15 @@ public class SignalRService : ISignalRService
         {
             DMUserTyping?.Invoke(e);
         });
+    }
 
-        // SSRC mapping events (for per-user volume control)
-        _hubConnection.On<SsrcMappingEvent>("UserAudioSsrcMapped", e =>
+    #endregion
+
+    #region SSRC Handlers
+
+    private void RegisterSsrcHandlers()
+    {
+        _hubConnection!.On<SsrcMappingEvent>("UserAudioSsrcMapped", e =>
         {
             Console.WriteLine($"SignalR: UserAudioSsrcMapped - user {e.UserId} has mic SSRC {e.AudioSsrc} in channel {e.ChannelId}");
             UserAudioSsrcMapped?.Invoke(e);
@@ -1071,9 +1158,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: SsrcMappingsBatch - {e.Mappings.Count} mappings for channel {e.ChannelId}");
             SsrcMappingsBatchReceived?.Invoke(e);
         });
+    }
 
-        // Thread events
-        _hubConnection.On<ThreadReplyEvent>("ReceiveThreadReply", e =>
+    #endregion
+
+    #region Thread Handlers
+
+    private void RegisterThreadHandlers()
+    {
+        _hubConnection!.On<ThreadReplyEvent>("ReceiveThreadReply", e =>
         {
             Console.WriteLine($"SignalR: ReceiveThreadReply - reply to message {e.ParentMessageId} in channel {e.ChannelId}");
             ThreadReplyReceived?.Invoke(e);
@@ -1084,22 +1177,15 @@ public class SignalRService : ISignalRService
             Console.WriteLine($"SignalR: ThreadMetadataUpdated - message {e.MessageId} now has {e.ReplyCount} replies");
             ThreadMetadataUpdated?.Invoke(e);
         });
+    }
 
-        // Community invite events
-        _hubConnection.On<CommunityInviteReceivedEvent>("CommunityInviteReceived", e =>
-        {
-            Console.WriteLine($"SignalR: CommunityInviteReceived - invite to {e.CommunityName} from {e.InvitedByUsername}");
-            CommunityInviteReceived?.Invoke(e);
-        });
+    #endregion
 
-        _hubConnection.On<CommunityInviteRespondedEvent>("CommunityInviteResponded", e =>
-        {
-            Console.WriteLine($"SignalR: CommunityInviteResponded - {e.InvitedUserUsername} {e.Status} invite to community {e.CommunityId}");
-            CommunityInviteResponded?.Invoke(e);
-        });
+    #region Notification Handlers
 
-        // Notification events
-        _hubConnection.On<NotificationResponse>("NotificationReceived", notification =>
+    private void RegisterNotificationHandlers()
+    {
+        _hubConnection!.On<NotificationResponse>("NotificationReceived", notification =>
         {
             Console.WriteLine($"SignalR: NotificationReceived - {notification.Type}: {notification.Title}");
             NotificationReceived?.Invoke(notification);
@@ -1117,15 +1203,20 @@ public class SignalRService : ISignalRService
             UnreadNotificationCountChanged?.Invoke(count);
         });
 
-        // Admin user management events
         _hubConnection.On<AdminUserResponse>("UserRegistered", e =>
         {
             Console.WriteLine($"SignalR: UserRegistered - {e.Username}");
             UserRegistered?.Invoke(e);
         });
+    }
 
-        // Controller streaming events
-        _hubConnection.On<ControllerAccessRequestedEvent>("ControllerAccessRequested", e =>
+    #endregion
+
+    #region Controller Handlers
+
+    private void RegisterControllerHandlers()
+    {
+        _hubConnection!.On<ControllerAccessRequestedEvent>("ControllerAccessRequested", e =>
         {
             Console.WriteLine($"SignalR: ControllerAccessRequested - {e.RequesterUsername} wants controller access in channel {e.ChannelId}");
             ControllerAccessRequested?.Invoke(e);
@@ -1151,7 +1242,6 @@ public class SignalRService : ISignalRService
 
         _hubConnection.On<ControllerStateReceivedEvent>("ControllerStateReceived", e =>
         {
-            // Log controller state for debugging/phase 1
             var state = e.State;
             var buttons = (ControllerButtons)state.Buttons;
             Console.WriteLine($"Controller [{e.GuestUsername}] Slot {state.ControllerSlot}: " +
@@ -1164,20 +1254,24 @@ public class SignalRService : ISignalRService
 
         _hubConnection.On<ControllerRumbleReceivedEvent>("ControllerRumbleReceived", e =>
         {
-            // Rumble feedback from host - forward to physical controller
             var rumble = e.Rumble;
             Console.WriteLine($"Rumble received: Slot {rumble.ControllerSlot} Large:{rumble.LargeMotor} Small:{rumble.SmallMotor}");
             ControllerRumbleReceived?.Invoke(e);
         });
+    }
 
-        // Gaming Station events
-        _hubConnection.On<GamingStationStatusChangedEvent>("GamingStationStatusChanged", e =>
+    #endregion
+
+    #region Gaming Station Handlers
+
+    private void RegisterGamingStationHandlers()
+    {
+        _hubConnection!.On<GamingStationStatusChangedEvent>("GamingStationStatusChanged", e =>
         {
             Console.WriteLine($"SignalR: GamingStationStatusChanged - user {e.Username} station {e.MachineId} available={e.IsAvailable}");
             GamingStationStatusChanged?.Invoke(e);
         });
 
-        // Gaming Station command events (received by the gaming station client)
         _hubConnection.On<StationCommandJoinChannelEvent>("StationCommandJoinChannel", e =>
         {
             Console.WriteLine($"SignalR: StationCommandJoinChannel - commanded to join channel {e.ChannelId} ({e.ChannelName})");
@@ -1208,7 +1302,6 @@ public class SignalRService : ISignalRService
             StationCommandDisable?.Invoke(e);
         });
 
-        // Gaming Station input events (received by the gaming station when viewer sends input)
         _hubConnection.On<StationKeyboardInputEvent>("StationKeyboardInput", e =>
         {
             StationKeyboardInputReceived?.Invoke(e);
@@ -1218,8 +1311,15 @@ public class SignalRService : ISignalRService
         {
             StationMouseInputReceived?.Invoke(e);
         });
+    }
 
-        _hubConnection.Reconnecting += error =>
+    #endregion
+
+    #region Connection State Handlers
+
+    private void RegisterConnectionStateHandlers()
+    {
+        _hubConnection!.Reconnecting += error =>
         {
             State = ConnectionState.Reconnecting;
             Console.WriteLine($"SignalR: Reconnecting... {error?.Message}");
@@ -1242,6 +1342,8 @@ public class SignalRService : ISignalRService
             return Task.CompletedTask;
         };
     }
+
+    #endregion
 
     public async ValueTask DisposeAsync()
     {
