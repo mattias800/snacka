@@ -64,27 +64,27 @@ public record ScreenShareQuality(int BitrateMbps, string Label, string Descripti
 
     /// <summary>
     /// Balanced - 8 Mbps. Good balance of quality and bandwidth.
-    /// Suitable for general use including light gaming.
+    /// Suitable for general use including light gaming at 1080p.
     /// </summary>
     public static ScreenShareQuality Balanced => new(8, "Balanced", "8 Mbps - Good for general use");
 
     /// <summary>
     /// High Quality - 15 Mbps. Better quality for detailed content and gaming.
-    /// Handles moderate motion well with minimal artifacts.
+    /// Good for 1080p@60fps or 1440p@30fps gaming.
     /// </summary>
-    public static ScreenShareQuality HighQuality => new(15, "High Quality", "15 Mbps - Great for gaming");
+    public static ScreenShareQuality HighQuality => new(15, "High Quality", "15 Mbps - Great for 1080p gaming");
 
     /// <summary>
-    /// Gaming - 25 Mbps. Optimized for fast-paced gaming with lots of motion.
-    /// Excellent quality even during intense action scenes.
+    /// Gaming - 35 Mbps. Optimized for fast-paced gaming with lots of motion.
+    /// Excellent for 1440p@60fps gaming with minimal artifacts.
     /// </summary>
-    public static ScreenShareQuality Gaming => new(25, "Gaming", "25 Mbps - Best for fast-paced games");
+    public static ScreenShareQuality Gaming => new(35, "Gaming", "35 Mbps - Best for 1440p@60fps");
 
     /// <summary>
-    /// Ultra - 50 Mbps. Maximum quality for the best possible visual experience.
-    /// Requires excellent network connection. Ideal for competitive gaming or streaming.
+    /// Ultra - 60 Mbps. Maximum quality for the best possible visual experience.
+    /// Ideal for 4K gaming or competitive play where every detail matters.
     /// </summary>
-    public static ScreenShareQuality Ultra => new(50, "Ultra", "50 Mbps - Maximum quality");
+    public static ScreenShareQuality Ultra => new(60, "Ultra", "60 Mbps - Maximum quality");
 
     public static IReadOnlyList<ScreenShareQuality> All => new[]
     {

@@ -90,25 +90,28 @@ class VideoToolboxEncoder {
         var status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_RealTime, value: kCFBooleanTrue)
         guard status == noErr else { throw EncoderError.failedToSetProperty("RealTime", status) }
 
-        // Baseline profile for maximum compatibility
-        status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_Baseline_AutoLevel)
+        // High profile for better compression efficiency (more quality per bit)
+        // High profile supports CABAC entropy coding which is ~10-15% more efficient than Baseline's CAVLC
+        status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_ProfileLevel, value: kVTProfileLevel_H264_High_AutoLevel)
         guard status == noErr else { throw EncoderError.failedToSetProperty("ProfileLevel", status) }
 
         // Disable B-frames for lower latency (no frame reordering)
+        // B-frames add 1-2 frame delays which is unacceptable for game streaming
         status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowFrameReordering, value: kCFBooleanFalse)
         guard status == noErr else { throw EncoderError.failedToSetProperty("AllowFrameReordering", status) }
 
-        // Set bitrate (average)
+        // Set bitrate (average) - in bits per second
         status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AverageBitRate, value: bitrate as CFNumber)
         guard status == noErr else { throw EncoderError.failedToSetProperty("AverageBitRate", status) }
 
         // Set max bitrate (data rate limit) - 1.5x average for burst tolerance
-        let maxBitrate = Int(Double(bitrate) * 1.5)
-        let dataRateLimits: [Int] = [maxBitrate, 1]  // bytes per second, seconds
+        // DataRateLimits expects [bytes_per_second, time_window_seconds]
+        let maxBitrateBytes = Int(Double(bitrate) * 1.5 / 8.0)  // Convert bits to bytes
+        let dataRateLimits: [Int] = [maxBitrateBytes, 1]
         status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_DataRateLimits, value: dataRateLimits as CFArray)
         // Ignore failure - not all encoders support this
 
-        // Keyframe interval (GOP size) - one keyframe per second
+        // Keyframe interval (GOP size) - one keyframe per second for recovery
         status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxKeyFrameInterval, value: fps as CFNumber)
         guard status == noErr else { throw EncoderError.failedToSetProperty("MaxKeyFrameInterval", status) }
 
@@ -119,6 +122,18 @@ class VideoToolboxEncoder {
         // Allow temporal compression (P-frames)
         status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_AllowTemporalCompression, value: kCFBooleanTrue)
         guard status == noErr else { throw EncoderError.failedToSetProperty("AllowTemporalCompression", status) }
+
+        // Ultra-low latency: Output frames immediately without buffering
+        // This ensures minimal encode-to-output delay
+        status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_MaxFrameDelayCount, value: 0 as CFNumber)
+        // Ignore failure - older systems may not support this
+
+        // Prioritize encoding speed over quality for lowest latency
+        // The bitrate increase compensates for any quality loss
+        if #available(macOS 13.0, *) {
+            status = VTSessionSetProperty(session, key: kVTCompressionPropertyKey_PrioritizeEncodingSpeedOverQuality, value: kCFBooleanTrue)
+            // Ignore failure - this is an optimization hint
+        }
     }
 
     /// Encodes a CVPixelBuffer frame.
@@ -129,10 +144,9 @@ class VideoToolboxEncoder {
 
         frameCount += 1
 
-        // Force keyframe on first frame or periodically for recovery
+        // Force keyframe on first frame only - MaxKeyFrameInterval handles periodic keyframes
         var frameProperties: CFDictionary? = nil
-        if frameCount == 1 || frameCount % Int64(fps * 5) == 0 {
-            // Force I-frame every 5 seconds for recovery
+        if frameCount == 1 {
             frameProperties = [kVTEncodeFrameOptionKey_ForceKeyFrame: true] as CFDictionary
         }
 
