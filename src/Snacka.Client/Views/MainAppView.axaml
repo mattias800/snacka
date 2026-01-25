@@ -52,7 +52,7 @@
         <Border Grid.Row="0" Grid.ColumnSpan="6"
                 Background="{StaticResource AccentBrush}"
                 Padding="12,8"
-                IsVisible="{Binding ShowGamingStationBanner}">
+                IsVisible="{Binding GamingStation.ShowGamingStationBanner}">
             <Grid ColumnDefinitions="Auto,*,Auto">
                 <!-- Left: Icon and status text -->
                 <StackPanel Grid.Column="0" Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
@@ -313,27 +313,27 @@
 
             <!-- Station Stream Viewer (shown when connected to a station) -->
             <controls:StationStreamView x:Name="StationStream"
-                                        IsVisible="{Binding IsViewingStationStream}"
-                                        StationId="{Binding ConnectedStationId}"
-                                        StationName="{Binding ConnectedStationName}"
-                                        ConnectionStatus="{Binding StationConnectionStatus}"
-                                        IsConnecting="{Binding IsConnectingToStation}"
-                                        ConnectedUserCount="{Binding StationConnectedUserCount}"
-                                        Latency="{Binding StationLatency}"
-                                        Resolution="{Binding StationResolution}"
-                                        PlayerSlot="{Binding StationPlayerSlot}"
-                                        DisconnectCommand="{Binding DisconnectFromStationCommand}"
-                                        ToggleFullscreenCommand="{Binding ToggleStationFullscreenCommand}"/>
+                                        IsVisible="{Binding GamingStation.IsViewingStationStream}"
+                                        StationId="{Binding GamingStation.ConnectedStationId}"
+                                        StationName="{Binding GamingStation.ConnectedStationName}"
+                                        ConnectionStatus="{Binding GamingStation.StationConnectionStatus}"
+                                        IsConnecting="{Binding GamingStation.IsConnectingToStation}"
+                                        ConnectedUserCount="{Binding GamingStation.StationConnectedUserCount}"
+                                        Latency="{Binding GamingStation.StationLatency}"
+                                        Resolution="{Binding GamingStation.StationResolution}"
+                                        PlayerSlot="{Binding GamingStation.StationPlayerSlot}"
+                                        DisconnectCommand="{Binding GamingStation.DisconnectFromStationCommand}"
+                                        ToggleFullscreenCommand="{Binding GamingStation.ToggleStationFullscreenCommand}"/>
 
             <!-- Gaming Stations (shown when viewing gaming stations) -->
-            <controls:GamingStationsView IsVisible="{Binding IsViewingGamingStations}"
-                                         IsLoading="{Binding IsLoadingStations}"
-                                         HasNoStations="{Binding HasNoStations}"
-                                         HasMyStations="{Binding HasMyStations}"
-                                         HasSharedStations="{Binding HasSharedStations}"
-                                         IsCurrentMachineRegistered="{Binding IsCurrentMachineRegistered}"
-                                         MyStations="{Binding MyStations}"
-                                         SharedStations="{Binding SharedStations}"
+            <controls:GamingStationsView IsVisible="{Binding GamingStation.IsViewingGamingStations}"
+                                         IsLoading="{Binding GamingStation.IsLoadingStations}"
+                                         HasNoStations="{Binding GamingStation.HasNoStations}"
+                                         HasMyStations="{Binding GamingStation.HasMyStations}"
+                                         HasSharedStations="{Binding GamingStation.HasSharedStations}"
+                                         IsCurrentMachineRegistered="{Binding GamingStation.IsCurrentMachineRegistered}"
+                                         MyStations="{Binding GamingStation.MyStations}"
+                                         SharedStations="{Binding GamingStation.SharedStations}"
                                          RegisterStationCommand="{Binding RegisterStationCommand}"
                                          ConnectToStationCommand="{Binding ConnectToStationCommand}"
                                          ManageStationCommand="{Binding ManageStationCommand}"/>
@@ -406,8 +406,8 @@
                     <MultiBinding Converter="{x:Static BoolConverters.And}">
                         <Binding Path="IsViewingDM" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="IsViewingVoiceChannel" Converter="{x:Static BoolConverters.Not}"/>
-                        <Binding Path="IsViewingGamingStations" Converter="{x:Static BoolConverters.Not}"/>
-                        <Binding Path="IsViewingStationStream" Converter="{x:Static BoolConverters.Not}"/>
+                        <Binding Path="GamingStation.IsViewingGamingStations" Converter="{x:Static BoolConverters.Not}"/>
+                        <Binding Path="GamingStation.IsViewingStationStream" Converter="{x:Static BoolConverters.Not}"/>
                         <Binding Path="HasNoCommunities" Converter="{x:Static BoolConverters.Not}"/>
                     </MultiBinding>
                 </controls:ChatAreaView.IsVisible>
@@ -509,8 +509,8 @@
         <!-- Thread Panel Overlay (visible when thread IS open) -->
         <Border Grid.Column="3" Grid.ColumnSpan="3"
                 HorizontalAlignment="Right"
-                Width="{Binding ThreadPanelWidth}"
-                IsVisible="{Binding CurrentThread, Converter={x:Static ObjectConverters.IsNotNull}}">
+                Width="{Binding ThreadPanel.PanelWidth}"
+                IsVisible="{Binding ThreadPanel.CurrentThread, Converter={x:Static ObjectConverters.IsNotNull}}">
             <Grid>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="4"/>
@@ -527,7 +527,7 @@
 
                 <!-- Thread Content -->
                 <controls:ThreadPanelView Grid.Column="1"
-                                          DataContext="{Binding CurrentThread}"
+                                          DataContext="{Binding ThreadPanel.CurrentThread}"
                                           BaseUrl="{Binding $parent[UserControl].DataContext.BaseUrl}"
                                           AccessToken="{Binding $parent[UserControl].DataContext.AccessToken}"
                                           StartEditMessageCommand="{Binding $parent[UserControl].DataContext.StartEditMessageCommand}"
@@ -901,26 +901,25 @@
                Placement="Top"
                PlacementGravity="Top">
             <controls:GifPickerContent x:Name="GifPickerContent"
-                                       GifSearchQuery="{Binding GifSearchQuery, Mode=TwoWay}"
-                                       IsLoadingGifs="{Binding IsLoadingGifs}"
-                                       GifResults="{Binding GifResults}"
-                                       SearchGifsCommand="{Binding SearchGifsCommand}"
+                                       GifSearchQuery="{Binding GifPanel.SearchQuery, Mode=TwoWay}"
+                                       IsLoadingGifs="{Binding GifPanel.IsLoading}"
+                                       GifResults="{Binding GifPanel.Results}"
                                        GifSelected="OnGifPickerGifSelected"/>
         </Popup>
 
         <!-- Audio Device Popup -->
         <Popup x:Name="AudioDevicePopup"
-               IsOpen="{Binding IsAudioDevicePopupOpen, Mode=TwoWay}"
+               IsOpen="{Binding AudioDeviceQuickSelect.IsOpen, Mode=TwoWay}"
                IsLightDismissEnabled="True"
                Placement="Bottom"
                PlacementTarget="{Binding $parent[Grid]}">
-            <controls:AudioDeviceContent InputDevices="{Binding InputDevices}"
-                                         SelectedInputDeviceItem="{Binding SelectedInputDeviceItem, Mode=TwoWay}"
-                                         OutputDevices="{Binding OutputDevices}"
-                                         SelectedOutputDeviceItem="{Binding SelectedOutputDeviceItem, Mode=TwoWay}"
-                                         InputLevel="{Binding InputLevel}"
-                                         PushToTalkEnabled="{Binding PushToTalkEnabled, Mode=TwoWay}"
-                                         VoiceModeDescription="{Binding VoiceModeDescription}"
+            <controls:AudioDeviceContent InputDevices="{Binding AudioDeviceQuickSelect.InputDevices}"
+                                         SelectedInputDeviceItem="{Binding AudioDeviceQuickSelect.SelectedInputDeviceItem, Mode=TwoWay}"
+                                         OutputDevices="{Binding AudioDeviceQuickSelect.OutputDevices}"
+                                         SelectedOutputDeviceItem="{Binding AudioDeviceQuickSelect.SelectedOutputDeviceItem, Mode=TwoWay}"
+                                         InputLevel="{Binding AudioDeviceQuickSelect.InputLevel}"
+                                         PushToTalkEnabled="{Binding AudioDeviceQuickSelect.PushToTalkEnabled, Mode=TwoWay}"
+                                         VoiceModeDescription="{Binding AudioDeviceQuickSelect.VoiceModeDescription}"
                                          RefreshDevicesRequested="OnAudioDeviceRefreshRequested"/>
         </Popup>
 
@@ -982,7 +981,7 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Margin="16"
-                IsVisible="{Binding HasPendingControllerRequests}">
+                IsVisible="{Binding ControllerHost.HasPendingRequests}">
             <Border Background="{StaticResource Content1Brush}"
                     BorderBrush="{StaticResource PrimaryBrush}"
                     BorderThickness="1"
@@ -999,7 +998,7 @@
                                    Foreground="{StaticResource ForegroundBrush}"/>
                     </StackPanel>
 
-                    <ItemsControl ItemsSource="{Binding PendingControllerRequests}">
+                    <ItemsControl ItemsSource="{Binding ControllerHost.PendingRequests}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Background="{StaticResource BackgroundBrush}"
@@ -1043,7 +1042,7 @@
                 HorizontalAlignment="Right"
                 VerticalAlignment="Top"
                 Margin="16,100,16,16"
-                IsVisible="{Binding HasActiveControllerSessions}">
+                IsVisible="{Binding ControllerHost.HasActiveSessions}">
             <Border Background="{StaticResource Content1Brush}"
                     BorderBrush="{StaticResource SuccessBrush}"
                     BorderThickness="1"
@@ -1060,7 +1059,7 @@
                                    Foreground="{StaticResource ForegroundBrush}"/>
                     </StackPanel>
 
-                    <ItemsControl ItemsSource="{Binding ActiveControllerSessions}">
+                    <ItemsControl ItemsSource="{Binding ControllerHost.ActiveSessions}">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
                                 <Border Background="{StaticResource BackgroundBrush}"

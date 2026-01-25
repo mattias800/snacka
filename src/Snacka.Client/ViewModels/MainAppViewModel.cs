@@ -445,6 +445,14 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Create the audio device quick select ViewModel
         _audioDeviceQuickSelect = new AudioDeviceQuickSelectViewModel(settingsStore, audioDeviceService);
         _audioDeviceQuickSelect.PushToTalkMuteChanged += unmute => _ = _voiceControl?.SetMutedAsync(!unmute);
+        _audioDeviceQuickSelect.PropertyChanged += (_, e) =>
+        {
+            if (e.PropertyName is nameof(AudioDeviceQuickSelectViewModel.HasNoInputDevice) or
+                                  nameof(AudioDeviceQuickSelectViewModel.HasNoOutputDevice))
+            {
+                this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
+            }
+        };
 
         // Create the inline DM ViewModel
         _dmContent = new DMContentViewModel(
@@ -1201,34 +1209,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// </summary>
     public CommunityDiscoveryViewModel? CommunityDiscovery => _communityDiscovery;
 
-    // Controller access request properties (delegated to ControllerHostViewModel)
-    public ObservableCollection<ControllerAccessRequest> PendingControllerRequests =>
-        _controllerHost?.PendingRequests ?? new ObservableCollection<ControllerAccessRequest>();
+    // Controller host ViewModel (exposed for direct binding)
+    public ControllerHostViewModel? ControllerHost => _controllerHost;
 
-    public ObservableCollection<ActiveControllerSession> ActiveControllerSessions =>
-        _controllerHost?.ActiveSessions ?? new ObservableCollection<ActiveControllerSession>();
-
-    public bool HasPendingControllerRequests => _controllerHost?.HasPendingRequests ?? false;
-    public bool HasActiveControllerSessions => _controllerHost?.HasActiveSessions ?? false;
-
-    public byte SelectedControllerSlot
-    {
-        get => _controllerHost?.SelectedControllerSlot ?? 0;
-        set { if (_controllerHost != null) _controllerHost.SelectedControllerSlot = value; }
-    }
-
-    public byte[] AvailableControllerSlots => _controllerHost?.AvailableSlots ?? [0, 1, 2, 3];
-
-    // Thread properties (delegated to ThreadPanelViewModel)
-    public ThreadViewModel? CurrentThread => _threadPanel?.CurrentThread;
-
-    public bool IsThreadOpen => _threadPanel?.IsOpen ?? false;
-
-    public double ThreadPanelWidth
-    {
-        get => _threadPanel?.PanelWidth ?? 400;
-        set { if (_threadPanel != null) _threadPanel.PanelWidth = Math.Max(280, Math.Min(600, value)); }
-    }
+    // Thread panel ViewModel (exposed for direct binding)
+    public ThreadPanelViewModel? ThreadPanel => _threadPanel;
 
     public bool IsLoading
     {
@@ -1416,22 +1401,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private GifPanelViewModel? _gifPanel;
 
     public bool IsGifsEnabled => _isGifsEnabled;
-
-    // GIF panel properties (delegate to GifPanelViewModel)
     public GifPanelViewModel? GifPanel => _gifPanel;
-    public ObservableCollection<GifResult> GifResults => _gifPanel?.Results ?? new ObservableCollection<GifResult>();
-
-    public string GifSearchQuery
-    {
-        get => _gifPanel?.SearchQuery ?? string.Empty;
-        set { if (_gifPanel != null) _gifPanel.SearchQuery = value; }
-    }
-
-    public bool IsLoadingGifs => _gifPanel?.IsLoading ?? false;
-
-    public Task LoadTrendingGifsAsync() => _gifPanel?.LoadTrendingAsync() ?? Task.CompletedTask;
-
-    public Task SearchGifsAsync() => _gifPanel?.SearchAsync() ?? Task.CompletedTask;
 
     public async Task SendGifMessageAsync(GifResult gif)
     {
@@ -1462,8 +1432,6 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// </summary>
     private async void OnGifPanelGifSelected(GifResult gif) => await SendGifMessageAsync(gif);
 
-    public void ClearGifResults() => _gifPanel?.Clear();
-
     /// <summary>
     /// Initiates a GIF preview search for the /gif command.
     /// Uses the self-contained GIF picker that appears in the message list.
@@ -1476,65 +1444,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         await _gifPicker.StartSearchAsync(query);
     }
 
-    // Quick audio device switcher (delegated to AudioDeviceQuickSelectViewModel)
+    // Audio device quick select ViewModel (exposed for direct binding)
     public AudioDeviceQuickSelectViewModel? AudioDeviceQuickSelect => _audioDeviceQuickSelect;
-    public ObservableCollection<AudioDeviceItem> InputDevices => _audioDeviceQuickSelect?.InputDevices ?? new();
-    public ObservableCollection<AudioDeviceItem> OutputDevices => _audioDeviceQuickSelect?.OutputDevices ?? new();
-    public float InputLevel => _audioDeviceQuickSelect?.InputLevel ?? 0;
-
-    public bool IsAudioDevicePopupOpen
-    {
-        get => _audioDeviceQuickSelect?.IsOpen ?? false;
-        set { if (_audioDeviceQuickSelect != null) _audioDeviceQuickSelect.IsOpen = value; }
-    }
-
-    public AudioDeviceItem? SelectedInputDeviceItem
-    {
-        get => _audioDeviceQuickSelect?.SelectedInputDeviceItem;
-        set
-        {
-            if (_audioDeviceQuickSelect != null) _audioDeviceQuickSelect.SelectedInputDeviceItem = value;
-            this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
-        }
-    }
-
-    public AudioDeviceItem? SelectedOutputDeviceItem
-    {
-        get => _audioDeviceQuickSelect?.SelectedOutputDeviceItem;
-        set
-        {
-            if (_audioDeviceQuickSelect != null) _audioDeviceQuickSelect.SelectedOutputDeviceItem = value;
-            this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
-        }
-    }
-
-    public string SelectedInputDeviceDisplay => _audioDeviceQuickSelect?.SelectedInputDeviceDisplay ?? "Default";
-    public string SelectedOutputDeviceDisplay => _audioDeviceQuickSelect?.SelectedOutputDeviceDisplay ?? "Default";
-
-    public bool PushToTalkEnabled
-    {
-        get => _audioDeviceQuickSelect?.PushToTalkEnabled ?? false;
-        set
-        {
-            if (_audioDeviceQuickSelect != null)
-            {
-                _audioDeviceQuickSelect.PushToTalkEnabled = value;
-                // When PTT is enabled while in voice channel, start muted
-                if (value && IsInVoiceChannel)
-                {
-                    _ = _voiceControl?.SetMutedAsync(true);
-                }
-            }
-        }
-    }
-
-    public string VoiceModeDescription => _audioDeviceQuickSelect?.VoiceModeDescription ?? "Voice activity: Speak to transmit";
-
-    public void HandlePushToTalk(bool isPressed) => _audioDeviceQuickSelect?.HandlePushToTalk(isPressed, IsInVoiceChannel);
-
-    public void OpenAudioDevicePopup() => _audioDeviceQuickSelect?.Open();
-
-    public void RefreshAudioDevices() => _audioDeviceQuickSelect?.RefreshDevices();
 
     // Voice channel properties
     public ChannelResponse? CurrentVoiceChannel
@@ -1651,30 +1562,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     /// </summary>
     public bool IsViewingDM => _dmContent?.IsOpen ?? false;
 
-    // Gaming Stations properties (delegate to GamingStationViewModel)
+    // Child ViewModels exposed for direct binding
     public GamingStationViewModel? GamingStation => _gamingStation;
     public VoiceControlViewModel? VoiceControl => _voiceControl;
     public MessageInputViewModel? MessageInputVM => _messageInputVm;
     public ChannelManagementViewModel? ChannelManagement => _channelManagementVm;
-    public bool IsViewingGamingStations => _gamingStation?.IsViewingGamingStations ?? false;
-    public bool IsLoadingStations => _gamingStation?.IsLoadingStations ?? false;
-    public ObservableCollection<GamingStationResponse> MyStations => _gamingStation?.MyStations ?? new ObservableCollection<GamingStationResponse>();
-    public ObservableCollection<GamingStationResponse> SharedStations => _gamingStation?.SharedStations ?? new ObservableCollection<GamingStationResponse>();
-    public bool HasNoStations => _gamingStation?.HasNoStations ?? true;
-    public bool HasMyStations => _gamingStation?.HasMyStations ?? false;
-    public bool HasSharedStations => _gamingStation?.HasSharedStations ?? false;
-    public bool IsCurrentMachineRegistered => _gamingStation?.IsCurrentMachineRegistered ?? false;
-
-    // Station stream properties (delegate to GamingStationViewModel)
-    public bool IsViewingStationStream => _gamingStation?.IsViewingStationStream ?? false;
-    public bool IsConnectingToStation => _gamingStation?.IsConnectingToStation ?? false;
-    public Guid? ConnectedStationId => _gamingStation?.ConnectedStationId;
-    public string ConnectedStationName => _gamingStation?.ConnectedStationName ?? "";
-    public string StationConnectionStatus => _gamingStation?.StationConnectionStatus ?? "Disconnected";
-    public int StationConnectedUserCount => _gamingStation?.StationConnectedUserCount ?? 0;
-    public int StationLatency => _gamingStation?.StationLatency ?? 0;
-    public string StationResolution => _gamingStation?.StationResolution ?? "—";
-    public int? StationPlayerSlot => _gamingStation?.StationPlayerSlot;
 
     // Screen share picker properties (delegate to ScreenShareViewModel)
     public bool IsScreenSharePickerOpen

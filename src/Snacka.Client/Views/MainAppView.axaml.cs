@@ -466,11 +466,11 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 
     private void ThreadPanelResizeHandle_PointerPressed(object? sender, PointerPressedEventArgs e)
     {
-        if (sender is Border border && ViewModel != null)
+        if (sender is Border border && ViewModel?.ThreadPanel != null)
         {
             _isResizingThreadPanel = true;
             _resizeStartX = e.GetPosition(this).X;
-            _resizeStartWidth = ViewModel.ThreadPanelWidth;
+            _resizeStartWidth = ViewModel.ThreadPanel.PanelWidth;
             e.Pointer.Capture(border);
             e.Handled = true;
         }
@@ -478,11 +478,12 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
 
     private void ThreadPanelResizeHandle_PointerMoved(object? sender, PointerEventArgs e)
     {
-        if (_isResizingThreadPanel && ViewModel != null)
+        if (_isResizingThreadPanel && ViewModel?.ThreadPanel != null)
         {
             var currentX = e.GetPosition(this).X;
             var delta = _resizeStartX - currentX;
-            ViewModel.ThreadPanelWidth = _resizeStartWidth + delta;
+            var newWidth = Math.Max(280, Math.Min(600, _resizeStartWidth + delta));
+            ViewModel.ThreadPanel.PanelWidth = newWidth;
             e.Handled = true;
         }
     }
@@ -579,7 +580,8 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
             GifPickerPopup.PlacementTarget = gifButton;
             GifPickerPopup.IsOpen = true;
 
-            await ViewModel.LoadTrendingGifsAsync();
+            if (ViewModel.GifPanel != null)
+                await ViewModel.GifPanel.LoadTrendingAsync();
             GifPickerContent?.FocusSearchBox();
         }
     }
@@ -744,7 +746,7 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         GifPickerPopup.IsOpen = false;
 
         // Clear GIF state
-        ViewModel.ClearGifResults();
+        ViewModel.GifPanel?.Clear();
     }
 
     // Called when Watch button is clicked in VoiceChannelContentView
@@ -1246,7 +1248,7 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     /// </summary>
     private void OnUserPanelAudioDeviceButtonClick(object? sender, EventArgs e)
     {
-        ViewModel?.OpenAudioDevicePopup();
+        ViewModel?.AudioDeviceQuickSelect?.Open();
     }
 
     /// <summary>
@@ -1254,7 +1256,7 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
     /// </summary>
     private void OnAudioDeviceRefreshRequested(object? sender, EventArgs e)
     {
-        ViewModel?.RefreshAudioDevices();
+        ViewModel?.AudioDeviceQuickSelect?.RefreshDevices();
     }
 
     // ==================== Push-to-Talk Handlers ====================
@@ -1271,9 +1273,9 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         if (e.Source is TextBox) return;
 
         // Check if push-to-talk is enabled and we're in a voice channel
-        if (ViewModel?.PushToTalkEnabled == true && ViewModel?.IsInVoiceChannel == true)
+        if (ViewModel?.AudioDeviceQuickSelect?.PushToTalkEnabled == true && ViewModel?.IsInVoiceChannel == true)
         {
-            ViewModel.HandlePushToTalk(true);
+            ViewModel.AudioDeviceQuickSelect.HandlePushToTalk(true, isInVoiceChannel: true);
             // Don't mark as handled - allow other key handlers to process if needed
         }
     }
@@ -1290,9 +1292,9 @@ public partial class MainAppView : ReactiveUserControl<MainAppViewModel>
         if (e.Source is TextBox) return;
 
         // Check if push-to-talk is enabled and we're in a voice channel
-        if (ViewModel?.PushToTalkEnabled == true && ViewModel?.IsInVoiceChannel == true)
+        if (ViewModel?.AudioDeviceQuickSelect?.PushToTalkEnabled == true && ViewModel?.IsInVoiceChannel == true)
         {
-            ViewModel.HandlePushToTalk(false);
+            ViewModel.AudioDeviceQuickSelect.HandlePushToTalk(false, isInVoiceChannel: true);
         }
     }
 
