@@ -678,42 +678,24 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             .SelectMany(_ => Observable.FromAsync(OnChannelSelectedAsync))
             .Subscribe();
 
-        // Derived property notifications for ConnectionState
+        // Derived property notifications - when source property changes, notify dependent computed properties
         this.WhenAnyValue(x => x.ConnectionState)
-            .Subscribe(_ =>
-            {
-                this.RaisePropertyChanged(nameof(IsConnected));
-                this.RaisePropertyChanged(nameof(IsReconnecting));
-                this.RaisePropertyChanged(nameof(IsDisconnected));
-                this.RaisePropertyChanged(nameof(ConnectionStatusText));
-            });
+            .Subscribe(_ => RaiseDerivedPropertyChanges(
+                nameof(IsConnected), nameof(IsReconnecting), nameof(IsDisconnected), nameof(ConnectionStatusText)));
 
-        // Derived property notifications for CurrentVoiceChannel
         this.WhenAnyValue(x => x.CurrentVoiceChannel)
-            .Subscribe(_ =>
-            {
-                this.RaisePropertyChanged(nameof(IsInVoiceChannel));
-                this.RaisePropertyChanged(nameof(ShowAudioDeviceWarning));
-                this.RaisePropertyChanged(nameof(IsVoiceInDifferentCommunity));
-                this.RaisePropertyChanged(nameof(VoiceCommunityName));
-                this.RaisePropertyChanged(nameof(GamingStationChannelStatus));
-            });
+            .Subscribe(_ => RaiseDerivedPropertyChanges(
+                nameof(IsInVoiceChannel), nameof(ShowAudioDeviceWarning), nameof(IsVoiceInDifferentCommunity),
+                nameof(VoiceCommunityName), nameof(GamingStationChannelStatus)));
 
-        // Derived property notifications for SelectedCommunity (affects voice-in-different-community check)
         this.WhenAnyValue(x => x.SelectedCommunity)
-            .Subscribe(_ =>
-            {
-                this.RaisePropertyChanged(nameof(IsVoiceInDifferentCommunity));
-                this.RaisePropertyChanged(nameof(VoiceCommunityName));
-            });
+            .Subscribe(_ => RaiseDerivedPropertyChanges(nameof(IsVoiceInDifferentCommunity), nameof(VoiceCommunityName)));
 
-        // Derived property notifications for SelectedVoiceChannelForViewing
         this.WhenAnyValue(x => x.SelectedVoiceChannelForViewing)
-            .Subscribe(_ => this.RaisePropertyChanged(nameof(IsViewingVoiceChannel)));
+            .Subscribe(_ => RaiseDerivedPropertyChanges(nameof(IsViewingVoiceChannel)));
 
-        // Derived property notifications for LightboxImage
         this.WhenAnyValue(x => x.LightboxImage)
-            .Subscribe(_ => this.RaisePropertyChanged(nameof(IsLightboxOpen)));
+            .Subscribe(_ => RaiseDerivedPropertyChanges(nameof(IsLightboxOpen)));
 
         #endregion
 
@@ -728,23 +710,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _voiceCoordinator,
             _conversationStateService,
             _auth.UserId,
-            new SignalRUiCallbacks(
-                GetSelectedChannel: () => SelectedChannel,
-                SetSelectedChannel: c => SelectedChannel = c,
-                GetSelectedCommunity: () => SelectedCommunity,
-                GetCurrentVoiceChannel: () => CurrentVoiceChannel,
-                SetCurrentVoiceChannelNull: () => CurrentVoiceChannel = null,
-                ClearVoiceOverlayState: () =>
-                {
-                    IsVoiceVideoOverlayOpen = false;
-                    SelectedVoiceChannelForViewing = null;
-                },
-                GetChannelById: id => _storeAllChannels.FirstOrDefault(c => c.Id == id),
-                GetFirstTextChannel: () => _storeTextChannels.Count > 0 ? _storeTextChannels[0] : null,
-                LeaveVoiceChannelAsync: LeaveVoiceChannelAsync,
-                JoinVoiceChannelAsync: JoinVoiceChannelAsync,
-                RaiseTotalDmUnreadCountChanged: () => this.RaisePropertyChanged(nameof(TotalDmUnreadCount))
-            ),
+            CreateSignalRUiCallbacks(),
             _screenShare,
             _voiceControl,
             _videoFullscreen,
@@ -1778,18 +1744,37 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Delegate to coordinator (handles SignalR, store, and WebRTC)
         await _voiceCoordinator.LeaveVoiceChannelAsync(stopScreenShare: true);
 
-        // Update view state
+        // Clear all voice-related UI state
+        ClearVoiceUiState();
+    }
+
+    /// <summary>
+    /// Clears all voice-related UI state when leaving or being disconnected from voice.
+    /// </summary>
+    private void ClearVoiceUiState()
+    {
         CurrentVoiceChannel = null;
-
-        // Reset transient state via VoiceControlViewModel
-        // Note: IsMuted and IsDeafened are persisted and NOT reset when leaving
         _voiceControl?.ResetTransientState();
-
-        // Close voice video overlay
-        // VoiceChannelContentViewModel clears reactively when VoiceStore.CurrentChannelId becomes null
         IsVoiceVideoOverlayOpen = false;
         SelectedVoiceChannelForViewing = null;
     }
+
+    /// <summary>
+    /// Creates the callbacks object for SignalRUiEventManager.
+    /// Centralizes all UI callback definitions for SignalR events.
+    /// </summary>
+    private SignalRUiCallbacks CreateSignalRUiCallbacks() => new(
+        GetSelectedChannel: () => SelectedChannel,
+        SetSelectedChannel: c => SelectedChannel = c,
+        GetSelectedCommunity: () => SelectedCommunity,
+        GetCurrentVoiceChannel: () => CurrentVoiceChannel,
+        ClearVoiceUiState: ClearVoiceUiState,
+        GetChannelById: id => _storeAllChannels.FirstOrDefault(c => c.Id == id),
+        GetFirstTextChannel: () => _storeTextChannels.Count > 0 ? _storeTextChannels[0] : null,
+        LeaveVoiceChannelAsync: LeaveVoiceChannelAsync,
+        JoinVoiceChannelAsync: JoinVoiceChannelAsync,
+        RaiseTotalDmUnreadCountChanged: () => this.RaisePropertyChanged(nameof(TotalDmUnreadCount))
+    );
 
     // Note: ToggleMuteAsync, ToggleDeafenAsync, and ToggleCameraAsync are now handled by VoiceControlViewModel
     // Note: ToggleScreenShareAsync, StartScreenShareWithSettingsAsync, and StopScreenShareAsync are now handled by ScreenShareViewModel
@@ -1958,6 +1943,22 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _storeSubscriptions.Dispose();
         _ = _signalR.DisposeAsync();
     }
+
+    #region Property Change Helpers
+
+    /// <summary>
+    /// Raises property changed notifications for multiple derived properties at once.
+    /// Used when a source property changes and multiple computed properties depend on it.
+    /// </summary>
+    private void RaiseDerivedPropertyChanges(params string[] propertyNames)
+    {
+        foreach (var name in propertyNames)
+        {
+            this.RaisePropertyChanged(name);
+        }
+    }
+
+    #endregion
 
     #region Store State Conversion Helpers
 

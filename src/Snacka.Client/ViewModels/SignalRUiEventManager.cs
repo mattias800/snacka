@@ -18,8 +18,7 @@ public record SignalRUiCallbacks(
     Action<ChannelResponse?> SetSelectedChannel,
     Func<CommunityResponse?> GetSelectedCommunity,
     Func<ChannelResponse?> GetCurrentVoiceChannel,
-    Action SetCurrentVoiceChannelNull,
-    Action ClearVoiceOverlayState,
+    Action ClearVoiceUiState,
     Func<Guid, ChannelResponse?> GetChannelById,
     Func<ChannelResponse?> GetFirstTextChannel,
     Func<Task> LeaveVoiceChannelAsync,
@@ -196,10 +195,8 @@ public class SignalRUiEventManager : IDisposable
 
             if (channelName != null)
             {
-                // Clear UI-specific state
-                _callbacks.SetCurrentVoiceChannelNull();
-                _voiceControl?.ResetTransientState();
-                _callbacks.ClearVoiceOverlayState();
+                // Clear all voice-related UI state
+                _callbacks.ClearVoiceUiState();
 
                 // Track that we're in voice on another device
                 _stores.VoiceStore.SetVoiceOnOtherDevice(e.ChannelId, channelName);
