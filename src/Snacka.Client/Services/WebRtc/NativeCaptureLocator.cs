@@ -680,12 +680,29 @@ public class NativeCaptureLocator
             };
 
             process.Start();
-            var output = await process.StandardOutput.ReadToEndAsync();
-            await process.WaitForExitAsync();
+
+            // Read both stdout and stderr concurrently to avoid deadlock
+            var outputTask = process.StandardOutput.ReadToEndAsync();
+            var errorTask = process.StandardError.ReadToEndAsync();
+
+            // Wait for process with timeout (5 seconds)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            try
+            {
+                await process.WaitForExitAsync(cts.Token);
+            }
+            catch (OperationCanceledException)
+            {
+                Console.WriteLine("NativeCaptureLocator: Microphone enumeration timed out");
+                try { process.Kill(); } catch { }
+                return microphones;
+            }
+
+            var output = await outputTask;
+            var error = await errorTask;
 
             if (process.ExitCode != 0)
             {
-                var error = await process.StandardError.ReadToEndAsync();
                 Console.WriteLine($"NativeCaptureLocator: Failed to enumerate microphones: {error}");
                 return microphones;
             }

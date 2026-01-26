@@ -5,42 +5,50 @@ import AVFoundation
 /// Lists available capture sources using ScreenCaptureKit
 enum SourceLister {
     static func getAvailableSources() async throws -> AvailableSources {
-        let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
-
-        let displays = content.displays.enumerated().map { index, display in
-            DisplaySource(
-                id: "\(index)",
-                name: "Display \(index + 1)",
-                width: Int(display.width),
-                height: Int(display.height)
-            )
-        }
-
-        let windows = content.windows.compactMap { window -> WindowSource? in
-            // Filter out windows without titles or from system processes
-            guard let title = window.title, !title.isEmpty else { return nil }
-            guard let app = window.owningApplication else { return nil }
-
-            return WindowSource(
-                id: "\(window.windowID)",
-                name: title,
-                appName: app.applicationName,
-                bundleId: app.bundleIdentifier
-            )
-        }
-
-        let applications = content.applications.map { app in
-            ApplicationSource(
-                bundleId: app.bundleIdentifier,
-                name: app.applicationName
-            )
-        }
-
-        // Enumerate cameras using AVFoundation
+        // Enumerate cameras and microphones first (these don't need screen capture permission)
         let cameras = getAvailableCameras()
-
-        // Enumerate microphones using AVFoundation
         let microphones = getAvailableMicrophones()
+
+        // Try to get screen capture sources (may fail if permission not granted)
+        var displays: [DisplaySource] = []
+        var windows: [WindowSource] = []
+        var applications: [ApplicationSource] = []
+
+        do {
+            let content = try await SCShareableContent.excludingDesktopWindows(false, onScreenWindowsOnly: true)
+
+            displays = content.displays.enumerated().map { index, display in
+                DisplaySource(
+                    id: "\(index)",
+                    name: "Display \(index + 1)",
+                    width: Int(display.width),
+                    height: Int(display.height)
+                )
+            }
+
+            windows = content.windows.compactMap { window -> WindowSource? in
+                // Filter out windows without titles or from system processes
+                guard let title = window.title, !title.isEmpty else { return nil }
+                guard let app = window.owningApplication else { return nil }
+
+                return WindowSource(
+                    id: "\(window.windowID)",
+                    name: title,
+                    appName: app.applicationName,
+                    bundleId: app.bundleIdentifier
+                )
+            }
+
+            applications = content.applications.map { app in
+                ApplicationSource(
+                    bundleId: app.bundleIdentifier,
+                    name: app.applicationName
+                )
+            }
+        } catch {
+            // Screen capture permission may not be granted - that's OK, we can still list cameras and microphones
+            fputs("SourceLister: Screen capture permission not granted, skipping display/window/app enumeration\n", stderr)
+        }
 
         return AvailableSources(
             displays: displays,
@@ -119,7 +127,7 @@ enum SourceLister {
         }
     }
 
-    /// Find a microphone by unique ID or index
+    /// Find a microphone by unique ID, name, or index
     static func findMicrophone(idOrIndex: String) -> AVCaptureDevice? {
         let microphones = AVCaptureDevice.DiscoverySession(
             deviceTypes: [.builtInMicrophone, .externalUnknown],
@@ -129,6 +137,11 @@ enum SourceLister {
 
         // First try to find by unique ID
         if let device = microphones.first(where: { $0.uniqueID == idOrIndex }) {
+            return device
+        }
+
+        // Then try to find by name (for backwards compatibility with settings that stored names)
+        if let device = microphones.first(where: { $0.localizedName == idOrIndex }) {
             return device
         }
 

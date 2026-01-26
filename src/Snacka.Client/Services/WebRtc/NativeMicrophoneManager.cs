@@ -241,6 +241,7 @@ public class NativeMicrophoneManager : IAsyncDisposable
         var stderr = _captureProcess.StandardError.BaseStream;
         var headerBuffer = new byte[McapHeaderSize];
         long packetCount = 0;
+        int invalidHeaderCount = 0;
 
         try
         {
@@ -265,8 +266,44 @@ public class NativeMicrophoneManager : IAsyncDisposable
                 var header = ParseMcapHeader(headerBuffer);
                 if (header == null)
                 {
-                    Console.WriteLine("NativeMicrophoneManager: Invalid MCAP header");
-                    continue;
+                    // Log message or other non-MCAP data received - scan for next MCAP magic
+                    invalidHeaderCount++;
+                    if (invalidHeaderCount <= 5)
+                    {
+                        Console.WriteLine("NativeMicrophoneManager: Invalid MCAP header, scanning for sync...");
+                    }
+
+                    // Scan the buffer for the MCAP magic bytes to resync
+                    int syncOffset = ScanForMcapMagic(headerBuffer, 1);
+                    if (syncOffset > 0)
+                    {
+                        // Found magic bytes - shift buffer and read remaining bytes
+                        int remaining = McapHeaderSize - syncOffset;
+                        Buffer.BlockCopy(headerBuffer, syncOffset, headerBuffer, 0, remaining);
+
+                        // Read the rest of the header
+                        while (remaining < McapHeaderSize && !ct.IsCancellationRequested)
+                        {
+                            int bytesRead = await stderr.ReadAsync(
+                                headerBuffer.AsMemory(remaining, McapHeaderSize - remaining), ct);
+                            if (bytesRead == 0) return;
+                            remaining += bytesRead;
+                        }
+
+                        // Try parsing again
+                        header = ParseMcapHeader(headerBuffer);
+                    }
+
+                    if (header == null)
+                    {
+                        // Still no valid header - read byte by byte until we find magic
+                        if (!await ScanForMcapMagicAsync(stderr, headerBuffer, ct))
+                        {
+                            return; // EOF
+                        }
+                        header = ParseMcapHeader(headerBuffer);
+                        if (header == null) continue; // Still invalid, try again
+                    }
                 }
 
                 // Read audio data
@@ -331,6 +368,77 @@ public class NativeMicrophoneManager : IAsyncDisposable
                 (ulong)buffer[20] << 32 | (ulong)buffer[21] << 40 |
                 (ulong)buffer[22] << 48 | (ulong)buffer[23] << 56)
         };
+    }
+
+    /// <summary>
+    /// Scans a buffer for the MCAP magic bytes starting at the given offset.
+    /// Returns the offset where magic was found, or -1 if not found.
+    /// </summary>
+    private static int ScanForMcapMagic(byte[] buffer, int startOffset)
+    {
+        // MCAP magic is 0x4D434150 in big-endian = bytes 'M' 'C' 'A' 'P'
+        for (int i = startOffset; i <= buffer.Length - 4; i++)
+        {
+            if (buffer[i] == 0x4D && buffer[i + 1] == 0x43 &&
+                buffer[i + 2] == 0x41 && buffer[i + 3] == 0x50)
+            {
+                return i;
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>
+    /// Scans the stream byte-by-byte until MCAP magic is found.
+    /// Fills the header buffer with the complete header once magic is found.
+    /// Returns false on EOF.
+    /// </summary>
+    private async Task<bool> ScanForMcapMagicAsync(Stream stream, byte[] headerBuffer, CancellationToken ct)
+    {
+        // Read one byte at a time looking for 'M' 'C' 'A' 'P'
+        var singleByte = new byte[1];
+        int matchIndex = 0;
+        byte[] magicBytes = { 0x4D, 0x43, 0x41, 0x50 }; // "MCAP"
+
+        while (!ct.IsCancellationRequested)
+        {
+            int bytesRead = await stream.ReadAsync(singleByte.AsMemory(0, 1), ct);
+            if (bytesRead == 0) return false; // EOF
+
+            if (singleByte[0] == magicBytes[matchIndex])
+            {
+                headerBuffer[matchIndex] = singleByte[0];
+                matchIndex++;
+
+                if (matchIndex == 4)
+                {
+                    // Found magic! Now read the rest of the header
+                    int remaining = McapHeaderSize - 4;
+                    int read = 4;
+                    while (read < McapHeaderSize && !ct.IsCancellationRequested)
+                    {
+                        bytesRead = await stream.ReadAsync(
+                            headerBuffer.AsMemory(read, McapHeaderSize - read), ct);
+                        if (bytesRead == 0) return false;
+                        read += bytesRead;
+                    }
+                    return true;
+                }
+            }
+            else
+            {
+                // Reset match
+                matchIndex = 0;
+                // Check if current byte starts a new match
+                if (singleByte[0] == magicBytes[0])
+                {
+                    headerBuffer[0] = singleByte[0];
+                    matchIndex = 1;
+                }
+            }
+        }
+
+        return false;
     }
 
     private void ProcessAudioPacket(byte[] audioData, uint sampleCount)

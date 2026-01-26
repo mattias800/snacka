@@ -21,8 +21,8 @@ public class AudioSettingsViewModelTests : IDisposable
         _mockSettingsStore.Setup(x => x.Settings).Returns(_settings);
 
         // Default device lists
-        _mockAudioDeviceService.Setup(x => x.GetInputDevices())
-            .Returns(new List<string> { "Microphone 1", "Microphone 2" });
+        _mockAudioDeviceService.Setup(x => x.GetInputDevicesAsync())
+            .ReturnsAsync(new List<AudioDeviceInfo> { new("0", "Microphone 1"), new("1", "Microphone 2") });
         _mockAudioDeviceService.Setup(x => x.GetOutputDevices())
             .Returns(new List<string> { "Speakers", "Headphones" });
     }
@@ -118,8 +118,8 @@ public class AudioSettingsViewModelTests : IDisposable
         Assert.Equal(3, vm.InputDevices.Count);
 
         // Update mock to return different devices
-        _mockAudioDeviceService.Setup(x => x.GetInputDevices())
-            .Returns(new List<string> { "New Microphone" });
+        _mockAudioDeviceService.Setup(x => x.GetInputDevicesAsync())
+            .ReturnsAsync(new List<AudioDeviceInfo> { new("0", "New Microphone") });
         _mockAudioDeviceService.Setup(x => x.GetOutputDevices())
             .Returns(new List<string> { "New Speaker" });
 
