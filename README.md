@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="./src/Snacka.Client/Assets/snacka-icon.png" alt="Snacka Logo" width="128" height="128">
+  <img src="logo.png" alt="Snacka Logo" width="128" height="128">
 </p>
 
 # Snacka
