@@ -8,13 +8,17 @@ namespace Snacka.Client.Services.WebRtc;
 
 /// <summary>
 /// Manages microphone capture, voice activity detection (VAD), and automatic gain control (AGC).
+/// Supports both native platform capture and SDL2 fallback.
 /// Extracted from WebRtcService for single responsibility.
 /// </summary>
 public class AudioInputManager : IAsyncDisposable
 {
     private readonly ISettingsStore? _settingsStore;
+    private readonly NativeCaptureLocator? _nativeLocator;
 
     private SDL2AudioSource? _audioSource;
+    private NativeMicrophoneManager? _nativeMicManager;
+    private bool _useNativeCapture;
     private bool _isMuted;
     private bool _isSpeaking;
     private DateTime _lastAudioActivity = DateTime.MinValue;
@@ -56,27 +60,98 @@ public class AudioInputManager : IAsyncDisposable
     /// </summary>
     public event Action<bool>? SpeakingChanged;
 
-    public AudioInputManager(ISettingsStore? settingsStore)
+    /// <summary>
+    /// Fired when encoded audio is available from native capture.
+    /// Used to route audio to WebRtcService when using native capture.
+    /// </summary>
+    public event Action<uint, byte[]>? OnNativeEncodedSample;
+
+    /// <summary>
+    /// Gets whether native microphone capture is being used.
+    /// </summary>
+    public bool IsUsingNativeCapture => _useNativeCapture;
+
+    public AudioInputManager(ISettingsStore? settingsStore, NativeCaptureLocator? nativeLocator = null)
     {
         _settingsStore = settingsStore;
+        _nativeLocator = nativeLocator;
     }
 
     /// <summary>
     /// Initializes the microphone capture and starts audio processing.
+    /// Tries native capture first, falls back to SDL2 if unavailable.
     /// </summary>
     public async Task InitializeAsync()
     {
-        if (_audioSource != null) return;
+        if (_audioSource != null || _nativeMicManager != null) return;
 
+        var inputDevice = _settingsStore?.Settings.AudioInputDevice ?? string.Empty;
+
+        // Try native capture first
+        if (_nativeLocator != null && _nativeLocator.IsNativeMicrophoneCaptureAvailable())
+        {
+            try
+            {
+                Console.WriteLine("AudioInputManager: Attempting native microphone capture...");
+
+                _nativeMicManager = new NativeMicrophoneManager(_nativeLocator, _settingsStore);
+
+                // Subscribe to events
+                _nativeMicManager.SpeakingChanged += (speaking) =>
+                {
+                    _isSpeaking = speaking;
+                    SpeakingChanged?.Invoke(speaking);
+                };
+
+                _nativeMicManager.OnEncodedSample += (duration, sample) =>
+                {
+                    OnNativeEncodedSample?.Invoke(duration, sample);
+                };
+
+                // Use device index 0 if no specific device selected, otherwise try to find the device
+                var micId = string.IsNullOrEmpty(inputDevice) ? "0" : inputDevice;
+
+                if (await _nativeMicManager.StartAsync(micId))
+                {
+                    _useNativeCapture = true;
+
+                    if (_isMuted)
+                    {
+                        _nativeMicManager.SetMuted(true);
+                    }
+
+                    Console.WriteLine("AudioInputManager: Using native microphone capture");
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine("AudioInputManager: Native capture failed, falling back to SDL2");
+                    await _nativeMicManager.DisposeAsync();
+                    _nativeMicManager = null;
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"AudioInputManager: Native capture error: {ex.Message}, falling back to SDL2");
+                if (_nativeMicManager != null)
+                {
+                    await _nativeMicManager.DisposeAsync();
+                    _nativeMicManager = null;
+                }
+            }
+        }
+
+        // Fall back to SDL2
         try
         {
+            Console.WriteLine("AudioInputManager: Using SDL2 microphone capture");
+
             // Ensure SDL2 audio is initialized
             NativeLibraryInitializer.EnsureSdl2AudioInitialized();
 
             // Use selected audio input device from settings
             // Enable Opus for high-quality 48kHz audio
             var audioEncoder = new AudioEncoder(includeOpus: true);
-            var inputDevice = _settingsStore?.Settings.AudioInputDevice ?? string.Empty;
             _audioSource = new SDL2AudioSource(inputDevice, audioEncoder);
 
             // Subscribe to raw audio samples for voice activity detection
@@ -112,11 +187,12 @@ public class AudioInputManager : IAsyncDisposable
                 await _audioSource.PauseAudio();
             }
 
-            Console.WriteLine("AudioInputManager: Microphone initialized");
+            _useNativeCapture = false;
+            Console.WriteLine("AudioInputManager: Microphone initialized (SDL2)");
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"AudioInputManager: Failed to initialize: {ex.Message}");
+            Console.WriteLine($"AudioInputManager: Failed to initialize SDL2: {ex.Message}");
             _audioSource = null;
         }
     }
@@ -129,7 +205,11 @@ public class AudioInputManager : IAsyncDisposable
         _isMuted = muted;
         Console.WriteLine($"AudioInputManager: Muted = {muted}");
 
-        if (_audioSource != null)
+        if (_nativeMicManager != null)
+        {
+            _nativeMicManager.SetMuted(muted);
+        }
+        else if (_audioSource != null)
         {
             try
             {
@@ -180,6 +260,21 @@ public class AudioInputManager : IAsyncDisposable
             SpeakingChanged?.Invoke(false);
         }
 
+        // Stop native capture if used
+        if (_nativeMicManager != null)
+        {
+            try
+            {
+                await _nativeMicManager.DisposeAsync();
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"AudioInputManager: Error stopping native capture: {ex.Message}");
+            }
+            _nativeMicManager = null;
+        }
+
+        // Stop SDL2 capture if used
         if (_audioSource != null)
         {
             try
@@ -189,11 +284,12 @@ public class AudioInputManager : IAsyncDisposable
             }
             catch (Exception ex)
             {
-                Console.WriteLine($"AudioInputManager: Error stopping: {ex.Message}");
+                Console.WriteLine($"AudioInputManager: Error stopping SDL2: {ex.Message}");
             }
             _audioSource = null;
         }
 
+        _useNativeCapture = false;
         _loggedSampleRate = false;
     }
 

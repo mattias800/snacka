@@ -1,4 +1,6 @@
 using Snacka.Shared.Models;
+using System.Diagnostics;
+using System.Text.Json;
 
 namespace Snacka.Client.Services.WebRtc;
 
@@ -569,5 +571,137 @@ public class NativeCaptureLocator
         {
             return null;
         }
+    }
+
+    /// <summary>
+    /// Checks if native microphone capture is available on the current platform.
+    /// </summary>
+    public bool IsNativeMicrophoneCaptureAvailable()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return ShouldUseSnackaCaptureVideoToolbox();
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return ShouldUseSnackaCaptureWindows();
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return ShouldUseSnackaCaptureLinux();
+        }
+
+        return false;
+    }
+
+    /// <summary>
+    /// Gets the path to the native capture tool that supports microphone capture.
+    /// </summary>
+    public string? GetNativeMicrophoneCapturePath()
+    {
+        if (OperatingSystem.IsMacOS())
+        {
+            return GetSnackaCaptureVideoToolboxPath();
+        }
+
+        if (OperatingSystem.IsWindows())
+        {
+            return GetSnackaCaptureWindowsPath();
+        }
+
+        if (OperatingSystem.IsLinux())
+        {
+            return GetSnackaCaptureLinuxPath();
+        }
+
+        return null;
+    }
+
+    /// <summary>
+    /// Builds native microphone capture command arguments for any platform.
+    /// </summary>
+    /// <param name="microphoneId">Microphone device ID or index</param>
+    public string GetNativeMicrophoneCaptureArgs(string microphoneId)
+    {
+        // All platforms use the same argument format
+        // Quote the ID in case it contains special characters or spaces
+        return $"--microphone \"{microphoneId}\"";
+    }
+
+    /// <summary>
+    /// Gets available microphones from the native capture tool.
+    /// </summary>
+    public async Task<List<MicrophoneInfo>> GetAvailableMicrophonesAsync()
+    {
+        var microphones = new List<MicrophoneInfo>();
+
+        string? capturePath = null;
+        if (OperatingSystem.IsMacOS())
+        {
+            capturePath = GetSnackaCaptureVideoToolboxPath();
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            capturePath = GetSnackaCaptureWindowsPath();
+        }
+        else if (OperatingSystem.IsLinux())
+        {
+            capturePath = GetSnackaCaptureLinuxPath();
+        }
+
+        if (capturePath == null || !File.Exists(capturePath))
+        {
+            Console.WriteLine("NativeCaptureLocator: Native capture tool not available for microphone enumeration");
+            return microphones;
+        }
+
+        try
+        {
+            using var process = new Process();
+            process.StartInfo = new ProcessStartInfo
+            {
+                FileName = capturePath,
+                Arguments = "list --json",
+                UseShellExecute = false,
+                RedirectStandardOutput = true,
+                RedirectStandardError = true,
+                CreateNoWindow = true
+            };
+
+            process.Start();
+            var output = await process.StandardOutput.ReadToEndAsync();
+            await process.WaitForExitAsync();
+
+            if (process.ExitCode != 0)
+            {
+                var error = await process.StandardError.ReadToEndAsync();
+                Console.WriteLine($"NativeCaptureLocator: Failed to enumerate microphones: {error}");
+                return microphones;
+            }
+
+            // Parse JSON output
+            using var doc = JsonDocument.Parse(output);
+            if (doc.RootElement.TryGetProperty("microphones", out var microphonesElement))
+            {
+                foreach (var mic in microphonesElement.EnumerateArray())
+                {
+                    var id = mic.GetProperty("id").GetString() ?? "";
+                    var name = mic.GetProperty("name").GetString() ?? "";
+                    var index = mic.GetProperty("index").GetInt32();
+
+                    microphones.Add(new MicrophoneInfo(id, name, index));
+                }
+            }
+
+            Console.WriteLine($"NativeCaptureLocator: Found {microphones.Count} microphones via native tool");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"NativeCaptureLocator: Error enumerating microphones: {ex.Message}");
+        }
+
+        return microphones;
     }
 }

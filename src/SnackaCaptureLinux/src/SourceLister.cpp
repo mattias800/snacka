@@ -1,4 +1,5 @@
 #include "SourceLister.h"
+#include "PulseMicrophoneCapturer.h"
 
 #include <X11/Xlib.h>
 #include <X11/extensions/Xrandr.h>
@@ -114,7 +115,14 @@ SourceList SourceLister::GetAvailableSources() {
     // Enumerate cameras
     sources.cameras = EnumerateCameras();
 
+    // Enumerate microphones
+    sources.microphones = EnumerateMicrophones();
+
     return sources;
+}
+
+std::vector<MicrophoneInfo> SourceLister::EnumerateMicrophones() {
+    return PulseMicrophoneCapturer::EnumerateMicrophones();
 }
 
 std::vector<CameraInfo> SourceLister::EnumerateCameras() {
@@ -199,6 +207,16 @@ void SourceLister::PrintSources(const SourceList& sources) {
         }
     }
 
+    std::cerr << "\nAvailable Microphones:\n";
+    std::cerr << "----------------------\n";
+    if (sources.microphones.empty()) {
+        std::cerr << "  (No microphones found)\n";
+    } else {
+        for (const auto& mic : sources.microphones) {
+            std::cerr << "  [" << mic.index << "] " << mic.name << "\n";
+        }
+    }
+
     std::cerr << "\n";
 }
 
@@ -242,6 +260,18 @@ void SourceLister::PrintSourcesAsJson(const SourceList& sources) {
         std::cout << "      \"name\": \"" << EscapeJson(camera.name) << "\",\n";
         std::cout << "      \"index\": " << camera.index << "\n";
         std::cout << "    }" << (i < sources.cameras.size() - 1 ? "," : "") << "\n";
+    }
+    std::cout << "  ],\n";
+
+    // Microphones
+    std::cout << "  \"microphones\": [\n";
+    for (size_t i = 0; i < sources.microphones.size(); i++) {
+        const auto& mic = sources.microphones[i];
+        std::cout << "    {\n";
+        std::cout << "      \"id\": \"" << EscapeJson(mic.id) << "\",\n";
+        std::cout << "      \"name\": \"" << EscapeJson(mic.name) << "\",\n";
+        std::cout << "      \"index\": " << mic.index << "\n";
+        std::cout << "    }" << (i < sources.microphones.size() - 1 ? "," : "") << "\n";
     }
     std::cout << "  ]\n";
 

@@ -20,6 +20,8 @@ add_executable(SnackaCaptureLinux
     src/V4L2Capturer.h
     src/PulseAudioCapturer.cpp
     src/PulseAudioCapturer.h
+    src/PulseMicrophoneCapturer.cpp
+    src/PulseMicrophoneCapturer.h
     src/SourceLister.cpp
     src/SourceLister.h
     src/Protocol.h

@@ -24,7 +24,8 @@ let package = Package(
                 .linkedFramework("CoreMedia"),
                 .linkedFramework("CoreVideo"),
                 .linkedFramework("AVFoundation"),
-                .linkedFramework("VideoToolbox")
+                .linkedFramework("VideoToolbox"),
+                .linkedFramework("AppKit")
             ]
         )
     ]

@@ -4,6 +4,7 @@
 #include "WindowCapturer.h"
 #include "CameraCapturer.h"
 #include "AudioCapturer.h"
+#include "MicrophoneCapturer.h"
 #include "MediaFoundationEncoder.h"
 
 #define WIN32_LEAN_AND_MEAN
@@ -35,27 +36,28 @@ BOOL WINAPI ConsoleHandler(DWORD signal) {
 
 void PrintUsage() {
     std::cerr << R"(
-SnackaCaptureWindows - Screen, window, and camera capture tool for Windows
+SnackaCaptureWindows - Screen, window, camera, and microphone capture tool for Windows
 
 USAGE:
     SnackaCaptureWindows list [--json]
     SnackaCaptureWindows [OPTIONS]
 
 COMMANDS:
-    list              List available capture sources (displays, windows, cameras)
+    list              List available capture sources (displays, windows, cameras, microphones)
 
 OPTIONS:
-    --display <index>   Display index to capture (default: 0)
-    --window <hwnd>     Window handle to capture
-    --camera <id>       Camera device ID or index to capture
-    --width <pixels>    Output width (default: 1920, camera: 640)
-    --height <pixels>   Output height (default: 1080, camera: 480)
-    --fps <rate>        Frames per second (default: 30, camera: 15)
-    --audio             Capture system audio (not used with camera)
-    --encode            Output H.264 encoded video (instead of raw NV12)
-    --bitrate <mbps>    Encoding bitrate in Mbps (default: 6, camera: 2)
-    --json              Output source list as JSON (with 'list' command)
-    --help              Show this help message
+    --display <index>     Display index to capture (default: 0)
+    --window <hwnd>       Window handle to capture
+    --camera <id>         Camera device ID or index to capture
+    --microphone <id>     Microphone device ID or index to capture (audio only, no video)
+    --width <pixels>      Output width (default: 1920, camera: 640)
+    --height <pixels>     Output height (default: 1080, camera: 480)
+    --fps <rate>          Frames per second (default: 30, camera: 15)
+    --audio               Capture system audio (not used with camera or microphone)
+    --encode              Output H.264 encoded video (instead of raw NV12)
+    --bitrate <mbps>      Encoding bitrate in Mbps (default: 6, camera: 2)
+    --json                Output source list as JSON (with 'list' command)
+    --help                Show this help message
 
 EXAMPLES:
     SnackaCaptureWindows list --json
@@ -63,6 +65,7 @@ EXAMPLES:
     SnackaCaptureWindows --display 0 --encode --bitrate 8 --audio
     SnackaCaptureWindows --window 12345678 --audio
     SnackaCaptureWindows --camera 0 --encode --bitrate 2
+    SnackaCaptureWindows --microphone 0
 )";
 }
 
@@ -75,6 +78,60 @@ int ListSources(bool asJson) {
         SourceLister::PrintSources(sources);
     }
 
+    return 0;
+}
+
+int CaptureMicrophone(const std::string& microphoneId) {
+    // Set stderr to binary mode for audio output
+    _setmode(_fileno(stderr), _O_BINARY);
+
+    // Set up console handler for clean shutdown
+    SetConsoleCtrlHandler(ConsoleHandler, TRUE);
+
+    // Initialize COM
+    CoInitializeEx(nullptr, COINIT_MULTITHREADED);
+
+    std::cerr << "SnackaCaptureWindows: Starting microphone capture (audio only)\n";
+
+    uint64_t audioPacketCount = 0;
+
+    // Write audio packets to stderr
+    auto audioCallback = [&](const uint8_t* data, size_t size, uint64_t timestamp) {
+        if (!g_running) return;
+
+        size_t written = 0;
+        while (written < size && g_running) {
+            int result = _write(_fileno(stderr), data + written, static_cast<unsigned int>(size - written));
+            if (result < 0) {
+                g_running = false;
+                return;
+            }
+            written += result;
+        }
+
+        audioPacketCount++;
+    };
+
+    // Start microphone capture
+    auto capturer = std::make_unique<snacka::MicrophoneCapturer>();
+    if (!capturer->Initialize(microphoneId)) {
+        std::cerr << "SnackaCaptureWindows: Failed to initialize microphone capture\n";
+        CoUninitialize();
+        return 1;
+    }
+
+    capturer->Start(audioCallback);
+
+    // Wait for shutdown
+    while (g_running && capturer->IsRunning()) {
+        Sleep(100);
+    }
+
+    capturer->Stop();
+
+    std::cerr << "SnackaCaptureWindows: Microphone capture stopped (audio packets: " << audioPacketCount << ")\n";
+
+    CoUninitialize();
     return 0;
 }
 
@@ -311,12 +368,14 @@ int main(int argc, char* argv[]) {
     int displayIndex = 0;
     HWND windowHandle = nullptr;
     std::string cameraId;
+    std::string microphoneId;
     int width = -1;  // -1 means use default for source type
     int height = -1;
     int fps = -1;
     bool captureAudio = false;
     bool encodeH264 = false;
     int bitrateMbps = -1;
+    bool hasMicrophone = false;
 
     for (size_t i = 1; i < args.size(); i++) {
         if (args[i] == "--display" && i + 1 < args.size()) {
@@ -325,6 +384,9 @@ int main(int argc, char* argv[]) {
             windowHandle = reinterpret_cast<HWND>(std::stoull(args[++i]));
         } else if (args[i] == "--camera" && i + 1 < args.size()) {
             cameraId = args[++i];
+        } else if (args[i] == "--microphone" && i + 1 < args.size()) {
+            microphoneId = args[++i];
+            hasMicrophone = true;
         } else if (args[i] == "--width" && i + 1 < args.size()) {
             width = std::stoi(args[++i]);
         } else if (args[i] == "--height" && i + 1 < args.size()) {
@@ -338,6 +400,11 @@ int main(int argc, char* argv[]) {
         } else if (args[i] == "--bitrate" && i + 1 < args.size()) {
             bitrateMbps = std::stoi(args[++i]);
         }
+    }
+
+    // Handle microphone capture mode (audio only, no video)
+    if (hasMicrophone) {
+        return CaptureMicrophone(microphoneId);
     }
 
     // Set defaults based on source type

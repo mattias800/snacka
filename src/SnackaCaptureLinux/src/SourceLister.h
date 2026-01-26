@@ -14,6 +14,9 @@ public:
     /// Enumerate available V4L2 video capture devices
     static std::vector<CameraInfo> EnumerateCameras();
 
+    /// Enumerate available microphones (non-monitor PulseAudio sources)
+    static std::vector<MicrophoneInfo> EnumerateMicrophones();
+
     /// Print sources in human-readable format to stderr
     static void PrintSources(const SourceList& sources);
 

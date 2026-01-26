@@ -1,5 +1,6 @@
 import ArgumentParser
 import Foundation
+import AppKit
 
 @main
 @available(macOS 13.0, *)
@@ -29,6 +30,9 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
 
     @Option(name: .long, help: "Camera unique ID or index to capture")
     var camera: String?
+
+    @Option(name: .long, help: "Microphone unique ID or index to capture (audio only, no video)")
+    var microphone: String?
 
     // MARK: - Video Settings
 
@@ -68,9 +72,9 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
             return
         }
 
-        let sourceCount = [display != nil, window != nil, app != nil, camera != nil].filter { $0 }.count
+        let sourceCount = [display != nil, window != nil, app != nil, camera != nil, microphone != nil].filter { $0 }.count
         if sourceCount > 1 {
-            throw ValidationError("Specify only one of --display, --window, --app, or --camera")
+            throw ValidationError("Specify only one of --display, --window, --app, --camera, or --microphone")
         }
 
         guard width > 0 && width <= 4096 else {
@@ -87,6 +91,10 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
     // MARK: - Run
 
     func run() async throws {
+        // CRITICAL: Set activation policy FIRST to prevent dock icon
+        // This marks the app as a background helper that shouldn't appear in the dock
+        NSApplication.shared.setActivationPolicy(.accessory)
+
         // Handle list command
         if command == "list" {
             try await runList()
@@ -125,13 +133,29 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
                 let positionStr = camera.position != "unspecified" ? " (\(camera.position))" : ""
                 print("  [\(camera.index)] \(camera.name)\(positionStr) - id: \(camera.id)")
             }
+            print("\nMicrophones:")
+            for mic in sources.microphones {
+                print("  [\(mic.index)] \(mic.name) - id: \(mic.id)")
+            }
         }
     }
 
     // MARK: - Capture
 
     private func runCapture() async throws {
-        // Determine capture source
+        // Handle microphone capture separately (audio only, no video)
+        if let micId = microphone {
+            fputs("SnackaCaptureVideoToolbox: Starting microphone capture (audio only)\n", stderr)
+
+            let capturer = MicrophoneCapturer(microphoneId: micId)
+            try await capturer.start()
+
+            // Keep running until terminated
+            await capturer.waitUntilDone()
+            return
+        }
+
+        // Determine capture source for video modes
         let sourceType: CaptureSourceType
         if let cameraId = camera {
             sourceType = .camera(id: cameraId)

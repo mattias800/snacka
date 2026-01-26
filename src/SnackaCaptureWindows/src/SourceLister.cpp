@@ -1,4 +1,5 @@
 #include "SourceLister.h"
+#include "MicrophoneCapturer.h"
 
 #define WIN32_LEAN_AND_MEAN
 #define NOMINMAX
@@ -264,11 +265,16 @@ std::vector<CameraInfo> SourceLister::EnumerateCameras() {
     return cameras;
 }
 
+std::vector<MicrophoneInfo> SourceLister::EnumerateMicrophones() {
+    return MicrophoneCapturer::EnumerateMicrophones();
+}
+
 SourceList SourceLister::GetAvailableSources() {
     SourceList sources;
     sources.displays = EnumerateDisplays();
     sources.windows = EnumerateWindows();
     sources.cameras = EnumerateCameras();
+    sources.microphones = EnumerateMicrophones();
     // Applications list is empty on Windows (macOS-only concept)
     return sources;
 }
@@ -315,6 +321,18 @@ void SourceLister::PrintSourcesAsJson(const SourceList& sources) {
         std::cout << "      \"index\": " << c.index << "\n";
         std::cout << "    }" << (i < sources.cameras.size() - 1 ? "," : "") << "\n";
     }
+    std::cout << "  ],\n";
+
+    // Microphones
+    std::cout << "  \"microphones\": [\n";
+    for (size_t i = 0; i < sources.microphones.size(); i++) {
+        const auto& m = sources.microphones[i];
+        std::cout << "    {\n";
+        std::cout << "      \"id\": \"" << EscapeJson(m.id) << "\",\n";
+        std::cout << "      \"name\": \"" << EscapeJson(m.name) << "\",\n";
+        std::cout << "      \"index\": " << m.index << "\n";
+        std::cout << "    }" << (i < sources.microphones.size() - 1 ? "," : "") << "\n";
+    }
     std::cout << "  ]\n";
 
     std::cout << "}\n";
@@ -341,6 +359,11 @@ void SourceLister::PrintSources(const SourceList& sources) {
     std::cout << "\nCameras:\n";
     for (const auto& c : sources.cameras) {
         std::cout << "  [" << c.index << "] " << c.name << "\n";
+    }
+
+    std::cout << "\nMicrophones:\n";
+    for (const auto& m : sources.microphones) {
+        std::cout << "  [" << m.index << "] " << m.name << "\n";
     }
 }
 

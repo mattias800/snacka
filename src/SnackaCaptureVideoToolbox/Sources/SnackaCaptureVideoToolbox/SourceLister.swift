@@ -39,11 +39,15 @@ enum SourceLister {
         // Enumerate cameras using AVFoundation
         let cameras = getAvailableCameras()
 
+        // Enumerate microphones using AVFoundation
+        let microphones = getAvailableMicrophones()
+
         return AvailableSources(
             displays: displays,
             windows: windows,
             applications: applications,
-            cameras: cameras
+            cameras: cameras,
+            microphones: microphones
         )
     }
 
@@ -93,6 +97,44 @@ enum SourceLister {
         // Then try to find by index
         if let index = Int(idOrIndex), index >= 0 && index < cameras.count {
             return cameras[index]
+        }
+
+        return nil
+    }
+
+    /// Returns available microphone devices using AVFoundation
+    static func getAvailableMicrophones() -> [MicrophoneSource] {
+        let discoverySession = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInMicrophone, .externalUnknown],
+            mediaType: .audio,
+            position: .unspecified
+        )
+
+        return discoverySession.devices.enumerated().map { index, device in
+            MicrophoneSource(
+                id: device.uniqueID,
+                name: device.localizedName,
+                index: index
+            )
+        }
+    }
+
+    /// Find a microphone by unique ID or index
+    static func findMicrophone(idOrIndex: String) -> AVCaptureDevice? {
+        let microphones = AVCaptureDevice.DiscoverySession(
+            deviceTypes: [.builtInMicrophone, .externalUnknown],
+            mediaType: .audio,
+            position: .unspecified
+        ).devices
+
+        // First try to find by unique ID
+        if let device = microphones.first(where: { $0.uniqueID == idOrIndex }) {
+            return device
+        }
+
+        // Then try to find by index
+        if let index = Int(idOrIndex), index >= 0 && index < microphones.count {
+            return microphones[index]
         }
 
         return nil

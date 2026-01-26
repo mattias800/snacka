@@ -4,6 +4,7 @@
 #include "V4L2Capturer.h"
 #include "VaapiEncoder.h"
 #include "PulseAudioCapturer.h"
+#include "PulseMicrophoneCapturer.h"
 
 #include <iostream>
 #include <string>
@@ -29,7 +30,7 @@ void SignalHandler(int signal) {
 
 void PrintUsage() {
     std::cerr << R"(
-SnackaCaptureLinux - Screen and camera capture tool for Linux with VAAPI encoding
+SnackaCaptureLinux - Screen, camera, and microphone capture tool for Linux with VAAPI encoding
 
 USAGE:
     SnackaCaptureLinux list [--json]
@@ -37,20 +38,21 @@ USAGE:
     SnackaCaptureLinux [OPTIONS]
 
 COMMANDS:
-    list              List available capture sources (displays, windows, cameras)
+    list              List available capture sources (displays, windows, cameras, microphones)
     validate          Check hardware encoding capabilities and system compatibility
 
 OPTIONS:
-    --display <index>   Display index to capture (default: 0)
-    --camera <id>       Camera device path or index to capture (e.g., /dev/video0 or 0)
-    --width <pixels>    Output width (default: 1920, camera: 640)
-    --height <pixels>   Output height (default: 1080, camera: 480)
-    --fps <rate>        Frames per second (default: 30, camera: 15)
-    --audio             Capture system audio (via PulseAudio/PipeWire)
-    --encode            Output H.264 encoded video (instead of raw NV12)
-    --bitrate <mbps>    Encoding bitrate in Mbps (default: 6, camera: 2)
-    --json              Output source list as JSON (with 'list' command)
-    --help              Show this help message
+    --display <index>     Display index to capture (default: 0)
+    --camera <id>         Camera device path or index to capture (e.g., /dev/video0 or 0)
+    --microphone <id>     Microphone source name or index to capture (audio only, no video)
+    --width <pixels>      Output width (default: 1920, camera: 640)
+    --height <pixels>     Output height (default: 1080, camera: 480)
+    --fps <rate>          Frames per second (default: 30, camera: 15)
+    --audio               Capture system audio (via PulseAudio/PipeWire)
+    --encode              Output H.264 encoded video (instead of raw NV12)
+    --bitrate <mbps>      Encoding bitrate in Mbps (default: 6, camera: 2)
+    --json                Output source list as JSON (with 'list' command)
+    --help                Show this help message
 
 EXAMPLES:
     SnackaCaptureLinux list --json
@@ -58,6 +60,7 @@ EXAMPLES:
     SnackaCaptureLinux --display 0 --encode --bitrate 8 --audio
     SnackaCaptureLinux --camera 0 --encode --bitrate 2
     SnackaCaptureLinux --camera /dev/video0 --width 640 --height 480 --fps 15
+    SnackaCaptureLinux --microphone 0
 
 OUTPUT:
     Video: H.264 NAL units in AVCC format (4-byte length prefix) to stdout
@@ -234,6 +237,55 @@ int ValidateEnvironment(bool asJson) {
 
 // Mutex for stderr output (shared between video preview and audio)
 std::mutex g_stderrMutex;
+
+int CaptureMicrophone(const std::string& microphoneId) {
+    // Set up signal handlers for clean shutdown
+    signal(SIGINT, SignalHandler);
+    signal(SIGTERM, SignalHandler);
+    signal(SIGPIPE, SignalHandler);
+
+    std::cerr << "SnackaCaptureLinux: Starting microphone capture (audio only)\n";
+
+    uint64_t audioPacketCount = 0;
+
+    // Audio callback - writes MCAP packets to stderr
+    auto audioCallback = [&](const int16_t* data, size_t sampleCount, uint64_t timestamp) {
+        if (!g_running) return;
+
+        // Create MCAP audio packet header
+        AudioPacketHeader header(static_cast<uint32_t>(sampleCount), timestamp);
+
+        // Write header + audio data to stderr
+        write(STDERR_FILENO, &header, sizeof(header));
+        write(STDERR_FILENO, data, sampleCount * 4);  // 2 channels * 2 bytes
+
+        audioPacketCount++;
+        if (audioPacketCount <= 5 || audioPacketCount % 100 == 0) {
+            std::cerr << "SnackaCaptureLinux: Microphone packet " << audioPacketCount
+                      << " (" << sampleCount << " samples)\n";
+        }
+    };
+
+    // Initialize microphone capture
+    PulseMicrophoneCapturer capturer;
+    if (!capturer.Initialize(microphoneId)) {
+        std::cerr << "SnackaCaptureLinux: Failed to initialize microphone capture\n";
+        return 1;
+    }
+
+    capturer.Start(audioCallback);
+
+    // Wait for shutdown
+    while (g_running && capturer.IsRunning()) {
+        usleep(100000);  // 100ms
+    }
+
+    capturer.Stop();
+
+    std::cerr << "SnackaCaptureLinux: Microphone capture stopped (audio packets: " << audioPacketCount << ")\n";
+
+    return 0;
+}
 
 int Capture(int displayIndex, const std::string& cameraId, int width, int height, int fps, bool encodeH264, int bitrateMbps, bool captureAudio) {
     // Set up signal handlers for clean shutdown
@@ -471,6 +523,8 @@ int main(int argc, char* argv[]) {
     // Parse capture options
     int displayIndex = 0;
     std::string cameraId;
+    std::string microphoneId;
+    bool hasMicrophone = false;
     int width = -1;  // -1 means use default for source type
     int height = -1;
     int fps = -1;
@@ -483,6 +537,9 @@ int main(int argc, char* argv[]) {
             displayIndex = std::stoi(args[++i]);
         } else if (args[i] == "--camera" && i + 1 < args.size()) {
             cameraId = args[++i];
+        } else if (args[i] == "--microphone" && i + 1 < args.size()) {
+            microphoneId = args[++i];
+            hasMicrophone = true;
         } else if (args[i] == "--width" && i + 1 < args.size()) {
             width = std::stoi(args[++i]);
         } else if (args[i] == "--height" && i + 1 < args.size()) {
@@ -496,6 +553,11 @@ int main(int argc, char* argv[]) {
         } else if (args[i] == "--audio") {
             captureAudio = true;
         }
+    }
+
+    // Handle microphone capture mode (audio only, no video)
+    if (hasMicrophone) {
+        return CaptureMicrophone(microphoneId);
     }
 
     // Set defaults based on source type

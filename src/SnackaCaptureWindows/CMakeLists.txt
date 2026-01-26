@@ -26,6 +26,8 @@ add_executable(SnackaCaptureWindows
     src/CameraCapturer.h
     src/AudioCapturer.cpp
     src/AudioCapturer.h
+    src/MicrophoneCapturer.cpp
+    src/MicrophoneCapturer.h
     src/ColorConverter.cpp
     src/ColorConverter.h
     src/MediaFoundationEncoder.cpp

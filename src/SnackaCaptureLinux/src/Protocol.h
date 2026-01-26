@@ -135,11 +135,18 @@ struct CameraInfo {
     int index;               // Index in device list
 };
 
+struct MicrophoneInfo {
+    std::string id;          // PulseAudio source name
+    std::string name;        // Human-readable device name
+    int index;               // Index in device list
+};
+
 struct SourceList {
     std::vector<DisplayInfo> displays;
     std::vector<WindowInfo> windows;
     std::vector<std::string> applications;
     std::vector<CameraInfo> cameras;
+    std::vector<MicrophoneInfo> microphones;
 };
 
 // Calculate NV12 frame size
