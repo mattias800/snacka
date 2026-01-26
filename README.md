@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="logo.png" alt="Snacka Logo" width="128" height="128">
+  <img src="src/Snacka.Client/Assets/snacka-icon.png" alt="Snacka Logo" width="128" height="128">
 </p>
 
 # Snacka
@@ -13,7 +13,7 @@ A self-hosted communication platform where you own your data.
 
 > **Note:** Snacka is a work in progress and not yet ready for production use.
 
-![Snacka Screenshot](./docs/screenshots/main-app.png)
+![Snacka Screenshot](docs/screenshots/main-app.png)
 
 ## What is Snacka?
 
