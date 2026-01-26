@@ -38,6 +38,67 @@
                                        Foreground="{StaticResource Foreground2Brush}"/>
                         </StackPanel>
                     </StackPanel>
+
+                    <!-- Update Status Section -->
+                    <StackPanel Spacing="12">
+                        <!-- Checking for updates indicator -->
+                        <StackPanel Orientation="Horizontal" Spacing="8"
+                                    IsVisible="{Binding IsCheckingForUpdate}">
+                            <ui:ProgressRing Width="16" Height="16" IsIndeterminate="True"/>
+                            <TextBlock Text="Checking for updates..."
+                                       FontSize="13"
+                                       Foreground="{StaticResource Foreground2Brush}"
+                                       VerticalAlignment="Center"/>
+                        </StackPanel>
+
+                        <!-- Update available notification -->
+                        <Border Background="#2d5865f2"
+                                CornerRadius="8"
+                                Padding="12"
+                                IsVisible="{Binding HasAvailableUpdate}">
+                            <Grid ColumnDefinitions="*,Auto">
+                                <StackPanel Grid.Column="0" Spacing="4">
+                                    <StackPanel Orientation="Horizontal" Spacing="8">
+                                        <ui:SymbolIcon Symbol="Important" FontSize="16" Foreground="#5865F2"/>
+                                        <TextBlock FontSize="13" Foreground="{StaticResource ForegroundBrush}">
+                                            <Run Text="Update available:"/>
+                                            <Run Text="{Binding AvailableUpdate.Version}" FontWeight="Bold"/>
+                                        </TextBlock>
+                                    </StackPanel>
+                                    <TextBlock Text="A new version is available on GitHub."
+                                               FontSize="12"
+                                               Foreground="{StaticResource Foreground3Brush}"/>
+                                </StackPanel>
+                                <Button Grid.Column="1"
+                                        Command="{Binding OpenReleasesPageCommand}"
+                                        Classes="btn-primary"
+                                        Padding="12,8"
+                                        VerticalAlignment="Center">
+                                    <StackPanel Orientation="Horizontal" Spacing="6">
+                                        <ui:SymbolIcon Symbol="Link" FontSize="12"/>
+                                        <TextBlock Text="View on GitHub" FontSize="12"/>
+                                    </StackPanel>
+                                </Button>
+                            </Grid>
+                        </Border>
+
+                        <!-- Up to date message -->
+                        <TextBlock Text="{Binding UpdateCheckStatus}"
+                                   FontSize="13"
+                                   Foreground="{StaticResource SuccessBrush}"
+                                   IsVisible="{Binding UpdateCheckStatus, Converter={x:Static StringConverters.IsNotNullOrEmpty}}"/>
+
+                        <!-- Check for updates button (shown when not checking and no update available) -->
+                        <Button Command="{Binding CheckForUpdateCommand}"
+                                Classes="btn-secondary"
+                                Padding="12,8"
+                                IsVisible="{Binding !IsCheckingForUpdate}">
+                            <StackPanel Orientation="Horizontal" Spacing="6">
+                                <ui:SymbolIcon Symbol="Sync" FontSize="14"/>
+                                <TextBlock Text="Check for Updates"/>
+                            </StackPanel>
+                        </Button>
+                    </StackPanel>
                 </StackPanel>
             </Border>
 

@@ -1,4 +1,6 @@
+using System.Net.Http;
 using System.Reflection;
+using System.Text.Json;
 using Velopack;
 using Velopack.Sources;
 
@@ -10,7 +12,8 @@ namespace Snacka.Client.Services;
 public record UpdateInfo(
     string Version,
     string? ReleaseNotes,
-    bool IsDownloaded
+    bool IsDownloaded,
+    bool CanAutoUpdate // True if Velopack can handle the update, false if manual download required
 );
 
 /// <summary>
@@ -37,21 +40,30 @@ public interface IUpdateService
 
     /// <summary>
     /// Gets whether the app was installed via Velopack (vs running from source/dev).
+    /// Determines if automatic updates can be downloaded and applied.
     /// </summary>
     bool IsInstalled { get; }
 
     /// <summary>
+    /// Gets whether auto-updates are supported on this platform.
+    /// When false, users must manually download updates from GitHub.
+    /// </summary>
+    bool SupportsAutoUpdate { get; }
+
+    /// <summary>
     /// Checks for updates and returns info if a newer version is available.
+    /// Works on all platforms - uses Velopack when available, otherwise checks GitHub API.
     /// </summary>
     Task<UpdateInfo?> CheckForUpdateAsync();
 
     /// <summary>
-    /// Downloads the update in the background.
+    /// Downloads the update in the background. Only works when SupportsAutoUpdate is true.
     /// </summary>
     Task DownloadUpdateAsync(Action<int>? progressCallback = null);
 
     /// <summary>
     /// Applies the downloaded update and restarts the application.
+    /// Only works when SupportsAutoUpdate is true.
     /// </summary>
     void ApplyUpdateAndRestart();
 
@@ -64,12 +76,17 @@ public interface IUpdateService
 public class UpdateService : IUpdateService
 {
     private readonly UpdateManager? _updateManager;
+    private readonly HttpClient _httpClient;
     private UpdateInfo? _cachedUpdate;
     private const string GitHubRepoUrl = "https://github.com/mattias800/snacka";
     private const string GitHubReleasesUrl = "https://github.com/mattias800/snacka/releases";
+    private const string GitHubApiReleasesUrl = "https://api.github.com/repos/mattias800/snacka/releases/latest";
 
     public UpdateService()
     {
+        _httpClient = new HttpClient();
+        _httpClient.DefaultRequestHeaders.Add("User-Agent", "Snacka-Client");
+
         try
         {
             // GithubSource: repoUrl, accessToken (null for public), prerelease
@@ -129,25 +146,27 @@ public class UpdateService : IUpdateService
 
     public bool IsInstalled => _updateManager?.IsInstalled ?? false;
 
+    public bool SupportsAutoUpdate => IsInstalled;
+
     public async Task<UpdateInfo?> CheckForUpdateAsync()
     {
-        if (_updateManager == null)
+        // If Velopack is installed, use it for update checking (supports auto-update)
+        if (IsInstalled && _updateManager != null)
         {
-            Console.WriteLine("UpdateService: UpdateManager not available");
-            return null;
+            return await CheckForUpdateViaVelopackAsync();
         }
 
-        if (!IsInstalled)
-        {
-            Console.WriteLine("UpdateService: App not installed via Velopack, skipping update check");
-            return null;
-        }
+        // Otherwise, check GitHub API directly (manual update only)
+        return await CheckForUpdateViaGitHubAsync();
+    }
 
+    private async Task<UpdateInfo?> CheckForUpdateViaVelopackAsync()
+    {
         try
         {
-            Console.WriteLine($"UpdateService: Checking for updates (current version: {CurrentVersion})");
+            Console.WriteLine($"UpdateService: Checking for updates via Velopack (current version: {CurrentVersion})");
 
-            var updateInfo = await _updateManager.CheckForUpdatesAsync();
+            var updateInfo = await _updateManager!.CheckForUpdatesAsync();
 
             if (updateInfo == null)
             {
@@ -157,19 +176,93 @@ public class UpdateService : IUpdateService
             }
 
             var newVersion = updateInfo.TargetFullRelease.Version;
-            Console.WriteLine($"UpdateService: Update available: {newVersion}");
+            Console.WriteLine($"UpdateService: Update available via Velopack: {newVersion}");
 
             _cachedUpdate = new UpdateInfo(
                 Version: newVersion.ToString(),
                 ReleaseNotes: null, // Velopack doesn't provide release notes directly
-                IsDownloaded: false
+                IsDownloaded: false,
+                CanAutoUpdate: true
             );
 
             return _cachedUpdate;
         }
         catch (Exception ex)
         {
-            Console.WriteLine($"UpdateService: Error checking for updates: {ex.Message}");
+            Console.WriteLine($"UpdateService: Error checking for updates via Velopack: {ex.Message}");
+            // Fall back to GitHub API check
+            return await CheckForUpdateViaGitHubAsync();
+        }
+    }
+
+    private async Task<UpdateInfo?> CheckForUpdateViaGitHubAsync()
+    {
+        try
+        {
+            Console.WriteLine($"UpdateService: Checking for updates via GitHub API (current version: {CurrentVersion})");
+
+            var response = await _httpClient.GetAsync(GitHubApiReleasesUrl);
+            if (!response.IsSuccessStatusCode)
+            {
+                Console.WriteLine($"UpdateService: GitHub API returned {response.StatusCode}");
+                return null;
+            }
+
+            var json = await response.Content.ReadAsStringAsync();
+            using var doc = JsonDocument.Parse(json);
+            var root = doc.RootElement;
+
+            // Get the tag name (e.g., "v0.3.5")
+            if (!root.TryGetProperty("tag_name", out var tagNameElement))
+            {
+                Console.WriteLine("UpdateService: No tag_name in GitHub response");
+                return null;
+            }
+
+            var tagName = tagNameElement.GetString();
+            if (string.IsNullOrEmpty(tagName))
+            {
+                return null;
+            }
+
+            // Strip 'v' prefix if present
+            var versionString = tagName.StartsWith("v") ? tagName.Substring(1) : tagName;
+
+            if (!Version.TryParse(versionString, out var latestVersion))
+            {
+                Console.WriteLine($"UpdateService: Could not parse version from tag: {tagName}");
+                return null;
+            }
+
+            // Compare versions
+            if (latestVersion <= CurrentVersion)
+            {
+                Console.WriteLine($"UpdateService: Current version {CurrentVersion} is up to date (latest: {latestVersion})");
+                _cachedUpdate = null;
+                return null;
+            }
+
+            Console.WriteLine($"UpdateService: Update available via GitHub: {latestVersion}");
+
+            // Try to get release notes
+            string? releaseNotes = null;
+            if (root.TryGetProperty("body", out var bodyElement))
+            {
+                releaseNotes = bodyElement.GetString();
+            }
+
+            _cachedUpdate = new UpdateInfo(
+                Version: versionString,
+                ReleaseNotes: releaseNotes,
+                IsDownloaded: false,
+                CanAutoUpdate: false // Manual update required
+            );
+
+            return _cachedUpdate;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"UpdateService: Error checking for updates via GitHub API: {ex.Message}");
             return null;
         }
     }
@@ -203,7 +296,7 @@ public class UpdateService : IUpdateService
             // Update cached info to mark as downloaded
             if (_cachedUpdate != null)
             {
-                _cachedUpdate = _cachedUpdate with { IsDownloaded = true };
+                _cachedUpdate = _cachedUpdate with { IsDownloaded = true, CanAutoUpdate = true };
             }
         }
         catch (Exception ex)

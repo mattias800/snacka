@@ -97,7 +97,7 @@
                     </TextBlock>
                 </StackPanel>
 
-                <!-- Download Button (when update available) -->
+                <!-- Download Button (when auto-update available) -->
                 <Button Grid.Column="1"
                         Content="Download"
                         Command="{Binding DownloadUpdate}"
@@ -106,7 +106,18 @@
                         Padding="16,6"
                         Margin="8,0"
                         CornerRadius="4"
-                        IsVisible="{Binding IsUpdateAvailable}"/>
+                        IsVisible="{Binding CanAutoUpdate}"/>
+
+                <!-- View on GitHub Button (when manual update only - macOS/Linux) -->
+                <Button Grid.Column="1"
+                        Content="View on GitHub"
+                        Command="{Binding OpenUpdatePage}"
+                        Background="#4752C4"
+                        Foreground="White"
+                        Padding="16,6"
+                        Margin="8,0"
+                        CornerRadius="4"
+                        IsVisible="{Binding IsManualUpdateOnly}"/>
 
                 <!-- Restart Button (when downloaded) -->
                 <Button Grid.Column="1"

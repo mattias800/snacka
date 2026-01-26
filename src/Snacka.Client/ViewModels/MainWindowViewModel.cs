@@ -295,7 +295,12 @@ public class MainWindowViewModel : ViewModelBase
     public UpdateInfo? UpdateInfo
     {
         get => _updateInfo;
-        set => this.RaiseAndSetIfChanged(ref _updateInfo, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _updateInfo, value);
+            this.RaisePropertyChanged(nameof(CanAutoUpdate));
+            this.RaisePropertyChanged(nameof(IsManualUpdateOnly));
+        }
     }
 
     public bool ShowUpdateBanner
@@ -309,7 +314,14 @@ public class MainWindowViewModel : ViewModelBase
     public UpdateState UpdateState
     {
         get => _updateState;
-        set => this.RaiseAndSetIfChanged(ref _updateState, value);
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _updateState, value);
+            this.RaisePropertyChanged(nameof(IsUpdateDownloading));
+            this.RaisePropertyChanged(nameof(IsUpdateReadyToInstall));
+            this.RaisePropertyChanged(nameof(IsUpdateAvailable));
+            this.RaisePropertyChanged(nameof(IsManualUpdateOnly));
+        }
     }
 
     public int UpdateDownloadProgress
@@ -321,6 +333,8 @@ public class MainWindowViewModel : ViewModelBase
     public bool IsUpdateDownloading => UpdateState == UpdateState.Downloading;
     public bool IsUpdateReadyToInstall => UpdateState == UpdateState.ReadyToInstall;
     public bool IsUpdateAvailable => UpdateState == UpdateState.UpdateAvailable;
+    public bool CanAutoUpdate => UpdateInfo?.CanAutoUpdate ?? false;
+    public bool IsManualUpdateOnly => IsUpdateAvailable && !CanAutoUpdate;
 
     public ReactiveCommand<Unit, Unit> OpenUpdatePage { get; }
     public ReactiveCommand<Unit, Unit> DismissUpdateBanner { get; }

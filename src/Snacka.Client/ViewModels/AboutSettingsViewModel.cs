@@ -11,10 +11,20 @@ namespace Snacka.Client.ViewModels;
 
 public class AboutSettingsViewModel : ViewModelBase
 {
+    private readonly IUpdateService _updateService;
     private string _copyStatus = "";
+    private bool _isCheckingForUpdate;
+    private UpdateInfo? _availableUpdate;
+    private string _updateCheckStatus = "";
 
-    public AboutSettingsViewModel()
+    public AboutSettingsViewModel() : this(new UpdateService())
     {
+    }
+
+    public AboutSettingsViewModel(IUpdateService updateService)
+    {
+        _updateService = updateService;
+
         var assembly = Assembly.GetExecutingAssembly();
 
         // Get version from AssemblyInformationalVersionAttribute (set by MinVer)
@@ -47,6 +57,11 @@ public class AboutSettingsViewModel : ViewModelBase
 
         CopyLogsCommand = ReactiveCommand.CreateFromTask(CopyLogsToClipboardAsync);
         OpenLogsFolderCommand = ReactiveCommand.Create(OpenLogsFolder);
+        CheckForUpdateCommand = ReactiveCommand.CreateFromTask(CheckForUpdateAsync);
+        OpenReleasesPageCommand = ReactiveCommand.Create(() => _updateService.OpenReleasesPage());
+
+        // Check for updates on load
+        _ = CheckForUpdateAsync();
     }
 
     public string Version { get; }
@@ -66,8 +81,73 @@ public class AboutSettingsViewModel : ViewModelBase
         set => this.RaiseAndSetIfChanged(ref _copyStatus, value);
     }
 
+    // Update-related properties
+    public bool IsCheckingForUpdate
+    {
+        get => _isCheckingForUpdate;
+        set => this.RaiseAndSetIfChanged(ref _isCheckingForUpdate, value);
+    }
+
+    public UpdateInfo? AvailableUpdate
+    {
+        get => _availableUpdate;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _availableUpdate, value);
+            this.RaisePropertyChanged(nameof(HasAvailableUpdate));
+            this.RaisePropertyChanged(nameof(IsUpToDate));
+        }
+    }
+
+    public bool HasAvailableUpdate => AvailableUpdate != null;
+    public bool IsUpToDate => AvailableUpdate == null && !IsCheckingForUpdate && string.IsNullOrEmpty(UpdateCheckStatus);
+
+    public string UpdateCheckStatus
+    {
+        get => _updateCheckStatus;
+        set
+        {
+            this.RaiseAndSetIfChanged(ref _updateCheckStatus, value);
+            this.RaisePropertyChanged(nameof(IsUpToDate));
+        }
+    }
+
     public ICommand CopyLogsCommand { get; }
     public ICommand OpenLogsFolderCommand { get; }
+    public ICommand CheckForUpdateCommand { get; }
+    public ICommand OpenReleasesPageCommand { get; }
+
+    private async Task CheckForUpdateAsync()
+    {
+        IsCheckingForUpdate = true;
+        UpdateCheckStatus = "";
+        AvailableUpdate = null;
+
+        try
+        {
+            var update = await _updateService.CheckForUpdateAsync();
+            AvailableUpdate = update;
+
+            if (update == null)
+            {
+                UpdateCheckStatus = "You're up to date!";
+                // Clear status after 5 seconds
+                _ = Task.Run(async () =>
+                {
+                    await Task.Delay(5000);
+                    Avalonia.Threading.Dispatcher.UIThread.Post(() => UpdateCheckStatus = "");
+                });
+            }
+        }
+        catch (Exception ex)
+        {
+            UpdateCheckStatus = $"Error checking for updates: {ex.Message}";
+        }
+        finally
+        {
+            IsCheckingForUpdate = false;
+        }
+    }
 
     private async Task CopyLogsToClipboardAsync()
     {
