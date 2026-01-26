@@ -385,8 +385,19 @@ public class AudioDeviceService : IAudioDeviceService
         // Handle loopback if enabled
         if (_isLoopbackEnabled && _testAudioSink != null)
         {
-            byte[] pcmBytes = new byte[samples.Length * 2];
-            Buffer.BlockCopy(samples, 0, pcmBytes, 0, pcmBytes.Length);
+            // Convert stereo to mono - SDL2AudioEndPoint always opens device with 1 channel
+            // If we send stereo data to mono sink, it plays at half speed (heavily pitched down)
+            var monoSamples = new short[samples.Length / 2];
+            for (int i = 0; i < monoSamples.Length; i++)
+            {
+                // Mix left and right channels
+                int left = samples[i * 2];
+                int right = samples[i * 2 + 1];
+                monoSamples[i] = (short)((left + right) / 2);
+            }
+
+            byte[] pcmBytes = new byte[monoSamples.Length * 2];
+            Buffer.BlockCopy(monoSamples, 0, pcmBytes, 0, pcmBytes.Length);
             _testAudioSink.GotAudioSample(pcmBytes);
         }
     }
@@ -408,23 +419,24 @@ public class AudioDeviceService : IAudioDeviceService
                     var audioEncoder = new AudioEncoder(includeOpus: true);
                     _testAudioSink = new SDL2AudioEndPoint(outputDevice ?? string.Empty, audioEncoder);
 
-                    // For native capture, always use OPUS 48kHz format (native outputs 48kHz stereo)
-                    // For SDL2 capture, use the same format as the source
+                    // For native capture, use OPUS 48kHz mono format for loopback
+                    // Note: SDL2AudioEndPoint always opens device with 1 channel (mono), so we convert
+                    // stereo to mono in OnNativeRawSample before sending to the sink
                     if (_useNativeCapture)
                     {
                         var formats = audioEncoder.SupportedFormats;
                         var opusFormat = formats.FirstOrDefault(f => f.FormatName == "OPUS");
                         if (!string.IsNullOrEmpty(opusFormat.FormatName))
                         {
-                            // Create stereo format for native capture output
-                            var stereoFormat = new AudioFormat(
+                            // Use mono format since SDL2AudioEndPoint hardcodes 1 channel
+                            var monoFormat = new AudioFormat(
                                 opusFormat.Codec,
                                 opusFormat.FormatID,
                                 opusFormat.ClockRate,
-                                2, // stereo
+                                1, // mono - matches SDL2AudioEndPoint's hardcoded channel count
                                 opusFormat.Parameters);
-                            _testAudioSink.SetAudioSinkFormat(stereoFormat);
-                            Console.WriteLine($"AudioDeviceService: Loopback sink using format: {stereoFormat.FormatName} ({stereoFormat.ClockRate}Hz stereo)");
+                            _testAudioSink.SetAudioSinkFormat(monoFormat);
+                            Console.WriteLine($"AudioDeviceService: Loopback sink using format: {monoFormat.FormatName} ({monoFormat.ClockRate}Hz mono)");
                         }
                     }
                     else if (_selectedFormat.HasValue)

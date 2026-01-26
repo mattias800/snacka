@@ -17,6 +17,9 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
     @Flag(name: .long, help: "Output list as JSON")
     var json = false
 
+    @Flag(name: .long, help: "Only list microphones (faster, skips screen capture enumeration)")
+    var microphonesOnly = false
+
     // MARK: - Capture Source Options
 
     @Option(name: .long, help: "Display index to capture")
@@ -115,6 +118,24 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
     // MARK: - List Sources
 
     private func runList() async throws {
+        // Fast path for microphones only - skips slow SCShareableContent enumeration
+        if microphonesOnly {
+            let microphones = SourceLister.getAvailableMicrophones()
+            if json {
+                let result = ["microphones": microphones]
+                let encoder = JSONEncoder()
+                encoder.outputFormatting = [.prettyPrinted, .sortedKeys]
+                let data = try encoder.encode(result)
+                print(String(data: data, encoding: .utf8)!)
+            } else {
+                print("Microphones:")
+                for mic in microphones {
+                    print("  [\(mic.index)] \(mic.name) - id: \(mic.id)")
+                }
+            }
+            return
+        }
+
         let sources = try await SourceLister.getAvailableSources()
 
         if json {

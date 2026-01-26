@@ -672,31 +672,35 @@ public class NativeCaptureLocator
             process.StartInfo = new ProcessStartInfo
             {
                 FileName = capturePath,
-                Arguments = "list --json",
+                Arguments = "list --json --microphones-only",  // Fast path - only enumerate microphones
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
 
+            var sw = System.Diagnostics.Stopwatch.StartNew();
             process.Start();
 
             // Read both stdout and stderr concurrently to avoid deadlock
             var outputTask = process.StandardOutput.ReadToEndAsync();
             var errorTask = process.StandardError.ReadToEndAsync();
 
-            // Wait for process with timeout (5 seconds)
-            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(5));
+            // Wait for process with timeout (15 seconds - needs to be generous as system may be under load)
+            using var cts = new CancellationTokenSource(TimeSpan.FromSeconds(15));
             try
             {
                 await process.WaitForExitAsync(cts.Token);
             }
             catch (OperationCanceledException)
             {
-                Console.WriteLine("NativeCaptureLocator: Microphone enumeration timed out");
+                sw.Stop();
+                Console.WriteLine($"NativeCaptureLocator: Microphone enumeration timed out after {sw.ElapsedMilliseconds}ms");
                 try { process.Kill(); } catch { }
                 return microphones;
             }
+            sw.Stop();
+            Console.WriteLine($"NativeCaptureLocator: Microphone enumeration completed in {sw.ElapsedMilliseconds}ms");
 
             var output = await outputTask;
             var error = await errorTask;
