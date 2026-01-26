@@ -201,12 +201,25 @@ public class AudioInputManager : IAsyncDisposable
     {
         if (_isMuted || sample.Length == 0) return;
 
-        // Log sample rate once per session for debugging
+        // Log sample rate and validate consistency once per session
         if (!_loggedSampleRate)
         {
             _loggedSampleRate = true;
             int sampleRateHz = AudioResampler.ToHz(samplingRate);
-            Console.WriteLine($"AudioInputManager: Raw sample rate: {sampleRateHz}Hz (enum: {samplingRate}), samples: {sample.Length}, duration: {durationMilliseconds}ms");
+            int expectedSamples = AudioPipelineDiagnostics.CalculateExpectedSamples(sampleRateHz, (int)durationMilliseconds);
+            int detectedRate = AudioPipelineDiagnostics.DetectSampleRateFromCount(sample.Length, (int)durationMilliseconds);
+
+            Console.WriteLine($"AudioInputManager: Raw sample rate: {sampleRateHz}Hz (enum: {samplingRate}), " +
+                            $"samples: {sample.Length} (expected: {expectedSamples}), " +
+                            $"duration: {durationMilliseconds}ms, " +
+                            $"detected rate: {detectedRate}Hz");
+
+            // Validate sample consistency and warn if mismatch detected
+            var mismatchError = AudioPipelineDiagnostics.ValidateSampleConsistency(samplingRate, durationMilliseconds, sample.Length);
+            if (mismatchError != null)
+            {
+                Console.WriteLine($"AudioInputManager: WARNING - {mismatchError}");
+            }
         }
 
         // Get user settings

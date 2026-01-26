@@ -467,11 +467,24 @@ public class AudioDeviceService : IAudioDeviceService
             // Get the input sample rate and resample to 48kHz if needed
             int inputRateHz = AudioResampler.ToHz(samplingRate);
 
-            // Log sample rate info once per session
+            // Log sample rate info and validate consistency once per session
             if (!_loggedSampleRate)
             {
                 _loggedSampleRate = true;
-                Console.WriteLine($"AudioDeviceService: Input sample rate: {inputRateHz}Hz, target: {AudioResampler.TargetSampleRate}Hz");
+                int expectedSamples = AudioPipelineDiagnostics.CalculateExpectedSamples(inputRateHz, (int)durationMilliseconds);
+                int detectedRate = AudioPipelineDiagnostics.DetectSampleRateFromCount(sample.Length, (int)durationMilliseconds);
+
+                Console.WriteLine($"AudioDeviceService: Input sample rate: {inputRateHz}Hz, " +
+                                $"samples: {sample.Length} (expected: {expectedSamples}), " +
+                                $"detected rate: {detectedRate}Hz, " +
+                                $"target: {AudioResampler.TargetSampleRate}Hz");
+
+                // Validate sample consistency and warn if mismatch detected
+                var mismatchError = AudioPipelineDiagnostics.ValidateSampleConsistency(samplingRate, durationMilliseconds, sample.Length);
+                if (mismatchError != null)
+                {
+                    Console.WriteLine($"AudioDeviceService: WARNING - {mismatchError}");
+                }
             }
 
             // Resample to 48kHz for the sink (which uses OPUS format)
