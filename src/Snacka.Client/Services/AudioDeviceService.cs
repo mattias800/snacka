@@ -7,16 +7,31 @@ using Snacka.Client.Services.WebRtc;
 
 namespace Snacka.Client.Services;
 
+/// <summary>
+/// Represents an audio device with ID and display name.
+/// </summary>
+public record AudioDeviceInfo(string Id, string Name);
+
 public interface IAudioDeviceService : IDisposable
 {
-    IReadOnlyList<string> GetInputDevices();
+    /// <summary>
+    /// Gets available input devices (microphones) using native enumeration.
+    /// </summary>
+    Task<IReadOnlyList<AudioDeviceInfo>> GetInputDevicesAsync();
+
+    /// <summary>
+    /// Gets available output devices (speakers) using SDL2.
+    /// </summary>
     IReadOnlyList<string> GetOutputDevices();
 
     bool IsTestingInput { get; }
     bool IsLoopbackEnabled { get; }
     float CurrentAgcGain { get; }
 
-    Task StartInputTestAsync(string? deviceName, Action<float> onRmsUpdate, Action<float>? onAgcUpdate = null);
+    /// <summary>
+    /// Starts microphone test. deviceId should be the native device index (e.g., "0", "1").
+    /// </summary>
+    Task StartInputTestAsync(string? deviceId, Action<float> onRmsUpdate, Action<float>? onAgcUpdate = null);
     void SetLoopbackEnabled(bool enabled, string? outputDevice);
     Task StopTestAsync();
 }
@@ -82,24 +97,31 @@ public class AudioDeviceService : IAudioDeviceService
         EnsureSdl2Initialized();
     }
 
-    public IReadOnlyList<string> GetInputDevices()
+    public async Task<IReadOnlyList<AudioDeviceInfo>> GetInputDevicesAsync()
     {
         try
         {
-            EnsureSdl2Initialized();
-            Console.WriteLine("AudioDeviceService: Getting input devices...");
-            var devices = SDL2Helper.GetAudioRecordingDevices();
+            Console.WriteLine("AudioDeviceService: Getting input devices via native enumeration...");
+
+            // Use native tool for microphone enumeration
+            var microphones = await _nativeCaptureLocator.GetAvailableMicrophonesAsync();
+
+            var devices = microphones
+                .Select(m => new AudioDeviceInfo(m.Index.ToString(), m.Name))
+                .ToList();
+
             Console.WriteLine($"AudioDeviceService: Found {devices.Count} input devices");
             foreach (var device in devices)
             {
-                Console.WriteLine($"  - Input device: {device}");
+                Console.WriteLine($"  - Input device [{device.Id}]: {device.Name}");
             }
+
             return devices;
         }
         catch (Exception ex)
         {
             Console.WriteLine($"AudioDeviceService: Failed to get input devices - {ex.GetType().Name}: {ex.Message}");
-            return Array.Empty<string>();
+            return Array.Empty<AudioDeviceInfo>();
         }
     }
 
@@ -275,10 +297,8 @@ public class AudioDeviceService : IAudioDeviceService
                     // AGC gain is managed internally, but we can track speaking state
                 };
 
-                // Native capture uses device index, not SDL2 device names
-                // For now, always use default device (index 0) with native capture
-                // TODO: Add proper device enumeration via native tool to support device selection
-                var micId = "0";
+                // Use device ID (index) directly - deviceName is now the native device index
+                var micId = string.IsNullOrEmpty(deviceName) ? "0" : deviceName;
 
                 // Get noise suppression setting
                 var noiseSuppression = _settingsStore?.Settings.NoiseSuppression ?? true;

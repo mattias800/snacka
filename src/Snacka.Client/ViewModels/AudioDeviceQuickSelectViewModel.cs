@@ -105,7 +105,7 @@ public class AudioDeviceQuickSelectViewModel : ReactiveObject, IDisposable
         }
     }
 
-    public string SelectedInputDeviceDisplay => _settingsStore.Settings.AudioInputDevice ?? "Default";
+    public string SelectedInputDeviceDisplay => SelectedInputDeviceItem?.DisplayName ?? "Default";
     public string SelectedOutputDeviceDisplay => _settingsStore.Settings.AudioOutputDevice ?? "Default";
 
     public bool HasNoInputDevice => string.IsNullOrEmpty(_settingsStore.Settings.AudioInputDevice);
@@ -164,6 +164,11 @@ public class AudioDeviceQuickSelectViewModel : ReactiveObject, IDisposable
     /// </summary>
     public void RefreshDevices()
     {
+        _ = RefreshDevicesAsync();
+    }
+
+    private async Task RefreshDevicesAsync()
+    {
         _isRefreshingDevices = true;
         try
         {
@@ -174,12 +179,14 @@ public class AudioDeviceQuickSelectViewModel : ReactiveObject, IDisposable
             InputDevices.Add(new AudioDeviceItem(null, "Default"));
             OutputDevices.Add(new AudioDeviceItem(null, "Default"));
 
-            // Add available devices
-            foreach (var device in _audioDeviceService.GetInputDevices())
+            // Get input devices via native enumeration (async)
+            var inputDevices = await _audioDeviceService.GetInputDevicesAsync();
+            foreach (var device in inputDevices)
             {
-                InputDevices.Add(new AudioDeviceItem(device, device));
+                InputDevices.Add(new AudioDeviceItem(device.Id, device.Name));
             }
 
+            // Get output devices via SDL2
             foreach (var device in _audioDeviceService.GetOutputDevices())
             {
                 OutputDevices.Add(new AudioDeviceItem(device, device));

@@ -242,13 +242,11 @@ public class AudioSettingsViewModel : ViewModelBase
 
         try
         {
-            // Run device enumeration on background thread to avoid blocking UI
-            var (inputDevices, outputDevices) = await Task.Run(() =>
-            {
-                var inputs = _audioDeviceService.GetInputDevices();
-                var outputs = _audioDeviceService.GetOutputDevices();
-                return (inputs, outputs);
-            });
+            // Get input devices via native enumeration (async)
+            var inputDevices = await _audioDeviceService.GetInputDevicesAsync();
+
+            // Get output devices via SDL2 (sync, but run on background thread)
+            var outputDevices = await Task.Run(() => _audioDeviceService.GetOutputDevices());
 
             // Update collections on UI thread
             InputDevices.Clear();
@@ -258,12 +256,13 @@ public class AudioSettingsViewModel : ViewModelBase
             InputDevices.Add(new AudioDeviceItem(null, "System default"));
             OutputDevices.Add(new AudioDeviceItem(null, "System default"));
 
-            // Add available devices
+            // Add available input devices (ID is device index, DisplayName is device name)
             foreach (var device in inputDevices)
             {
-                InputDevices.Add(new AudioDeviceItem(device, device));
+                InputDevices.Add(new AudioDeviceItem(device.Id, device.Name));
             }
 
+            // Add available output devices
             foreach (var device in outputDevices)
             {
                 OutputDevices.Add(new AudioDeviceItem(device, device));
