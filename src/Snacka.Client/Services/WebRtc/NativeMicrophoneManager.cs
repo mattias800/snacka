@@ -280,9 +280,9 @@ public class NativeMicrophoneManager : IAsyncDisposable
                 }
 
                 packetCount++;
-                if (packetCount <= 5 || packetCount % 100 == 0)
+                if (packetCount <= 5 || packetCount % 500 == 0)
                 {
-                    Console.WriteLine($"NativeMicrophoneManager: Audio packet {packetCount} ({header.SampleCount} samples)");
+                    Console.WriteLine($"NativeMicrophoneManager: Audio packet {packetCount} ({header.SampleCount} samples @ {header.SampleRate}Hz)");
                 }
 
                 // Process audio (AGC, gate, encode)
@@ -301,26 +301,28 @@ public class NativeMicrophoneManager : IAsyncDisposable
 
     private McapHeader? ParseMcapHeader(byte[] buffer)
     {
-        // Read magic (big-endian)
+        // Read magic (big-endian - this is the only big-endian field)
         uint magic = (uint)(buffer[0] << 24 | buffer[1] << 16 | buffer[2] << 8 | buffer[3]);
         if (magic != McapMagic)
         {
             return null;
         }
 
+        // All other multi-byte fields are little-endian (native byte order from Swift/C++)
         return new McapHeader
         {
             Version = buffer[4],
             BitsPerSample = buffer[5],
             Channels = buffer[6],
             IsFloat = buffer[7],
-            SampleCount = (uint)(buffer[8] << 24 | buffer[9] << 16 | buffer[10] << 8 | buffer[11]),
-            SampleRate = (uint)(buffer[12] << 24 | buffer[13] << 16 | buffer[14] << 8 | buffer[15]),
+            // Little-endian: least significant byte first
+            SampleCount = (uint)(buffer[8] | buffer[9] << 8 | buffer[10] << 16 | buffer[11] << 24),
+            SampleRate = (uint)(buffer[12] | buffer[13] << 8 | buffer[14] << 16 | buffer[15] << 24),
             Timestamp = (ulong)(
-                (ulong)buffer[16] << 56 | (ulong)buffer[17] << 48 |
-                (ulong)buffer[18] << 40 | (ulong)buffer[19] << 32 |
-                (ulong)buffer[20] << 24 | (ulong)buffer[21] << 16 |
-                (ulong)buffer[22] << 8 | buffer[23])
+                (ulong)buffer[16] | (ulong)buffer[17] << 8 |
+                (ulong)buffer[18] << 16 | (ulong)buffer[19] << 24 |
+                (ulong)buffer[20] << 32 | (ulong)buffer[21] << 40 |
+                (ulong)buffer[22] << 48 | (ulong)buffer[23] << 56)
         };
     }
 
