@@ -235,6 +235,9 @@ jobs:
         with:
           dotnet-version: ${{ env.DOTNET_VERSION }}
 
+      - name: Install Velopack CLI
+        run: dotnet tool install -g vpk
+
       - name: Install dependencies
         run: |
           sudo apt-get update
@@ -293,22 +296,24 @@ jobs:
           name: Snacka-Linux-x64-portable
           path: publish/
 
-      - name: Create AppImage
+      - name: Create Velopack release
         if: needs.version.outputs.is_release == 'true' || github.event.inputs.create_release == 'true'
         run: |
-          chmod +x installers/linux/*.sh installers/linux/AppRun
           mkdir -p output
-          ./installers/linux/create-appimage.sh \
-            ./publish \
-            ./output \
-            ${{ needs.version.outputs.version }}
+          vpk pack \
+            --packId Snacka \
+            --packVersion ${{ needs.version.outputs.version }} \
+            --packDir publish \
+            --mainExe Snacka.Client \
+            --icon installers/linux/snacka.png \
+            --outputDir output
 
-      - name: Upload AppImage
+      - name: Upload Velopack releases
         if: needs.version.outputs.is_release == 'true' || github.event.inputs.create_release == 'true'
         uses: actions/upload-artifact@v4
         with:
-          name: Snacka-Linux-x64-AppImage
-          path: output/*.AppImage
+          name: Snacka-Linux-x64-velopack
+          path: output/
 
   # ============================================
   # Create GitHub Release
@@ -339,8 +344,10 @@ jobs:
             cp artifacts/Snacka-Windows-x64-velopack/* release-assets/ 2>/dev/null || true
           fi
 
-          # Linux AppImage
-          cp artifacts/Snacka-Linux-x64-AppImage/*.AppImage release-assets/ 2>/dev/null || true
+          # Linux Velopack releases (includes AppImage and update files)
+          if [ -d "artifacts/Snacka-Linux-x64-velopack" ]; then
+            cp artifacts/Snacka-Linux-x64-velopack/* release-assets/ 2>/dev/null || true
+          fi
 
           # Create portable ZIPs
           cd artifacts
@@ -369,11 +376,13 @@ jobs:
           |----------|-----------|----------|
           | **Windows** | [Installer](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-Setup.exe) (auto-updates) | [Portable ZIP](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-Windows-x64-portable.zip) |
           | **macOS** | [DMG](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS.dmg) | [App Bundle](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-macOS-app.zip) |
-          | **Linux** | [AppImage](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-x86_64.AppImage) | [Portable tar.gz](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-Linux-x64-portable.tar.gz) |
+          | **Linux** | [AppImage](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-x86_64.AppImage) (auto-updates) | [Portable tar.gz](../../releases/download/v${{ needs.version.outputs.version }}/Snacka-${{ needs.version.outputs.version }}-Linux-x64-portable.tar.gz) |
 
-          ### Auto-Updates (Windows)
+          ### Auto-Updates (Windows & Linux)
 
-          The Windows installer includes automatic updates. When a new version is available, you'll see a notification in the app. Click "Download" to download the update in the background, then "Restart Now" to apply it.
+          The Windows installer and Linux AppImage include automatic updates. When a new version is available, you'll see a notification in the app. Click "Download" to download the update in the background, then "Restart Now" to apply it.
+
+          On Linux, if the AppImage is in a system folder, you may be prompted for your password to apply the update.
 
           ### Requirements
 
