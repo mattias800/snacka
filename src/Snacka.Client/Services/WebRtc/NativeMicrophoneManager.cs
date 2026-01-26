@@ -69,6 +69,13 @@ public class NativeMicrophoneManager : IAsyncDisposable
     /// </summary>
     public event Action<uint, byte[]>? OnEncodedSample;
 
+    /// <summary>
+    /// Fired when raw PCM audio is available (after AGC/gate processing, before encoding).
+    /// Parameters: samples (16-bit stereo), normalizedRms (0-1)
+    /// Used by settings test for level meter and loopback.
+    /// </summary>
+    public event Action<short[], float>? OnRawSample;
+
     public NativeMicrophoneManager(NativeCaptureLocator locator, ISettingsStore? settingsStore)
     {
         _locator = locator;
@@ -406,6 +413,9 @@ public class NativeMicrophoneManager : IAsyncDisposable
                 SpeakingChanged?.Invoke(true);
             }
         }
+
+        // Fire raw sample event (for settings test level meter and loopback)
+        OnRawSample?.Invoke(samples, (float)normalizedRms);
 
         // Encode to Opus and fire event
         if (_audioEncoder != null && _audioFormat.HasValue)

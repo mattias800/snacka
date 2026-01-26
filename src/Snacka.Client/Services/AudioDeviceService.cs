@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using SIPSorcery.Media;
 using SIPSorceryMedia.SDL2;
 using SIPSorceryMedia.Abstractions;
+using Snacka.Client.Services.WebRtc;
 
 namespace Snacka.Client.Services;
 
@@ -44,6 +45,13 @@ public class AudioDeviceService : IAudioDeviceService
     }
 
     private readonly ISettingsStore? _settingsStore;
+    private readonly NativeCaptureLocator _nativeCaptureLocator = new();
+
+    // Native capture (preferred)
+    private NativeMicrophoneManager? _nativeMicManager;
+    private bool _useNativeCapture;
+
+    // SDL2 fallback
     private SDL2AudioSource? _testAudioSource;
     private SDL2AudioEndPoint? _testAudioSink;
     private AudioFormat? _selectedFormat; // Track the selected format for source/sink consistency
@@ -64,7 +72,7 @@ public class AudioDeviceService : IAudioDeviceService
     private const float AgcSilenceThreshold = 200f;
     private const float BaselineInputBoost = 1.5f;    // 1.5x baseline (reduced from 4x)
 
-    public bool IsTestingInput => _testAudioSource != null;
+    public bool IsTestingInput => _testAudioSource != null || _nativeMicManager != null;
     public float CurrentAgcGain => _testAgcGain;
     public bool IsLoopbackEnabled => _isLoopbackEnabled;
 
@@ -249,8 +257,53 @@ public class AudioDeviceService : IAudioDeviceService
         _onAgcUpdate = onAgcUpdate;
         _testCts = new CancellationTokenSource();
 
+        // Try native capture first (same as voice channels)
+        if (_nativeCaptureLocator.IsNativeMicrophoneCaptureAvailable())
+        {
+            try
+            {
+                Console.WriteLine("AudioDeviceService: Attempting native microphone capture for test...");
+
+                _nativeMicManager = new NativeMicrophoneManager(_nativeCaptureLocator, _settingsStore);
+
+                // Subscribe to raw samples for RMS calculation and loopback
+                _nativeMicManager.OnRawSample += OnNativeRawSample;
+
+                // Subscribe to AGC updates via speaking state changes
+                _nativeMicManager.SpeakingChanged += (speaking) =>
+                {
+                    // AGC gain is managed internally, but we can track speaking state
+                };
+
+                // Use device index 0 if no specific device selected
+                var micId = string.IsNullOrEmpty(deviceName) ? "0" : deviceName;
+
+                // Get noise suppression setting
+                var noiseSuppression = _settingsStore?.Settings.NoiseSuppression ?? true;
+
+                if (await _nativeMicManager.StartAsync(micId, noiseSuppression))
+                {
+                    _useNativeCapture = true;
+                    Console.WriteLine($"AudioDeviceService: Started native input test on device: {deviceName ?? "(default)"}");
+                    return;
+                }
+                else
+                {
+                    Console.WriteLine("AudioDeviceService: Native capture failed, falling back to SDL2");
+                    await CleanupNativeCapture();
+                }
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"AudioDeviceService: Native capture error: {ex.Message}, falling back to SDL2");
+                await CleanupNativeCapture();
+            }
+        }
+
+        // Fall back to SDL2
         try
         {
+            Console.WriteLine("AudioDeviceService: Using SDL2 microphone capture for test");
             EnsureSdl2Initialized();
 
             var audioEncoder = new AudioEncoder(includeOpus: true);
@@ -280,7 +333,8 @@ public class AudioDeviceService : IAudioDeviceService
             }
 
             await _testAudioSource.StartAudio();
-            Console.WriteLine($"AudioDeviceService: Started input test on device: {deviceName ?? "(default)"}");
+            _useNativeCapture = false;
+            Console.WriteLine($"AudioDeviceService: Started SDL2 input test on device: {deviceName ?? "(default)"}");
         }
         catch (Exception ex)
         {
@@ -290,22 +344,68 @@ public class AudioDeviceService : IAudioDeviceService
         }
     }
 
+    private async Task CleanupNativeCapture()
+    {
+        if (_nativeMicManager != null)
+        {
+            _nativeMicManager.OnRawSample -= OnNativeRawSample;
+            await _nativeMicManager.DisposeAsync();
+            _nativeMicManager = null;
+        }
+        _useNativeCapture = false;
+    }
+
+    private void OnNativeRawSample(short[] samples, float normalizedRms)
+    {
+        // Update level meter
+        _onRmsUpdate?.Invoke(normalizedRms);
+
+        // Handle loopback if enabled
+        if (_isLoopbackEnabled && _testAudioSink != null)
+        {
+            byte[] pcmBytes = new byte[samples.Length * 2];
+            Buffer.BlockCopy(samples, 0, pcmBytes, 0, pcmBytes.Length);
+            _testAudioSink.GotAudioSample(pcmBytes);
+        }
+    }
+
     public void SetLoopbackEnabled(bool enabled, string? outputDevice)
     {
         _isLoopbackEnabled = enabled;
 
-        if (enabled && _testAudioSource != null)
+        // Loopback works with both native and SDL2 capture
+        var isCapturing = _useNativeCapture ? _nativeMicManager != null : _testAudioSource != null;
+
+        if (enabled && isCapturing)
         {
             try
             {
                 if (_testAudioSink == null)
                 {
+                    EnsureSdl2Initialized();
                     var audioEncoder = new AudioEncoder(includeOpus: true);
                     _testAudioSink = new SDL2AudioEndPoint(outputDevice ?? string.Empty, audioEncoder);
 
-                    // Use the same format as the source to ensure sample rates match
-                    // CRITICAL: Must set format BEFORE starting sink to prevent pitch issues
-                    if (_selectedFormat.HasValue)
+                    // For native capture, always use OPUS 48kHz format (native outputs 48kHz stereo)
+                    // For SDL2 capture, use the same format as the source
+                    if (_useNativeCapture)
+                    {
+                        var formats = audioEncoder.SupportedFormats;
+                        var opusFormat = formats.FirstOrDefault(f => f.FormatName == "OPUS");
+                        if (!string.IsNullOrEmpty(opusFormat.FormatName))
+                        {
+                            // Create stereo format for native capture output
+                            var stereoFormat = new AudioFormat(
+                                opusFormat.Codec,
+                                opusFormat.FormatID,
+                                opusFormat.ClockRate,
+                                2, // stereo
+                                opusFormat.Parameters);
+                            _testAudioSink.SetAudioSinkFormat(stereoFormat);
+                            Console.WriteLine($"AudioDeviceService: Loopback sink using format: {stereoFormat.FormatName} ({stereoFormat.ClockRate}Hz stereo)");
+                        }
+                    }
+                    else if (_selectedFormat.HasValue)
                     {
                         _testAudioSink.SetAudioSinkFormat(_selectedFormat.Value);
                         Console.WriteLine($"AudioDeviceService: Loopback sink using format: {_selectedFormat.Value.FormatName} ({_selectedFormat.Value.ClockRate}Hz)");
@@ -355,6 +455,10 @@ public class AudioDeviceService : IAudioDeviceService
         _testCts?.Dispose();
         _testCts = null;
 
+        // Stop native capture if used
+        await CleanupNativeCapture();
+
+        // Stop SDL2 capture if used
         if (_testAudioSource != null)
         {
             try
