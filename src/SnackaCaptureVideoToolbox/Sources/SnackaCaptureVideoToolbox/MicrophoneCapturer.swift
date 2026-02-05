@@ -33,10 +33,14 @@ class MicrophoneCapturer: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate
     private var rnnoiseStateLeft: OpaquePointer?
     private var rnnoiseStateRight: OpaquePointer?
 
-    // RNNoise requires exactly 480 samples per frame (10ms at 48kHz)
-    private let rnnoiseFrameSize = 480
+    // Frame size: 480 samples per frame (10ms at 48kHz)
+    // Used for both RNNoise processing and consistent output framing
+    private let frameSize = 480
     private var leftBuffer: [Float] = []
     private var rightBuffer: [Float] = []
+
+    // Buffer for non-RNNoise output (still need consistent frame sizes for MCAP)
+    private var outputBuffer: Data = Data()
 
     // Continuation for keeping the process alive
     private var runContinuation: CheckedContinuation<Void, Never>?
@@ -176,11 +180,14 @@ class MicrophoneCapturer: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate
 
         guard !normalizedData.isEmpty else { return }
 
-        // Apply RNNoise noise suppression if enabled
+        // Apply RNNoise noise suppression if enabled, otherwise just buffer for consistent frame sizes
+        // Both paths output complete 480-sample frames for MCAP consistency
         if noiseSuppressionEnabled {
             normalizedData = processWithRNNoise(normalizedData)
-            guard !normalizedData.isEmpty else { return }
+        } else {
+            normalizedData = bufferToFrames(normalizedData)
         }
+        guard !normalizedData.isEmpty else { return }
 
         // Output is always 48kHz 16-bit stereo = 4 bytes per frame
         let outputFrameCount = UInt32(normalizedData.count / 4)
@@ -208,6 +215,28 @@ class MicrophoneCapturer: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate
         }
     }
 
+    /// Buffer audio into consistent 480-sample frames (10ms at 48kHz)
+    /// This ensures MCAP packet sizes are predictable even without RNNoise
+    private func bufferToFrames(_ data: Data) -> Data {
+        // Add new data to output buffer
+        outputBuffer.append(data)
+
+        // Calculate bytes per frame: 480 samples * 2 channels * 2 bytes = 1920 bytes
+        let bytesPerFrame = frameSize * 4
+
+        // Only output complete frames
+        let completeFrames = outputBuffer.count / bytesPerFrame
+        guard completeFrames > 0 else { return Data() }
+
+        let outputBytes = completeFrames * bytesPerFrame
+        let result = outputBuffer.prefix(outputBytes)
+
+        // Keep remainder for next call
+        outputBuffer = Data(outputBuffer.suffix(from: outputBytes))
+
+        return Data(result)
+    }
+
     /// Process audio through RNNoise for noise suppression
     /// RNNoise requires 480-sample frames (10ms at 48kHz)
     private func processWithRNNoise(_ data: Data) -> Data {
@@ -230,14 +259,14 @@ class MicrophoneCapturer: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate
         // Process complete 480-sample frames
         var outputData = Data()
 
-        while leftBuffer.count >= rnnoiseFrameSize && rightBuffer.count >= rnnoiseFrameSize {
+        while leftBuffer.count >= frameSize && rightBuffer.count >= frameSize {
             // Extract frames for processing
-            var leftFrame = Array(leftBuffer.prefix(rnnoiseFrameSize))
-            var rightFrame = Array(rightBuffer.prefix(rnnoiseFrameSize))
+            var leftFrame = Array(leftBuffer.prefix(frameSize))
+            var rightFrame = Array(rightBuffer.prefix(frameSize))
 
             // Process through RNNoise
-            var processedLeft = [Float](repeating: 0, count: rnnoiseFrameSize)
-            var processedRight = [Float](repeating: 0, count: rnnoiseFrameSize)
+            var processedLeft = [Float](repeating: 0, count: frameSize)
+            var processedRight = [Float](repeating: 0, count: frameSize)
 
             leftFrame.withUnsafeMutableBufferPointer { inPtr in
                 processedLeft.withUnsafeMutableBufferPointer { outPtr in
@@ -252,7 +281,7 @@ class MicrophoneCapturer: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate
             }
 
             // Convert back to Int16 stereo and append to output
-            for i in 0..<rnnoiseFrameSize {
+            for i in 0..<frameSize {
                 let leftSample = Int16(clamping: Int(processedLeft[i]))
                 let rightSample = Int16(clamping: Int(processedRight[i]))
 
@@ -261,8 +290,8 @@ class MicrophoneCapturer: NSObject, AVCaptureAudioDataOutputSampleBufferDelegate
             }
 
             // Remove processed samples from buffers
-            leftBuffer.removeFirst(rnnoiseFrameSize)
-            rightBuffer.removeFirst(rnnoiseFrameSize)
+            leftBuffer.removeFirst(frameSize)
+            rightBuffer.removeFirst(frameSize)
         }
 
         return outputData

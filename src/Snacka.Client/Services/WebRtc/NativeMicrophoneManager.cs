@@ -1,6 +1,7 @@
 using System.Diagnostics;
 using SIPSorcery.Media;
 using SIPSorceryMedia.Abstractions;
+using Snacka.Client.Services.Audio;
 
 namespace Snacka.Client.Services.WebRtc;
 
@@ -25,23 +26,19 @@ public class NativeMicrophoneManager : IAsyncDisposable
     private DateTime _lastAudioActivity = DateTime.MinValue;
     private Timer? _speakingTimer;
 
-    // MCAP header size (24 bytes)
-    private const int McapHeaderSize = 24;
-    private const uint McapMagic = 0x4D434150; // "MCAP" in big-endian
+    // Audio processor for AEC (noise suppression handled by native capture)
+    private IAudioProcessor? _audioProcessor;
+    private short[]? _processorOutputBuffer;
+
+    // Use centralized MCAP parser
+    private const int McapHeaderSize = McapParser.HeaderSize;
 
     // Voice activity detection constants
     private const int SpeakingTimeoutMs = 200;
     private const int SpeakingCheckIntervalMs = 50;
 
     // Automatic Gain Control (AGC) for consistent microphone levels
-    private float _agcGain = 1.0f;
-    private const float AgcTargetRms = 3000f;
-    private const float AgcMinGain = 1.0f;
-    private const float AgcMaxGain = 8.0f;
-    private const float AgcAttackCoeff = 0.1f;
-    private const float AgcReleaseCoeff = 0.005f;
-    private const float AgcSilenceThreshold = 200f;
-    private const float BaselineInputBoost = 1.5f;
+    private readonly AudioGainProcessor _gainProcessor = new();
 
     /// <summary>
     /// Gets whether the user is currently speaking (voice activity detected).
@@ -83,11 +80,23 @@ public class NativeMicrophoneManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sets the audio processor for AEC.
+    /// Note: Noise suppression is handled by native capture (RNNoise), so only AEC is used from this processor.
+    /// </summary>
+    public void SetAudioProcessor(IAudioProcessor? processor)
+    {
+        _audioProcessor = processor;
+        _processorOutputBuffer = null;
+        Console.WriteLine($"NativeMicrophoneManager: Audio processor {(processor != null ? "set" : "cleared")}");
+    }
+
+    /// <summary>
     /// Starts native microphone capture with the specified device.
     /// </summary>
     /// <param name="microphoneId">Device ID or index to capture from</param>
     /// <param name="noiseSuppression">Whether to enable AI-powered noise suppression (default: true)</param>
-    public async Task<bool> StartAsync(string microphoneId, bool noiseSuppression = true)
+    /// <param name="echoCancellation">Whether to enable acoustic echo cancellation (default: true)</param>
+    public async Task<bool> StartAsync(string microphoneId, bool noiseSuppression = true, bool echoCancellation = true)
     {
         if (_isRunning)
         {
@@ -102,7 +111,7 @@ public class NativeMicrophoneManager : IAsyncDisposable
             return false;
         }
 
-        var args = _locator.GetNativeMicrophoneCaptureArgs(microphoneId, noiseSuppression);
+        var args = _locator.GetNativeMicrophoneCaptureArgs(microphoneId, noiseSuppression, echoCancellation);
 
         Console.WriteLine($"NativeMicrophoneManager: Starting native capture: {capturePath} {args}");
 
@@ -263,7 +272,7 @@ public class NativeMicrophoneManager : IAsyncDisposable
                 }
 
                 // Parse header
-                var header = ParseMcapHeader(headerBuffer);
+                var header = McapParser.ParseHeader(headerBuffer);
                 if (header == null)
                 {
                     // Log message or other non-MCAP data received - scan for next MCAP magic
@@ -274,7 +283,7 @@ public class NativeMicrophoneManager : IAsyncDisposable
                     }
 
                     // Scan the buffer for the MCAP magic bytes to resync
-                    int syncOffset = ScanForMcapMagic(headerBuffer, 1);
+                    int syncOffset = McapParser.ScanForMagic(headerBuffer, 1);
                     if (syncOffset > 0)
                     {
                         // Found magic bytes - shift buffer and read remaining bytes
@@ -291,17 +300,17 @@ public class NativeMicrophoneManager : IAsyncDisposable
                         }
 
                         // Try parsing again
-                        header = ParseMcapHeader(headerBuffer);
+                        header = McapParser.ParseHeader(headerBuffer);
                     }
 
                     if (header == null)
                     {
                         // Still no valid header - read byte by byte until we find magic
-                        if (!await ScanForMcapMagicAsync(stderr, headerBuffer, ct))
+                        if (!await McapParser.ScanForMagicAsync(stderr, headerBuffer, ct))
                         {
                             return; // EOF
                         }
-                        header = ParseMcapHeader(headerBuffer);
+                        header = McapParser.ParseHeader(headerBuffer);
                         if (header == null) continue; // Still invalid, try again
                     }
                 }
@@ -343,104 +352,6 @@ public class NativeMicrophoneManager : IAsyncDisposable
         }
     }
 
-    private McapHeader? ParseMcapHeader(byte[] buffer)
-    {
-        // Read magic (big-endian - this is the only big-endian field)
-        uint magic = (uint)(buffer[0] << 24 | buffer[1] << 16 | buffer[2] << 8 | buffer[3]);
-        if (magic != McapMagic)
-        {
-            return null;
-        }
-
-        // All other multi-byte fields are little-endian (native byte order from Swift/C++)
-        return new McapHeader
-        {
-            Version = buffer[4],
-            BitsPerSample = buffer[5],
-            Channels = buffer[6],
-            IsFloat = buffer[7],
-            // Little-endian: least significant byte first
-            SampleCount = (uint)(buffer[8] | buffer[9] << 8 | buffer[10] << 16 | buffer[11] << 24),
-            SampleRate = (uint)(buffer[12] | buffer[13] << 8 | buffer[14] << 16 | buffer[15] << 24),
-            Timestamp = (ulong)(
-                (ulong)buffer[16] | (ulong)buffer[17] << 8 |
-                (ulong)buffer[18] << 16 | (ulong)buffer[19] << 24 |
-                (ulong)buffer[20] << 32 | (ulong)buffer[21] << 40 |
-                (ulong)buffer[22] << 48 | (ulong)buffer[23] << 56)
-        };
-    }
-
-    /// <summary>
-    /// Scans a buffer for the MCAP magic bytes starting at the given offset.
-    /// Returns the offset where magic was found, or -1 if not found.
-    /// </summary>
-    private static int ScanForMcapMagic(byte[] buffer, int startOffset)
-    {
-        // MCAP magic is 0x4D434150 in big-endian = bytes 'M' 'C' 'A' 'P'
-        for (int i = startOffset; i <= buffer.Length - 4; i++)
-        {
-            if (buffer[i] == 0x4D && buffer[i + 1] == 0x43 &&
-                buffer[i + 2] == 0x41 && buffer[i + 3] == 0x50)
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    /// <summary>
-    /// Scans the stream byte-by-byte until MCAP magic is found.
-    /// Fills the header buffer with the complete header once magic is found.
-    /// Returns false on EOF.
-    /// </summary>
-    private async Task<bool> ScanForMcapMagicAsync(Stream stream, byte[] headerBuffer, CancellationToken ct)
-    {
-        // Read one byte at a time looking for 'M' 'C' 'A' 'P'
-        var singleByte = new byte[1];
-        int matchIndex = 0;
-        byte[] magicBytes = { 0x4D, 0x43, 0x41, 0x50 }; // "MCAP"
-
-        while (!ct.IsCancellationRequested)
-        {
-            int bytesRead = await stream.ReadAsync(singleByte.AsMemory(0, 1), ct);
-            if (bytesRead == 0) return false; // EOF
-
-            if (singleByte[0] == magicBytes[matchIndex])
-            {
-                headerBuffer[matchIndex] = singleByte[0];
-                matchIndex++;
-
-                if (matchIndex == 4)
-                {
-                    // Found magic! Now read the rest of the header
-                    int remaining = McapHeaderSize - 4;
-                    int read = 4;
-                    while (read < McapHeaderSize && !ct.IsCancellationRequested)
-                    {
-                        bytesRead = await stream.ReadAsync(
-                            headerBuffer.AsMemory(read, McapHeaderSize - read), ct);
-                        if (bytesRead == 0) return false;
-                        read += bytesRead;
-                    }
-                    return true;
-                }
-            }
-            else
-            {
-                // Reset match
-                matchIndex = 0;
-                // Check if current byte starts a new match
-                if (singleByte[0] == magicBytes[0])
-                {
-                    headerBuffer[0] = singleByte[0];
-                    matchIndex = 1;
-                }
-            }
-        }
-
-        return false;
-    }
-
     private void ProcessAudioPacket(byte[] audioData, uint sampleCount)
     {
         if (_isMuted || sampleCount == 0) return;
@@ -449,70 +360,38 @@ public class NativeMicrophoneManager : IAsyncDisposable
         var samples = new short[sampleCount * 2]; // Stereo
         Buffer.BlockCopy(audioData, 0, samples, 0, audioData.Length);
 
+        // Process through WebRTC APM for AEC and/or noise suppression if available
+        // Note: Native capture already has RNNoise, but we also process through WebRTC APM for consistency
+        if (_audioProcessor != null && (_audioProcessor.IsAecActive || _audioProcessor.IsNoiseSuppressionEnabled))
+        {
+            if (_processorOutputBuffer == null || _processorOutputBuffer.Length < samples.Length)
+            {
+                _processorOutputBuffer = new short[samples.Length];
+            }
+
+            // Native capture is 48kHz stereo
+            int processedCount = _audioProcessor.ProcessCaptureAudio(
+                samples.AsSpan(),
+                _processorOutputBuffer.AsSpan(),
+                48000,
+                2); // stereo
+
+            if (processedCount > 0)
+            {
+                _processorOutputBuffer.AsSpan(0, processedCount).CopyTo(samples.AsSpan());
+            }
+        }
+
         // Get user settings
         var manualGain = _settingsStore?.Settings.InputGain ?? 1.0f;
         var gateEnabled = _settingsStore?.Settings.GateEnabled ?? true;
         var gateThreshold = _settingsStore?.Settings.GateThreshold ?? 0.02f;
 
-        // Calculate input RMS
-        double sumOfSquares = 0;
-        for (int i = 0; i < samples.Length; i++)
-        {
-            sumOfSquares += (double)samples[i] * samples[i];
-        }
-        float inputRms = (float)Math.Sqrt(sumOfSquares / samples.Length);
-
-        // Update AGC gain
-        if (inputRms > AgcSilenceThreshold)
-        {
-            float desiredGain = AgcTargetRms / inputRms;
-            desiredGain = Math.Clamp(desiredGain, AgcMinGain, AgcMaxGain);
-
-            if (desiredGain < _agcGain)
-            {
-                _agcGain += (desiredGain - _agcGain) * AgcAttackCoeff;
-            }
-            else
-            {
-                _agcGain += (desiredGain - _agcGain) * AgcReleaseCoeff;
-            }
-        }
-
-        // Calculate total gain
-        float totalGain = BaselineInputBoost * _agcGain * manualGain;
-
-        // Apply gain to samples
-        for (int i = 0; i < samples.Length; i++)
-        {
-            float gainedSample = samples[i] * totalGain;
-            // Soft clipping
-            if (gainedSample > 30000f)
-                gainedSample = 30000f + (gainedSample - 30000f) * 0.1f;
-            else if (gainedSample < -30000f)
-                gainedSample = -30000f + (gainedSample + 30000f) * 0.1f;
-            samples[i] = (short)Math.Clamp(gainedSample, short.MinValue, short.MaxValue);
-        }
-
-        // Calculate output RMS for VAD
-        sumOfSquares = 0;
-        for (int i = 0; i < samples.Length; i++)
-        {
-            sumOfSquares += (double)samples[i] * samples[i];
-        }
-        double outputRms = Math.Sqrt(sumOfSquares / samples.Length);
-        double normalizedRms = Math.Min(1.0, outputRms / 10000.0);
-
-        // Apply gate
-        var effectiveThreshold = gateEnabled ? gateThreshold : 0.0;
-        var isAboveGate = normalizedRms > effectiveThreshold;
-
-        if (gateEnabled && !isAboveGate)
-        {
-            Array.Clear(samples, 0, samples.Length);
-        }
+        // Process audio through AGC and gate
+        var result = _gainProcessor.Process(samples, manualGain, gateEnabled, gateThreshold);
 
         // Update speaking state
-        if (isAboveGate)
+        if (result.IsAboveGate)
         {
             _lastAudioActivity = DateTime.UtcNow;
             if (!_isSpeaking)
@@ -523,7 +402,7 @@ public class NativeMicrophoneManager : IAsyncDisposable
         }
 
         // Fire raw sample event (for settings test level meter and loopback)
-        OnRawSample?.Invoke(samples, (float)normalizedRms);
+        OnRawSample?.Invoke(samples, result.NormalizedRms);
 
         // Encode to Opus and fire event
         if (_audioEncoder != null && _audioFormat.HasValue)
@@ -553,16 +432,5 @@ public class NativeMicrophoneManager : IAsyncDisposable
     public async ValueTask DisposeAsync()
     {
         await StopAsync();
-    }
-
-    private class McapHeader
-    {
-        public byte Version { get; set; }
-        public byte BitsPerSample { get; set; }
-        public byte Channels { get; set; }
-        public byte IsFloat { get; set; }
-        public uint SampleCount { get; set; }
-        public uint SampleRate { get; set; }
-        public ulong Timestamp { get; set; }
     }
 }
