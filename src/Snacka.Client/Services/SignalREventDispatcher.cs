@@ -102,6 +102,10 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
         // Subscribe to gaming station events
         _signalR.GamingStationStatusChanged += OnGamingStationStatusChanged;
 
+        // Subscribe to port forwarding events
+        _signalR.PortShared += OnPortShared;
+        _signalR.PortShareStopped += OnPortShareStopped;
+
         // Subscribe to typing events
         _signalR.UserTyping += OnUserTyping;
     }
@@ -317,6 +321,20 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
 
     #endregion
 
+    #region Port Forwarding Events
+
+    private void OnPortShared(PortSharedEvent e)
+    {
+        _voiceStore?.AddSharedPort(new SharedPortInfo(e.TunnelId, e.OwnerId, e.OwnerUsername, e.Port, e.Label, DateTime.UtcNow));
+    }
+
+    private void OnPortShareStopped(PortShareStoppedEvent e)
+    {
+        _voiceStore?.RemoveSharedPort(e.TunnelId);
+    }
+
+    #endregion
+
     public void Dispose()
     {
         // Unsubscribe from all events
@@ -350,6 +368,9 @@ public sealed class SignalREventDispatcher : ISignalREventDispatcher
         _signalR.DisconnectedFromVoice -= OnDisconnectedFromVoice;
 
         _signalR.GamingStationStatusChanged -= OnGamingStationStatusChanged;
+
+        _signalR.PortShared -= OnPortShared;
+        _signalR.PortShareStopped -= OnPortShareStopped;
 
         _signalR.UserTyping -= OnUserTyping;
 

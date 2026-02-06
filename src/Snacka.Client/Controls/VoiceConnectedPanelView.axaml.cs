@@ -46,6 +46,12 @@ public partial class VoiceConnectedPanelView : UserControl
     public static readonly StyledProperty<ICommand?> ShowVoiceVideoOverlayCommandProperty =
         AvaloniaProperty.Register<VoiceConnectedPanelView, ICommand?>(nameof(ShowVoiceVideoOverlayCommand));
 
+    public static readonly StyledProperty<ICommand?> SharePortCommandProperty =
+        AvaloniaProperty.Register<VoiceConnectedPanelView, ICommand?>(nameof(SharePortCommand));
+
+    public static readonly StyledProperty<bool> HasActivePortSharesProperty =
+        AvaloniaProperty.Register<VoiceConnectedPanelView, bool>(nameof(HasActivePortShares));
+
     public static readonly StyledProperty<bool> IsVoiceInDifferentCommunityProperty =
         AvaloniaProperty.Register<VoiceConnectedPanelView, bool>(nameof(IsVoiceInDifferentCommunity));
 
@@ -127,6 +133,18 @@ public partial class VoiceConnectedPanelView : UserControl
     {
         get => GetValue(ShowVoiceVideoOverlayCommandProperty);
         set => SetValue(ShowVoiceVideoOverlayCommandProperty, value);
+    }
+
+    public ICommand? SharePortCommand
+    {
+        get => GetValue(SharePortCommandProperty);
+        set => SetValue(SharePortCommandProperty, value);
+    }
+
+    public bool HasActivePortShares
+    {
+        get => GetValue(HasActivePortSharesProperty);
+        set => SetValue(HasActivePortSharesProperty, value);
     }
 
     public bool IsVoiceInDifferentCommunity

@@ -198,6 +198,16 @@ public interface ISignalRService : IAsyncDisposable
     // Gaming Station input events (fired on the gaming station when receiving input)
     event Action<StationKeyboardInputEvent>? StationKeyboardInputReceived;
     event Action<StationMouseInputEvent>? StationMouseInputReceived;
+
+    // Port forwarding methods
+    Task<SharedPortInfo?> SharePortAsync(int port, string? label);
+    Task StopSharingPortAsync(string tunnelId);
+    Task<IEnumerable<SharedPortInfo>> GetSharedPortsAsync(Guid channelId);
+    Task<TunnelAccessResponse?> RequestTunnelAccessAsync(string tunnelId);
+
+    // Port forwarding events
+    event Action<PortSharedEvent>? PortShared;
+    event Action<PortShareStoppedEvent>? PortShareStopped;
 }
 
 // Typing indicator event DTOs
@@ -223,6 +233,13 @@ public record StationCommandStopScreenShareEvent();
 public record StationCommandDisableEvent();
 public record StationKeyboardInputEvent(Guid FromUserId, StationKeyboardInput Input);
 public record StationMouseInputEvent(Guid FromUserId, StationMouseInput Input);
+
+// Port forwarding DTOs
+public record SharePortRequest(int Port, string? Label);
+public record SharedPortInfo(string TunnelId, Guid OwnerId, string OwnerUsername, int Port, string? Label, DateTime SharedAt);
+public record PortSharedEvent(Guid ChannelId, string TunnelId, Guid OwnerId, string OwnerUsername, int Port, string? Label);
+public record PortShareStoppedEvent(Guid ChannelId, string TunnelId, Guid OwnerId);
+public record TunnelAccessResponse(string Url);
 
 /// <summary>
 /// Custom retry policy that notifies when a retry is scheduled.
@@ -780,6 +797,57 @@ public class SignalRService : ISignalRService
         await _hubConnection.InvokeAsync("SendStationMouseInput", channelId, input);
     }
 
+    // Port forwarding methods
+    public async Task<SharedPortInfo?> SharePortAsync(int port, string? label)
+    {
+        if (_hubConnection is null || !IsConnected) return null;
+        try
+        {
+            var result = await _hubConnection.InvokeAsync<SharedPortInfo?>("SharePort", new SharePortRequest(port, label));
+            Console.WriteLine($"SignalR: SharedPort {port} as tunnel {result?.TunnelId}");
+            return result;
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SignalR: SharePort failed: {ex.Message}");
+            return null;
+        }
+    }
+
+    public async Task StopSharingPortAsync(string tunnelId)
+    {
+        if (_hubConnection is null || !IsConnected) return;
+        await _hubConnection.InvokeAsync("StopSharingPort", tunnelId);
+        Console.WriteLine($"SignalR: StoppedSharingPort {tunnelId}");
+    }
+
+    public async Task<IEnumerable<SharedPortInfo>> GetSharedPortsAsync(Guid channelId)
+    {
+        if (_hubConnection is null || !IsConnected) return Enumerable.Empty<SharedPortInfo>();
+        try
+        {
+            return await _hubConnection.InvokeAsync<IEnumerable<SharedPortInfo>>("GetSharedPorts", channelId);
+        }
+        catch
+        {
+            return Enumerable.Empty<SharedPortInfo>();
+        }
+    }
+
+    public async Task<TunnelAccessResponse?> RequestTunnelAccessAsync(string tunnelId)
+    {
+        if (_hubConnection is null || !IsConnected) return null;
+        try
+        {
+            return await _hubConnection.InvokeAsync<TunnelAccessResponse?>("RequestTunnelAccess", tunnelId);
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"SignalR: RequestTunnelAccess failed: {ex.Message}");
+            return null;
+        }
+    }
+
     // Gaming Station events
     public event Action<GamingStationStatusChangedEvent>? GamingStationStatusChanged;
     public event Action<StationCommandJoinChannelEvent>? StationCommandJoinChannel;
@@ -789,6 +857,10 @@ public class SignalRService : ISignalRService
     public event Action<StationCommandDisableEvent>? StationCommandDisable;
     public event Action<StationKeyboardInputEvent>? StationKeyboardInputReceived;
     public event Action<StationMouseInputEvent>? StationMouseInputReceived;
+
+    // Port forwarding events
+    public event Action<PortSharedEvent>? PortShared;
+    public event Action<PortShareStoppedEvent>? PortShareStopped;
 
     /// <summary>
     /// Registers all SignalR event handlers. Split into logical domain methods for maintainability.
@@ -1310,6 +1382,19 @@ public class SignalRService : ISignalRService
         _hubConnection.On<StationMouseInputEvent>("StationMouseInput", e =>
         {
             StationMouseInputReceived?.Invoke(e);
+        });
+
+        // Port forwarding events
+        _hubConnection!.On<PortSharedEvent>("PortShared", e =>
+        {
+            Console.WriteLine($"SignalR: PortShared - {e.OwnerUsername} shared port {e.Port} as tunnel {e.TunnelId}");
+            PortShared?.Invoke(e);
+        });
+
+        _hubConnection.On<PortShareStoppedEvent>("PortShareStopped", e =>
+        {
+            Console.WriteLine($"SignalR: PortShareStopped - tunnel {e.TunnelId}");
+            PortShareStopped?.Invoke(e);
         });
     }
 

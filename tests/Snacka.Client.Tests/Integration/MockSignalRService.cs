@@ -116,6 +116,10 @@ public class MockSignalRService : ISignalRService
     public event Action<ControllerStateReceivedEvent>? ControllerStateReceived;
     public event Action<ControllerRumbleReceivedEvent>? ControllerRumbleReceived;
 
+    // Port forwarding events
+    public event Action<PortSharedEvent>? PortShared;
+    public event Action<PortShareStoppedEvent>? PortShareStopped;
+
     // Gaming station events
     public event Action<GamingStationStatusChangedEvent>? GamingStationStatusChanged;
     public event Action<StationCommandJoinChannelEvent>? StationCommandJoinChannel;
@@ -245,6 +249,15 @@ public class MockSignalRService : ISignalRService
     public Task CommandStationDisableAsync(string targetMachineId) => Task.CompletedTask;
     public Task SendStationKeyboardInputAsync(Guid channelId, StationKeyboardInput input) => Task.CompletedTask;
     public Task SendStationMouseInputAsync(Guid channelId, StationMouseInput input) => Task.CompletedTask;
+
+    // Port forwarding methods
+    public Task<SharedPortInfo?> SharePortAsync(int port, string? label) =>
+        Task.FromResult<SharedPortInfo?>(new SharedPortInfo("test-tunnel", Guid.Empty, "test", port, label, DateTime.UtcNow));
+    public Task StopSharingPortAsync(string tunnelId) => Task.CompletedTask;
+    public Task<IEnumerable<SharedPortInfo>> GetSharedPortsAsync(Guid channelId) =>
+        Task.FromResult<IEnumerable<SharedPortInfo>>(Array.Empty<SharedPortInfo>());
+    public Task<TunnelAccessResponse?> RequestTunnelAccessAsync(string tunnelId) =>
+        Task.FromResult<TunnelAccessResponse?>(new TunnelAccessResponse("http://localhost/tunnel/test"));
 
     public ValueTask DisposeAsync() => ValueTask.CompletedTask;
 

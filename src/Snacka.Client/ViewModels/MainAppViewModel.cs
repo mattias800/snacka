@@ -34,6 +34,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     private readonly IVoiceCoordinator _voiceCoordinator;
     private readonly IMessageCoordinator _messageCoordinator;
     private readonly IGamingStationCommandHandler _gamingStationCommandHandler;
+    private readonly IPortForwardCoordinator _portForwardCoordinator;
+    private readonly ITunnelClientService _tunnelClient;
+    private readonly IPortDetectionService _portDetection;
     private readonly AuthResponse _auth;
     private readonly Action _onLogout;
     private readonly Action? _onSwitchServer;
@@ -160,7 +163,11 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     // Audio device quick selector (extracted ViewModel)
     private AudioDeviceQuickSelectViewModel? _audioDeviceQuickSelect;
 
-    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, IConversationStateService conversationStateService, StoreContainer stores, ISignalREventDispatcher signalREventDispatcher, IChannelCoordinator channelCoordinator, ICommunityCoordinator communityCoordinator, IVoiceCoordinator voiceCoordinator, IMessageCoordinator messageCoordinator, IGamingStationCommandHandler gamingStationCommandHandler, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false)
+    // Port sharing picker (flyout for sharing local dev ports)
+    private SharePortPickerViewModel? _sharePortPicker;
+    private bool _isSharePortPickerOpen;
+
+    public MainAppViewModel(IApiClient apiClient, ISignalRService signalR, IWebRtcService webRtc, IScreenCaptureService screenCaptureService, ISettingsStore settingsStore, IAudioDeviceService audioDeviceService, IControllerStreamingService controllerStreamingService, IControllerHostService controllerHostService, string baseUrl, AuthResponse auth, IConversationStateService conversationStateService, StoreContainer stores, ISignalREventDispatcher signalREventDispatcher, IChannelCoordinator channelCoordinator, ICommunityCoordinator communityCoordinator, IVoiceCoordinator voiceCoordinator, IMessageCoordinator messageCoordinator, IGamingStationCommandHandler gamingStationCommandHandler, Action onLogout, Action? onSwitchServer = null, Action? onOpenSettings = null, bool gifsEnabled = false, IPortForwardCoordinator? portForwardCoordinator = null, ITunnelClientService? tunnelClient = null, IPortDetectionService? portDetection = null)
     {
         #region Field Assignments
         _apiClient = apiClient;
@@ -185,6 +192,10 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _voiceCoordinator = voiceCoordinator;
         _messageCoordinator = messageCoordinator;
         _gamingStationCommandHandler = gamingStationCommandHandler;
+        _portForwardCoordinator = portForwardCoordinator ?? new PortForwardCoordinator(signalR, new TunnelClientService(), stores.VoiceStore);
+        _tunnelClient = tunnelClient ?? new TunnelClientService();
+        _portDetection = portDetection ?? new PortDetectionService();
+        _tunnelClient.TunnelsChanged += () => this.RaisePropertyChanged(nameof(HasActivePortShares));
         _currentMachineId = GetOrCreateMachineId();
         #endregion
 
@@ -203,7 +214,8 @@ public class MainAppViewModel : ViewModelBase, IDisposable
             _stores.VoiceStore,
             _stores.ChannelStore,
             _signalR,
-            auth.UserId);
+            auth.UserId,
+            _portForwardCoordinator);
         _voiceChannelContent.ParticipantLeft += (channelId, userId) =>
         {
             // Close fullscreen if viewing this user's stream
@@ -654,6 +666,9 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         {
             IsVoiceVideoOverlayOpen = false;
         });
+
+        // Port sharing command - toggles the share port picker flyout
+        SharePortCommand = ReactiveCommand.Create(ToggleSharePortPicker);
 
         // Admin voice commands
         ServerMuteUserCommand = ReactiveCommand.CreateFromTask<VoiceParticipantViewModel>(ServerMuteUserAsync);
@@ -1562,6 +1577,23 @@ public class MainAppViewModel : ViewModelBase, IDisposable
     public ReactiveCommand<Unit, Unit> ShowVoiceVideoOverlayCommand { get; }
     public ReactiveCommand<Unit, Unit> HideVoiceVideoOverlayCommand { get; }
 
+    // Port sharing commands
+    public ReactiveCommand<Unit, Unit> SharePortCommand { get; }
+
+    public SharePortPickerViewModel? SharePortPicker
+    {
+        get => _sharePortPicker;
+        private set => this.RaiseAndSetIfChanged(ref _sharePortPicker, value);
+    }
+
+    public bool IsSharePortPickerOpen
+    {
+        get => _isSharePortPickerOpen;
+        set => this.RaiseAndSetIfChanged(ref _isSharePortPickerOpen, value);
+    }
+
+    public bool HasActivePortShares => _tunnelClient.GetActiveTunnels().Count > 0;
+
     // Gaming station commands
     public ReactiveCommand<Unit, Unit> DisableGamingStationCommand { get; }
 
@@ -1715,6 +1747,16 @@ public class MainAppViewModel : ViewModelBase, IDisposable
                 await _voiceControl.ApplyPersistedStateAsync(channel.Id);
             }
 
+            // Load existing shared ports for the channel
+            try
+            {
+                await _portForwardCoordinator.LoadSharedPortsForChannelAsync(channel.Id);
+            }
+            catch (Exception ex)
+            {
+                Console.WriteLine($"MainApp: Failed to load shared ports: {ex.Message}");
+            }
+
             // VoiceChannelContentViewModel now updates reactively from VoiceStore
         }
         else
@@ -1732,11 +1774,53 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         // Stop screen sharing first (this closes the annotation overlay)
         _screenShare?.ForceStop();
 
+        // Stop all active port shares before leaving
+        try
+        {
+            await _portForwardCoordinator.StopAllSharesAsync();
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"MainApp: Failed to stop port shares: {ex.Message}");
+        }
+
+        // Close the port share picker if open
+        IsSharePortPickerOpen = false;
+        SharePortPicker = null;
+
         // Delegate to coordinator (handles SignalR, store, and WebRTC)
         await _voiceCoordinator.LeaveVoiceChannelAsync(stopScreenShare: true);
 
         // Clear all voice-related UI state
         ClearVoiceUiState();
+    }
+
+    private void ToggleSharePortPicker()
+    {
+        if (IsSharePortPickerOpen)
+        {
+            IsSharePortPickerOpen = false;
+            SharePortPicker = null;
+            return;
+        }
+
+        var picker = new SharePortPickerViewModel(
+            _portForwardCoordinator,
+            _portDetection,
+            _tunnelClient,
+            _stores.VoiceStore);
+
+        picker.CloseRequested += () =>
+        {
+            IsSharePortPickerOpen = false;
+            SharePortPicker = null;
+        };
+
+        SharePortPicker = picker;
+        IsSharePortPickerOpen = true;
+
+        // Start scanning for ports
+        _ = picker.InitializeAsync();
     }
 
     /// <summary>
@@ -1931,6 +2015,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
         _threadPanel?.Dispose();
         _voiceChannelManager?.Dispose();
         _typingSubscription?.Dispose();
+        (_tunnelClient as IDisposable)?.Dispose();
         _storeSubscriptions.Dispose();
         _ = _signalR.DisposeAsync();
     }

@@ -117,6 +117,27 @@
                         <ui:SymbolIcon Symbol="Edit" Foreground="White" FontSize="16"/>
                     </ToggleButton>
                 </Panel>
+                <!-- Share Port Button - only show when connected, green when sharing -->
+                <Panel IsVisible="{Binding IsVoiceConnected, RelativeSource={RelativeSource AncestorType=controls:VoiceConnectedPanelView}}">
+                    <Button Command="{Binding SharePortCommand, RelativeSource={RelativeSource AncestorType=controls:VoiceConnectedPanelView}}"
+                            Padding="8"
+                            CornerRadius="4"
+                            Cursor="Hand"
+                            Background="#3ba55c"
+                            ToolTip.Tip="Manage shared ports"
+                            IsVisible="{Binding HasActivePortShares, RelativeSource={RelativeSource AncestorType=controls:VoiceConnectedPanelView}}">
+                        <ui:SymbolIcon Symbol="Globe" Foreground="White" FontSize="16"/>
+                    </Button>
+                    <Button Command="{Binding SharePortCommand, RelativeSource={RelativeSource AncestorType=controls:VoiceConnectedPanelView}}"
+                            Padding="8"
+                            CornerRadius="4"
+                            Cursor="Hand"
+                            Background="Transparent"
+                            ToolTip.Tip="Share a local port"
+                            IsVisible="{Binding !HasActivePortShares, RelativeSource={RelativeSource AncestorType=controls:VoiceConnectedPanelView}}">
+                        <ui:SymbolIcon Symbol="Globe" Foreground="White" FontSize="16"/>
+                    </Button>
+                </Panel>
                 <!-- Show Video Grid Button - only show when connected -->
                 <Button Command="{Binding ShowVoiceVideoOverlayCommand, RelativeSource={RelativeSource AncestorType=controls:VoiceConnectedPanelView}}"
                         Padding="8"

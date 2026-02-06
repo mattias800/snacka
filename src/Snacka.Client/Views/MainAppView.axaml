@@ -244,6 +244,8 @@
                                                   ToggleScreenShareCommand="{Binding ToggleScreenShareCommand}"
                                                   LeaveVoiceChannelCommand="{Binding LeaveVoiceChannelCommand}"
                                                   ShowVoiceVideoOverlayCommand="{Binding ShowVoiceVideoOverlayCommand}"
+                                                  SharePortCommand="{Binding SharePortCommand}"
+                                                  HasActivePortShares="{Binding HasActivePortShares}"
                                                   IsVoiceInDifferentCommunity="{Binding IsVoiceInDifferentCommunity}"
                                                   VoiceCommunityName="{Binding VoiceCommunityName}"/>
 
@@ -966,6 +968,14 @@
                Placement="Center"
                PlacementTarget="{Binding $parent[Grid]}">
             <controls:MessageSearchContent x:Name="MessageSearchContent"/>
+        </Popup>
+
+        <!-- Share Port Picker Popup -->
+        <Popup IsOpen="{Binding IsSharePortPickerOpen, Mode=TwoWay}"
+               IsLightDismissEnabled="True"
+               Placement="Center"
+               PlacementTarget="{Binding $parent[Grid]}">
+            <views:SharePortPickerView DataContext="{Binding SharePortPicker}"/>
         </Popup>
 
         <!-- Image Lightbox Overlay -->

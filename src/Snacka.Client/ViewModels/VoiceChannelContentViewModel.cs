@@ -1,12 +1,14 @@
 using System.Collections.ObjectModel;
 using System.Reactive.Disposables;
 using System.Reactive.Linq;
+using System.Windows.Input;
 using Avalonia.Threading;
+using ReactiveUI;
+using Snacka.Client.Coordinators;
 using Snacka.Client.Services;
 using Snacka.Client.Services.HardwareVideo;
 using Snacka.Client.Stores;
 using Snacka.Shared.Models;
-using ReactiveUI;
 
 namespace Snacka.Client.ViewModels;
 
@@ -20,9 +22,11 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
     private readonly IWebRtcService _webRtc;
     private readonly IVoiceStore _voiceStore;
     private readonly IChannelStore _channelStore;
+    private readonly IPortForwardCoordinator? _portForwardCoordinator;
     private readonly Guid _localUserId;
     private Guid? _currentChannelId;
     private ObservableCollection<VideoStreamViewModel> _videoStreams = new();
+    private IReadOnlyList<SharedPortState> _sharedPorts = Array.Empty<SharedPortState>();
     private readonly Dictionary<Guid, ParticipantInfo> _participants = new();
     private readonly CompositeDisposable _subscriptions = new();
 
@@ -51,13 +55,21 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         IVoiceStore voiceStore,
         IChannelStore channelStore,
         ISignalRService signalR,
-        Guid localUserId)
+        Guid localUserId,
+        IPortForwardCoordinator? portForwardCoordinator = null)
     {
         _webRtc = webRtc;
         _voiceStore = voiceStore;
         _channelStore = channelStore;
         _signalR = signalR;
         _localUserId = localUserId;
+        _portForwardCoordinator = portForwardCoordinator;
+
+        OpenSharedPortCommand = ReactiveCommand.CreateFromTask<string>(async tunnelId =>
+        {
+            if (_portForwardCoordinator is not null)
+                await _portForwardCoordinator.OpenSharedPortInBrowserAsync(tunnelId);
+        });
 
         // Subscribe to video frames from WebRTC
         _webRtc.VideoFrameReceived += OnVideoFrameReceived;
@@ -98,6 +110,17 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         _voiceStore.CurrentChannelParticipants
             .ObserveOn(RxApp.MainThreadScheduler)
             .Subscribe(participants => SyncParticipants(participants))
+            .DisposeWith(_subscriptions);
+
+        // Subscribe to shared ports changes
+        _voiceStore.SharedPorts
+            .ObserveOn(RxApp.MainThreadScheduler)
+            .Subscribe(ports =>
+            {
+                _sharedPorts = ports;
+                this.RaisePropertyChanged(nameof(SharedPorts));
+                this.RaisePropertyChanged(nameof(HasSharedPorts));
+            })
             .DisposeWith(_subscriptions);
     }
 
@@ -311,6 +334,21 @@ public class VoiceChannelContentViewModel : ReactiveObject, IDisposable
         get => _videoStreams;
         set => this.RaiseAndSetIfChanged(ref _videoStreams, value);
     }
+
+    /// <summary>
+    /// Shared ports in the current voice channel.
+    /// </summary>
+    public IReadOnlyList<SharedPortState> SharedPorts => _sharedPorts;
+
+    /// <summary>
+    /// Whether there are any shared ports in the channel.
+    /// </summary>
+    public bool HasSharedPorts => _sharedPorts.Count > 0;
+
+    /// <summary>
+    /// Command to open a shared port in the browser.
+    /// </summary>
+    public ICommand OpenSharedPortCommand { get; }
 
     // Note: SetParticipants, AddParticipant, RemoveParticipant, UpdateParticipantState, UpdateSpeakingState
     // are no longer needed - VoiceStore subscriptions handle all participant state changes reactively.

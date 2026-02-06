@@ -121,6 +121,28 @@ public interface IVoiceStore : IStore<VoiceParticipantState, Guid>
     void SetVoiceOnOtherDevice(Guid? channelId, string? channelName);
     void ClearChannel(Guid channelId);
     void Clear();
+
+    // Port forwarding state
+    IObservable<IReadOnlyList<SharedPortState>> SharedPorts { get; }
+    void AddSharedPort(SharedPortInfo port);
+    void RemoveSharedPort(string tunnelId);
+    void SetSharedPorts(IEnumerable<SharedPortInfo> ports);
+    void ClearSharedPorts();
+}
+
+/// <summary>
+/// Immutable state representing a shared port in the current voice channel.
+/// </summary>
+public record SharedPortState(
+    string TunnelId,
+    Guid OwnerId,
+    string OwnerUsername,
+    int Port,
+    string? Label,
+    DateTime SharedAt
+)
+{
+    public string DisplayName => Label is not null ? $"{Label} ({Port})" : $"Port {Port}";
 }
 
 public sealed class VoiceStore : IVoiceStore, IDisposable
@@ -134,6 +156,7 @@ public sealed class VoiceStore : IVoiceStore, IDisposable
     private readonly BehaviorSubject<bool> _isScreenSharing;
     private readonly BehaviorSubject<bool> _isSpeaking;
     private readonly BehaviorSubject<(Guid? ChannelId, string? ChannelName)> _voiceOnOtherDevice;
+    private readonly BehaviorSubject<IReadOnlyList<SharedPortState>> _sharedPorts;
     private readonly IDisposable _cleanUp;
 
     public VoiceStore()
@@ -147,6 +170,7 @@ public sealed class VoiceStore : IVoiceStore, IDisposable
         _isScreenSharing = new BehaviorSubject<bool>(false);
         _isSpeaking = new BehaviorSubject<bool>(false);
         _voiceOnOtherDevice = new BehaviorSubject<(Guid?, string?)>((null, null));
+        _sharedPorts = new BehaviorSubject<IReadOnlyList<SharedPortState>>(Array.Empty<SharedPortState>());
 
         _cleanUp = _participantCache.Connect().Subscribe();
     }
@@ -184,6 +208,8 @@ public sealed class VoiceStore : IVoiceStore, IDisposable
     public IObservable<bool> IsScreenSharing => _isScreenSharing.AsObservable();
     public IObservable<bool> IsSpeaking => _isSpeaking.AsObservable();
     public IObservable<(Guid? ChannelId, string? ChannelName)> VoiceOnOtherDevice => _voiceOnOtherDevice.AsObservable();
+
+    public IObservable<IReadOnlyList<SharedPortState>> SharedPorts => _sharedPorts.AsObservable();
 
     public IReadOnlyList<VoiceParticipantState> GetParticipantsForChannel(Guid channelId)
     {
@@ -347,6 +373,34 @@ public sealed class VoiceStore : IVoiceStore, IDisposable
         });
     }
 
+    public void AddSharedPort(SharedPortInfo port)
+    {
+        var current = _sharedPorts.Value.ToList();
+        // Don't add duplicates
+        if (current.Any(p => p.TunnelId == port.TunnelId)) return;
+        current.Add(new SharedPortState(port.TunnelId, port.OwnerId, port.OwnerUsername, port.Port, port.Label, port.SharedAt));
+        _sharedPorts.OnNext(current.AsReadOnly());
+    }
+
+    public void RemoveSharedPort(string tunnelId)
+    {
+        var current = _sharedPorts.Value.ToList();
+        var removed = current.RemoveAll(p => p.TunnelId == tunnelId);
+        if (removed > 0)
+            _sharedPorts.OnNext(current.AsReadOnly());
+    }
+
+    public void SetSharedPorts(IEnumerable<SharedPortInfo> ports)
+    {
+        var list = ports.Select(p => new SharedPortState(p.TunnelId, p.OwnerId, p.OwnerUsername, p.Port, p.Label, p.SharedAt)).ToList();
+        _sharedPorts.OnNext(list.AsReadOnly());
+    }
+
+    public void ClearSharedPorts()
+    {
+        _sharedPorts.OnNext(Array.Empty<SharedPortState>());
+    }
+
     public void Clear()
     {
         _participantCache.Clear();
@@ -358,6 +412,7 @@ public sealed class VoiceStore : IVoiceStore, IDisposable
         _isScreenSharing.OnNext(false);
         _isSpeaking.OnNext(false);
         _voiceOnOtherDevice.OnNext((null, null));
+        _sharedPorts.OnNext(Array.Empty<SharedPortState>());
     }
 
     private static VoiceParticipantState MapToState(VoiceParticipantResponse response) =>
@@ -391,5 +446,6 @@ public sealed class VoiceStore : IVoiceStore, IDisposable
         _isScreenSharing.Dispose();
         _isSpeaking.Dispose();
         _voiceOnOtherDevice.Dispose();
+        _sharedPorts.Dispose();
     }
 }

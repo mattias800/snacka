@@ -8,6 +8,7 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
 using Snacka.Server.Data;
 using Snacka.Server.Hubs;
+using Snacka.Server.Middleware;
 using Snacka.Server.Services;
 using Snacka.Server.Services.Sfu;
 
@@ -156,6 +157,7 @@ builder.Services.AddAuthentication(options =>
             var path = context.HttpContext.Request.Path;
             if (!string.IsNullOrEmpty(accessToken) &&
                 (path.StartsWithSegments("/hubs") ||
+                 path.StartsWithSegments("/ws/tunnel") ||
                  path.StartsWithSegments("/api/attachments") ||
                  path.Value?.Contains("/avatar") == true))
             {
@@ -203,6 +205,9 @@ else
 
 // Add SFU service (Singleton to maintain WebRTC connections across requests)
 builder.Services.AddSingleton<ISfuService, SfuService>();
+
+// Add Tunnel service for port forwarding (Singleton to maintain tunnel state)
+builder.Services.AddSingleton<ITunnelService, TunnelService>();
 
 // Add TURN service for WebRTC NAT traversal
 builder.Services.Configure<TurnSettings>(builder.Configuration.GetSection(TurnSettings.SectionName));
@@ -449,6 +454,12 @@ app.Use(async (context, next) =>
 
     await next();
 });
+
+// Enable WebSocket support for tunnel data plane
+app.UseWebSockets();
+
+// Tunnel proxy must be before auth so it can handle its own cookie-based auth
+app.UseTunnelProxy();
 
 app.UseAuthentication();
 app.UseAuthorization();

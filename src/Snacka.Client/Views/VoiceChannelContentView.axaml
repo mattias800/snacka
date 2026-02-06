@@ -23,11 +23,55 @@
     <!-- Voice Channel Content - Grid of video streams (camera and screen share tiles) -->
     <Grid Background="#36393f">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
         </Grid.RowDefinitions>
 
+        <!-- Shared Ports Panel -->
+        <ItemsControl Grid.Row="0"
+                       ItemsSource="{Binding SharedPorts}"
+                       IsVisible="{Binding HasSharedPorts}"
+                       Margin="16,8,16,0">
+            <ItemsControl.ItemTemplate>
+                <DataTemplate>
+                    <Border Background="#2f3136"
+                            CornerRadius="4"
+                            Padding="12,8"
+                            Margin="0,4">
+                        <DockPanel>
+                            <Button Content="Open in Browser"
+                                    DockPanel.Dock="Right"
+                                    Command="{Binding $parent[ItemsControl].((vm:VoiceChannelContentViewModel)DataContext).OpenSharedPortCommand}"
+                                    CommandParameter="{Binding TunnelId}"
+                                    Background="#5865f2"
+                                    Foreground="White"
+                                    CornerRadius="4"
+                                    Padding="12,6"
+                                    Cursor="Hand"
+                                    VerticalAlignment="Center"
+                                    FontSize="12"/>
+                            <StackPanel Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <TextBlock Text="&#x1F310;"
+                                           FontSize="16"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding DisplayName}"
+                                           Foreground="#dcddde"
+                                           FontSize="14"
+                                           FontWeight="SemiBold"
+                                           VerticalAlignment="Center"/>
+                                <TextBlock Text="{Binding OwnerUsername}"
+                                           Foreground="#72767d"
+                                           FontSize="12"
+                                           VerticalAlignment="Center"/>
+                            </StackPanel>
+                        </DockPanel>
+                    </Border>
+                </DataTemplate>
+            </ItemsControl.ItemTemplate>
+        </ItemsControl>
+
         <!-- Video Streams Grid -->
-        <ScrollViewer HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
+        <ScrollViewer Grid.Row="1" HorizontalScrollBarVisibility="Disabled" VerticalScrollBarVisibility="Auto">
             <ItemsControl ItemsSource="{Binding VideoStreams}">
                 <ItemsControl.ItemsPanel>
                     <ItemsPanelTemplate>
@@ -168,7 +212,8 @@
         </ScrollViewer>
 
         <!-- Empty state when no video streams -->
-        <StackPanel VerticalAlignment="Center"
+        <StackPanel Grid.Row="1"
+                    VerticalAlignment="Center"
                     HorizontalAlignment="Center"
                     IsVisible="{Binding !VideoStreams.Count}">
             <TextBlock Text="🔊"

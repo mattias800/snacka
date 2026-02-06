@@ -18,6 +18,7 @@ public class SnackaHub : Hub
     private readonly SnackaDbContext _db;
     private readonly IVoiceService _voiceService;
     private readonly ISfuService _sfuService;
+    private readonly ITunnelService _tunnelService;
     private readonly IHubContext<SnackaHub> _hubContext;
     private readonly INotificationService _notificationService;
     private readonly IConversationService _conversationService;
@@ -50,6 +51,7 @@ public class SnackaHub : Hub
         SnackaDbContext db,
         IVoiceService voiceService,
         ISfuService sfuService,
+        ITunnelService tunnelService,
         IHubContext<SnackaHub> hubContext,
         INotificationService notificationService,
         IConversationService conversationService,
@@ -58,6 +60,7 @@ public class SnackaHub : Hub
         _db = db;
         _voiceService = voiceService;
         _sfuService = sfuService;
+        _tunnelService = tunnelService;
         _hubContext = hubContext;
         _notificationService = notificationService;
         _conversationService = conversationService;
@@ -220,6 +223,16 @@ public class SnackaHub : Hub
                     {
                         // Remove SFU session first (in-memory, won't fail)
                         _sfuService.RemoveSession(currentChannel.Value, userId.Value);
+
+                        // Remove all tunnels for this user and notify
+                        try
+                        {
+                            await CleanupUserTunnels(userId.Value);
+                        }
+                        catch (Exception ex)
+                        {
+                            _logger.LogWarning(ex, "Failed to cleanup tunnels during disconnect for user {UserId}", userId.Value);
+                        }
 
                         // Get the channel to find its community
                         Guid? communityId = null;
@@ -811,6 +824,9 @@ public class SnackaHub : Hub
 
         // Remove SFU session
         _sfuService.RemoveSession(channelId, userId.Value);
+
+        // Remove all tunnels for this user and notify
+        await CleanupUserTunnels(userId.Value);
 
         // Clear voice connection tracking
         lock (Lock)
@@ -2342,6 +2358,163 @@ public class SnackaHub : Hub
             await Clients.Client(stationConnectionId)
                 .SendAsync("ControllerInput", input);
         }
+    }
+
+    /// <summary>
+    /// Removes all tunnels for a user and notifies voice channel members.
+    /// </summary>
+    private async Task CleanupUserTunnels(Guid userId)
+    {
+        var removedTunnels = _tunnelService.RemoveAllTunnelsForUser(userId);
+        foreach (var tunnel in removedTunnels)
+        {
+            try
+            {
+                var channel = await _db.Channels.FirstOrDefaultAsync(c => c.Id == tunnel.ChannelId);
+                if (channel is not null)
+                {
+                    await _hubContext.Clients.Group($"community:{channel.CommunityId}")
+                        .SendAsync("PortShareStopped", new PortShareStoppedEvent(
+                            tunnel.ChannelId, tunnel.TunnelId, userId));
+                }
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to notify PortShareStopped for tunnel {TunnelId}", tunnel.TunnelId);
+            }
+        }
+    }
+
+    // ========================================================================
+    // Port Forwarding / Tunnel Methods
+    // ========================================================================
+
+    /// <summary>
+    /// Share a local port with voice channel members.
+    /// Creates a tunnel that other users can access through the server.
+    /// </summary>
+    public async Task<SharedPortInfo?> SharePort(SharePortRequest request)
+    {
+        var userId = GetUserId();
+        if (userId is null) return null;
+
+        if (request.Port < 1 || request.Port > 65535)
+            throw new HubException("Port must be between 1 and 65535");
+
+        // Verify user is in a voice channel
+        var currentChannelId = await _voiceService.GetUserCurrentChannelAsync(userId.Value);
+        if (currentChannelId is null)
+            throw new HubException("You must be in a voice channel to share a port");
+
+        var user = await _db.Users.FindAsync(userId.Value);
+        if (user is null) return null;
+
+        var channel = await _db.Channels.FirstOrDefaultAsync(c => c.Id == currentChannelId.Value);
+        if (channel is null) return null;
+
+        try
+        {
+            var tunnel = _tunnelService.CreateTunnel(userId.Value, user.Username, currentChannelId.Value, request.Port, request.Label);
+
+            var sharedPortInfo = new SharedPortInfo(
+                tunnel.TunnelId, tunnel.OwnerId, tunnel.OwnerUsername,
+                tunnel.LocalPort, tunnel.Label, tunnel.CreatedAt);
+
+            // Broadcast to voice channel members
+            await Clients.Group($"community:{channel.CommunityId}")
+                .SendAsync("PortShared", new PortSharedEvent(
+                    currentChannelId.Value, tunnel.TunnelId,
+                    userId.Value, user.Username,
+                    request.Port, request.Label));
+
+            _logger.LogInformation("User {Username} shared port {Port} in channel {ChannelId} as tunnel {TunnelId}",
+                user.Username, request.Port, currentChannelId.Value, tunnel.TunnelId);
+
+            return sharedPortInfo;
+        }
+        catch (InvalidOperationException ex)
+        {
+            throw new HubException(ex.Message);
+        }
+    }
+
+    /// <summary>
+    /// Stop sharing a port.
+    /// </summary>
+    public async Task StopSharingPort(string tunnelId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return;
+
+        var tunnel = _tunnelService.GetTunnel(tunnelId);
+        if (tunnel is null) return;
+
+        // Only the owner can stop sharing
+        if (tunnel.OwnerId != userId.Value)
+            throw new HubException("You can only stop your own port shares");
+
+        var channel = await _db.Channels.FirstOrDefaultAsync(c => c.Id == tunnel.ChannelId);
+
+        _tunnelService.RemoveTunnel(tunnelId);
+
+        // Broadcast to voice channel members
+        if (channel is not null)
+        {
+            await Clients.Group($"community:{channel.CommunityId}")
+                .SendAsync("PortShareStopped", new PortShareStoppedEvent(
+                    tunnel.ChannelId, tunnelId, userId.Value));
+        }
+
+        _logger.LogInformation("User {UserId} stopped sharing port tunnel {TunnelId}", userId.Value, tunnelId);
+    }
+
+    /// <summary>
+    /// Get all shared ports in a voice channel.
+    /// </summary>
+    public async Task<IEnumerable<SharedPortInfo>> GetSharedPorts(Guid channelId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return Enumerable.Empty<SharedPortInfo>();
+
+        // Verify user is in this voice channel
+        var currentChannel = await _voiceService.GetUserCurrentChannelAsync(userId.Value);
+        if (currentChannel != channelId)
+            return Enumerable.Empty<SharedPortInfo>();
+
+        var tunnels = _tunnelService.GetTunnelsForChannel(channelId);
+        return tunnels.Select(t => new SharedPortInfo(
+            t.TunnelId, t.OwnerId, t.OwnerUsername,
+            t.LocalPort, t.Label, t.CreatedAt));
+    }
+
+    /// <summary>
+    /// Request an access token to open a shared port in the browser.
+    /// Returns a URL with an embedded short-lived access token.
+    /// </summary>
+    public async Task<TunnelAccessResponse?> RequestTunnelAccess(string tunnelId)
+    {
+        var userId = GetUserId();
+        if (userId is null) return null;
+
+        var tunnel = _tunnelService.GetTunnel(tunnelId);
+        if (tunnel is null)
+            throw new HubException("Tunnel not found");
+
+        // Verify user is in the same voice channel as the tunnel owner
+        var currentChannel = await _voiceService.GetUserCurrentChannelAsync(userId.Value);
+        if (currentChannel != tunnel.ChannelId)
+            throw new HubException("You must be in the same voice channel to access this tunnel");
+
+        var token = _tunnelService.GenerateAccessToken(tunnelId, userId.Value);
+
+        // Build the URL using the current request's scheme and host
+        var httpContext = Context.GetHttpContext();
+        var scheme = httpContext?.Request.Scheme ?? "https";
+        var host = httpContext?.Request.Host.ToString() ?? "localhost";
+
+        var url = $"{scheme}://{host}/tunnel/{tunnelId}/?_tunnel_token={Uri.EscapeDataString(token)}";
+
+        return new TunnelAccessResponse(url);
     }
 
     private Guid? GetUserId()
