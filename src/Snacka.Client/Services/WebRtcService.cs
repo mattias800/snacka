@@ -8,6 +8,7 @@ using SIPSorceryMedia.Abstractions;
 using SIPSorceryMedia.FFmpeg;
 using SIPSorceryMedia.Encoders;
 using Snacka.Shared.Models;
+using Snacka.Client.Services.Audio;
 using Snacka.Client.Services.HardwareVideo;
 using Snacka.Client.Services.WebRtc;
 
@@ -126,6 +127,9 @@ public class WebRtcService : IWebRtcService
     private readonly ISignalRService _signalR;
     private readonly ISettingsStore? _settingsStore;
 
+    // Audio processor for AEC and noise suppression
+    private readonly AudioProcessorService? _audioProcessorService;
+
     // Extracted managers for audio handling
     private readonly AudioInputManager _audioInputManager;
     private readonly AudioOutputManager _audioOutputManager;
@@ -228,6 +232,12 @@ public class WebRtcService : IWebRtcService
     {
         _signalR = signalR;
         _settingsStore = settingsStore;
+
+        // Initialize audio processor service (for AEC and noise suppression)
+        if (settingsStore != null)
+        {
+            _audioProcessorService = new AudioProcessorService(settingsStore);
+        }
 
         // Initialize audio managers
         _audioInputManager = new AudioInputManager(settingsStore);
@@ -423,11 +433,23 @@ public class WebRtcService : IWebRtcService
         _currentChannelId = channelId;
         Console.WriteLine($"WebRTC: Joining voice channel {channelId} (SFU mode)");
 
+        // Initialize audio processor for AEC and noise suppression
+        _audioProcessorService?.Initialize();
+
         // Initialize microphone capture
         await InitializeAudioSourceAsync();
 
+        // Wire audio processor to input manager
+        _audioInputManager.SetAudioProcessor(_audioProcessorService?.Processor);
+
         // Initialize audio mixer for receiving audio from server (with per-user volume control)
         await InitializeAudioMixerAsync();
+
+        // Wire audio processor to output manager for AEC reference
+        if (_audioOutputManager.AudioMixer is UserAudioMixer userMixer)
+        {
+            userMixer.SetAudioProcessor(_audioProcessorService?.Processor);
+        }
 
         // Prepare video decoders for existing participants
         foreach (var p in existingParticipants)
@@ -504,6 +526,16 @@ public class WebRtcService : IWebRtcService
         _cameraSharingUserIds.Clear();
         _cameraFrameAssembler.Reset();
         _screenFrameAssembler.Reset();
+
+        // Clear audio processor references before stopping managers
+        _audioInputManager.SetAudioProcessor(null);
+        if (_audioOutputManager.AudioMixer is UserAudioMixer userMixer)
+        {
+            userMixer.SetAudioProcessor(null);
+        }
+
+        // Reset audio processor (disposes current instance)
+        _audioProcessorService?.Reset();
 
         // Stop and dispose audio managers
         await _audioInputManager.StopAsync();

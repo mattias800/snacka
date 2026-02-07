@@ -2,6 +2,7 @@ using System.Collections.Concurrent;
 using SIPSorcery.Media;
 using SIPSorceryMedia.Abstractions;
 using SIPSorceryMedia.SDL2;
+using Snacka.Client.Services.Audio;
 
 namespace Snacka.Client.Services;
 
@@ -72,6 +73,10 @@ public class UserAudioMixer : IUserAudioMixer
 
     // Opus format for high-quality 48kHz audio
     private AudioFormat? _currentFormat;
+
+    // Audio processor for AEC reference (feeds playback audio to AEC)
+    private IAudioProcessor? _audioProcessor;
+    private int _aecFeedCount;
 
     public async Task StartAsync(string? outputDevice = null)
     {
@@ -203,6 +208,26 @@ public class UserAudioMixer : IUserAudioMixer
             volume *= GetUserVolume(userId.Value);
         }
 
+        // Feed audio to AEC processor if present (needs decoded PCM)
+        if (_audioProcessor != null && _currentFormat.HasValue)
+        {
+            // Always decode for AEC reference
+            var pcmSamples = DecodePayloadToPcm(payload, payloadType);
+            if (pcmSamples != null && pcmSamples.Length > 0)
+            {
+                _aecFeedCount++;
+                if (_aecFeedCount <= 5)
+                {
+                    Console.WriteLine($"UserAudioMixer: Feeding AEC #{_aecFeedCount}: {pcmSamples.Length} samples @ {_currentFormat.Value.ClockRate}Hz/{_currentFormat.Value.ChannelCount}ch");
+                }
+                _audioProcessor.FeedPlaybackAudio(pcmSamples, _currentFormat.Value.ClockRate, _currentFormat.Value.ChannelCount);
+            }
+            else if (_aecFeedCount <= 5)
+            {
+                Console.WriteLine($"UserAudioMixer: Failed to decode payload for AEC (PT={payloadType}, size={payload.Length})");
+            }
+        }
+
         // Fast path: if volume is 1.0, no processing needed
         if (Math.Abs(volume - 1.0f) < 0.001f)
         {
@@ -214,6 +239,46 @@ public class UserAudioMixer : IUserAudioMixer
         // Apply volume by decoding, scaling, and re-encoding
         var processedPayload = ApplyVolumeToPayload(payload, payloadType, volume);
         _audioOutput.GotAudioRtp(null!, ssrc, seqNum, timestamp, outputPayloadType, marker, processedPayload);
+    }
+
+    /// <summary>
+    /// Decodes audio payload to PCM samples without any volume adjustment.
+    /// Used for feeding audio to AEC processor.
+    /// </summary>
+    private short[]? DecodePayloadToPcm(byte[] payload, int payloadType)
+    {
+        bool isG711 = payloadType == 0 || payloadType == 8;
+
+        if (isG711)
+        {
+            // G.711: Decode to PCM
+            var samples = new short[payload.Length];
+            bool isMuLaw = payloadType == 0;
+            var decodeTable = isMuLaw ? MuLawDecodeTable : ALawDecodeTable;
+
+            for (int i = 0; i < payload.Length; i++)
+            {
+                samples[i] = decodeTable[payload[i]];
+            }
+            return samples;
+        }
+        else
+        {
+            // Opus: Use AudioEncoder to decode
+            if (!_currentFormat.HasValue)
+            {
+                return null;
+            }
+
+            try
+            {
+                return _audioEncoder.DecodeAudio(payload, _currentFormat.Value);
+            }
+            catch
+            {
+                return null;
+            }
+        }
     }
 
     private byte[] ApplyVolumeToPayload(byte[] payload, int payloadType, float volume)
@@ -302,6 +367,16 @@ public class UserAudioMixer : IUserAudioMixer
     }
 
     public float GetMasterVolume() => _masterVolume;
+
+    /// <summary>
+    /// Sets the audio processor for AEC reference.
+    /// Playback audio will be fed to this processor.
+    /// </summary>
+    public void SetAudioProcessor(IAudioProcessor? processor)
+    {
+        _audioProcessor = processor;
+        Console.WriteLine($"UserAudioMixer: Audio processor {(processor != null ? "set" : "cleared")}");
+    }
 
     public async Task StopAsync()
     {

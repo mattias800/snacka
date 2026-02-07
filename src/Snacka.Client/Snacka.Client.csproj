@@ -18,7 +18,7 @@
 
   <!-- Avalonia assets -->
   <ItemGroup>
-    <AvaloniaResource Include="Assets\**"/>
+    <AvaloniaResource Include="Assets\**" />
   </ItemGroup>
 
   <ItemGroup>
@@ -46,6 +46,7 @@
     <PackageReference Include="Silk.NET.OpenGL" Version="2.22.0" />
     <PackageReference Include="Silk.NET.Windowing" Version="2.22.0" />
     <PackageReference Include="Silk.NET.Windowing.Glfw" Version="2.22.0" />
+    <PackageReference Include="SoundFlow.Extensions.WebRtc.Apm" Version="1.3.0" />
     <!-- Velopack for auto-updates -->
     <PackageReference Include="Velopack" Version="0.0.1251" />
   </ItemGroup>
@@ -67,8 +68,7 @@
 
   <!-- macOS native library for hardware video decoding (VideoToolbox + Metal) -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('OSX'))">
-    <None Include="..\SnackaMetalRenderer\.build\arm64-apple-macosx\release\libSnackaMetalRenderer.dylib"
-          Condition="Exists('..\SnackaMetalRenderer\.build\arm64-apple-macosx\release\libSnackaMetalRenderer.dylib')">
+    <None Include="..\SnackaMetalRenderer\.build\arm64-apple-macosx\release\libSnackaMetalRenderer.dylib" Condition="Exists('..\SnackaMetalRenderer\.build\arm64-apple-macosx\release\libSnackaMetalRenderer.dylib')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>libSnackaMetalRenderer.dylib</Link>
     </None>
@@ -77,8 +77,7 @@
   <!-- Windows native library for hardware video decoding (Media Foundation + D3D11) -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Windows'))">
     <!-- CMake outputs to build\bin\ -->
-    <None Include="..\SnackaWindowsRenderer\build\bin\SnackaWindowsRenderer.dll"
-          Condition="Exists('..\SnackaWindowsRenderer\build\bin\SnackaWindowsRenderer.dll')">
+    <None Include="..\SnackaWindowsRenderer\build\bin\SnackaWindowsRenderer.dll" Condition="Exists('..\SnackaWindowsRenderer\build\bin\SnackaWindowsRenderer.dll')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>SnackaWindowsRenderer.dll</Link>
     </None>
@@ -86,14 +85,12 @@
 
   <!-- Linux native library for hardware video decoding (VA-API + EGL) -->
   <ItemGroup Condition="$([MSBuild]::IsOSPlatform('Linux'))">
-    <None Include="..\SnackaLinuxRenderer\build\libSnackaLinuxRenderer.so"
-          Condition="Exists('..\SnackaLinuxRenderer\build\libSnackaLinuxRenderer.so')">
+    <None Include="..\SnackaLinuxRenderer\build\libSnackaLinuxRenderer.so" Condition="Exists('..\SnackaLinuxRenderer\build\libSnackaLinuxRenderer.so')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>libSnackaLinuxRenderer.so</Link>
     </None>
     <!-- Also check bin path for CMake builds -->
-    <None Include="..\SnackaLinuxRenderer\build\bin\libSnackaLinuxRenderer.so"
-          Condition="Exists('..\SnackaLinuxRenderer\build\bin\libSnackaLinuxRenderer.so')">
+    <None Include="..\SnackaLinuxRenderer\build\bin\libSnackaLinuxRenderer.so" Condition="Exists('..\SnackaLinuxRenderer\build\bin\libSnackaLinuxRenderer.so')">
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
       <Link>libSnackaLinuxRenderer.so</Link>
     </None>

@@ -20,14 +20,17 @@
                            FontSize="11"
                            FontWeight="SemiBold"
                            Foreground="{StaticResource Foreground3Brush}"/>
-                <ComboBox ItemsSource="{Binding InputDevices}"
+                <ComboBox x:Name="InputDeviceComboBox"
+                          ItemsSource="{Binding InputDevices}"
                           SelectedItem="{Binding SelectedInputDeviceItem, Mode=TwoWay}"
                           DisplayMemberBinding="{Binding DisplayName}"
+                          IsEnabled="{Binding IsDevicesLoaded}"
                           Background="{StaticResource Content1Brush}"
                           Foreground="{StaticResource ForegroundBrush}"
                           MinWidth="320"
                           Padding="14,10"
-                          CornerRadius="10"/>
+                          CornerRadius="10"
+                          DropDownOpened="OnDeviceDropdownOpened"/>
             </StackPanel>
 
             <!-- Output Device Section -->
@@ -36,14 +39,17 @@
                            FontSize="11"
                            FontWeight="SemiBold"
                            Foreground="{StaticResource Foreground3Brush}"/>
-                <ComboBox ItemsSource="{Binding OutputDevices}"
+                <ComboBox x:Name="OutputDeviceComboBox"
+                          ItemsSource="{Binding OutputDevices}"
                           SelectedItem="{Binding SelectedOutputDeviceItem, Mode=TwoWay}"
                           DisplayMemberBinding="{Binding DisplayName}"
+                          IsEnabled="{Binding IsDevicesLoaded}"
                           Background="{StaticResource Content1Brush}"
                           Foreground="{StaticResource ForegroundBrush}"
                           MinWidth="320"
                           Padding="14,10"
-                          CornerRadius="10"/>
+                          CornerRadius="10"
+                          DropDownOpened="OnDeviceDropdownOpened"/>
             </StackPanel>
 
             <!-- Input Gain Section -->
@@ -87,6 +93,56 @@
                            FontSize="12"
                            Foreground="{StaticResource Foreground3Brush}"
                            TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Echo Cancellation Section (Windows/macOS) -->
+            <StackPanel Spacing="10" IsVisible="{x:Static vm:AudioSettingsViewModel.IsNotLinux}">
+                <StackPanel Orientation="Horizontal" Spacing="12">
+                    <TextBlock Text="ECHO CANCELLATION"
+                               FontSize="11"
+                               FontWeight="SemiBold"
+                               Foreground="{StaticResource Foreground3Brush}"
+                               VerticalAlignment="Center"/>
+                    <ToggleSwitch IsChecked="{Binding EchoCancellation}"
+                                  OnContent=""
+                                  OffContent=""
+                                  Padding="0"
+                                  MinWidth="40"/>
+                </StackPanel>
+                <TextBlock Text="Software-based echo cancellation using WebRTC. Reduces feedback when using speakers instead of headphones. Changes take effect when you rejoin voice."
+                           FontSize="12"
+                           Foreground="{StaticResource Foreground3Brush}"
+                           TextWrapping="Wrap"/>
+            </StackPanel>
+
+            <!-- Echo Cancellation Info (Linux) -->
+            <StackPanel Spacing="10" IsVisible="{x:Static vm:AudioSettingsViewModel.IsLinux}">
+                <TextBlock Text="ECHO CANCELLATION"
+                           FontSize="11"
+                           FontWeight="SemiBold"
+                           Foreground="{StaticResource Foreground3Brush}"/>
+                <Border Background="{StaticResource Content1Brush}" CornerRadius="10" Padding="16">
+                    <StackPanel Spacing="8">
+                        <TextBlock Text="Linux uses system-level echo cancellation via PipeWire or PulseAudio."
+                                   FontSize="12"
+                                   Foreground="{StaticResource Foreground2Brush}"
+                                   TextWrapping="Wrap"/>
+                        <TextBlock Text="To enable, add module-echo-cancel to your audio configuration:"
+                                   FontSize="12"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   TextWrapping="Wrap"/>
+                        <Border Background="{StaticResource BackgroundBrush}" CornerRadius="6" Padding="12,8">
+                            <TextBlock Text="pactl load-module module-echo-cancel aec_method=webrtc"
+                                       FontSize="11"
+                                       FontFamily="Consolas,Monaco,monospace"
+                                       Foreground="{StaticResource Foreground2Brush}"/>
+                        </Border>
+                        <TextBlock Text="Or for PipeWire, create ~/.config/pipewire/pipewire.conf.d/echo-cancel.conf"
+                                   FontSize="12"
+                                   Foreground="{StaticResource Foreground3Brush}"
+                                   TextWrapping="Wrap"/>
+                    </StackPanel>
+                </Border>
             </StackPanel>
 
             <!-- Noise Gate Section -->

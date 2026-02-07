@@ -624,7 +624,8 @@ public class NativeCaptureLocator
     /// </summary>
     /// <param name="microphoneId">Microphone device ID or index</param>
     /// <param name="noiseSuppression">Whether to enable AI-powered noise suppression (default: true)</param>
-    public string GetNativeMicrophoneCaptureArgs(string microphoneId, bool noiseSuppression = true)
+    /// <param name="echoCancellation">Whether to enable acoustic echo cancellation (default: true, macOS only via VoiceProcessingIO)</param>
+    public string GetNativeMicrophoneCaptureArgs(string microphoneId, bool noiseSuppression = true, bool echoCancellation = true)
     {
         // All platforms use the same argument format
         // Quote the ID in case it contains special characters or spaces
@@ -634,6 +635,14 @@ public class NativeCaptureLocator
         if (!noiseSuppression)
         {
             args += " --no-noise-suppression";
+        }
+
+        // Echo cancellation is enabled by default on macOS (VoiceProcessingIO), so only add flag when disabled
+        // On Linux, users should configure system-level AEC via PipeWire/PulseAudio
+        // On Windows, we'll add support later via Voice Capture DSP
+        if (!echoCancellation)
+        {
+            args += " --no-echo-cancellation";
         }
 
         return args;

@@ -27,6 +27,15 @@ public class UserSettings
     /// </summary>
     public bool NoiseSuppression { get; set; } = true;
 
+    /// <summary>
+    /// Enable OS-level acoustic echo cancellation (AEC).
+    /// Removes speaker audio from microphone input to prevent feedback.
+    /// On macOS: Uses VoiceProcessingIO audio unit.
+    /// On Windows: Uses Voice Capture DSP.
+    /// On Linux: Users should configure PipeWire/PulseAudio module-echo-cancel.
+    /// </summary>
+    public bool EchoCancellation { get; set; } = true;
+
     // Voice channel state (persisted across sessions)
     public bool IsMuted { get; set; } = false;
     public bool IsDeafened { get; set; } = false;

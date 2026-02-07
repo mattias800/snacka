@@ -1,4 +1,5 @@
 using System.Collections.ObjectModel;
+using System.Runtime.InteropServices;
 using System.Windows.Input;
 using Avalonia.Threading;
 using ReactiveUI;
@@ -22,7 +23,10 @@ public class AudioSettingsViewModel : ViewModelBase
     private bool _noiseSuppression;
     private bool _isRefreshingDevices; // Flag to prevent binding feedback during refresh
     private bool _isLoadingDevices;
+    private bool _isDevicesLoaded;
+    private bool _echoCancellation;
     private float _agcGain = 1.0f;
+    private DateTime _lastDropdownRefresh = DateTime.MinValue;
 
     public AudioSettingsViewModel(ISettingsStore settingsStore, IAudioDeviceService audioDeviceService)
     {
@@ -43,6 +47,7 @@ public class AudioSettingsViewModel : ViewModelBase
         _gateThreshold = _settingsStore.Settings.GateThreshold;
         _gateEnabled = _settingsStore.Settings.GateEnabled;
         _noiseSuppression = _settingsStore.Settings.NoiseSuppression;
+        _echoCancellation = _settingsStore.Settings.EchoCancellation;
 
         // Add default options immediately so UI has something to show
         InputDevices.Add(new AudioDeviceItem(null, "System default"));
@@ -231,6 +236,43 @@ public class AudioSettingsViewModel : ViewModelBase
         private set => this.RaiseAndSetIfChanged(ref _isLoadingDevices, value);
     }
 
+    /// <summary>
+    /// True when device enumeration has completed at least once.
+    /// Used to disable ComboBoxes until devices are loaded.
+    /// </summary>
+    public bool IsDevicesLoaded
+    {
+        get => _isDevicesLoaded;
+        private set => this.RaiseAndSetIfChanged(ref _isDevicesLoaded, value);
+    }
+
+    /// <summary>
+    /// Enable OS-level acoustic echo cancellation.
+    /// Note: Changes require reconnecting the microphone to take effect.
+    /// </summary>
+    public bool EchoCancellation
+    {
+        get => _echoCancellation;
+        set
+        {
+            if (_echoCancellation == value) return;
+
+            this.RaiseAndSetIfChanged(ref _echoCancellation, value);
+            _settingsStore.Settings.EchoCancellation = value;
+            _settingsStore.Save();
+        }
+    }
+
+    /// <summary>
+    /// True if running on Linux. Used to show system-level AEC instructions.
+    /// </summary>
+    public static bool IsLinux => RuntimeInformation.IsOSPlatform(OSPlatform.Linux);
+
+    /// <summary>
+    /// True if NOT running on Linux (Windows/macOS). Used to show AEC info message.
+    /// </summary>
+    public static bool IsNotLinux => !IsLinux;
+
     public ICommand TestMicrophoneCommand { get; }
     public ICommand ToggleLoopbackCommand { get; }
     public ICommand RefreshDevicesCommand { get; }
@@ -272,11 +314,25 @@ public class AudioSettingsViewModel : ViewModelBase
         {
             _isRefreshingDevices = false;
             IsLoadingDevices = false;
+            IsDevicesLoaded = true;
         }
 
         // Notify UI to re-sync the selection after items are populated
         this.RaisePropertyChanged(nameof(SelectedInputDeviceItem));
         this.RaisePropertyChanged(nameof(SelectedOutputDeviceItem));
+    }
+
+    /// <summary>
+    /// Called when a device dropdown is opened. Refreshes device list if enough time has passed.
+    /// </summary>
+    public void OnDropdownOpened()
+    {
+        // Debounce: don't refresh more than once every 2 seconds
+        if ((DateTime.UtcNow - _lastDropdownRefresh).TotalSeconds < 2)
+            return;
+
+        _lastDropdownRefresh = DateTime.UtcNow;
+        _ = RefreshDevicesAsync();
     }
 
     private async Task ToggleMicrophoneTest()

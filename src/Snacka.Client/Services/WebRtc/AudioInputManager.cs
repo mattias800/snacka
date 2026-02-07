@@ -3,6 +3,7 @@ using SIPSorceryMedia.SDL2;
 using SIPSorceryMedia.Abstractions;
 using SIPSorceryMedia.Encoders;
 using Snacka.Client.Services;
+using Snacka.Client.Services.Audio;
 
 namespace Snacka.Client.Services.WebRtc;
 
@@ -38,6 +39,10 @@ public class AudioInputManager : IAsyncDisposable
     private const float AgcReleaseCoeff = 0.005f;
     private const float AgcSilenceThreshold = 200f;
     private const float BaselineInputBoost = 1.5f;    // 1.5x baseline (reduced from 4x)
+
+    // Audio processor for AEC and noise suppression
+    private IAudioProcessor? _audioProcessor;
+    private short[]? _processorOutputBuffer;
 
     /// <summary>
     /// Gets whether the user is currently speaking (voice activity detected).
@@ -111,11 +116,12 @@ public class AudioInputManager : IAsyncDisposable
                 // Use device index 0 if no specific device selected, otherwise try to find the device
                 var micId = string.IsNullOrEmpty(inputDevice) ? "0" : inputDevice;
 
-                // Get noise suppression setting (default: enabled)
+                // Get noise suppression and echo cancellation settings (default: enabled)
                 var noiseSuppression = _settingsStore?.Settings.NoiseSuppression ?? true;
-                Console.WriteLine($"AudioInputManager: Noise suppression = {noiseSuppression}");
+                var echoCancellation = _settingsStore?.Settings.EchoCancellation ?? true;
+                Console.WriteLine($"AudioInputManager: Noise suppression = {noiseSuppression}, Echo cancellation = {echoCancellation}");
 
-                if (await _nativeMicManager.StartAsync(micId, noiseSuppression))
+                if (await _nativeMicManager.StartAsync(micId, noiseSuppression, echoCancellation))
                 {
                     _useNativeCapture = true;
 
@@ -250,6 +256,20 @@ public class AudioInputManager : IAsyncDisposable
     }
 
     /// <summary>
+    /// Sets the audio processor for AEC and noise suppression.
+    /// </summary>
+    public void SetAudioProcessor(IAudioProcessor? processor)
+    {
+        _audioProcessor = processor;
+        _processorOutputBuffer = null; // Will be allocated on first use
+
+        // Also set on native mic manager if using native capture
+        _nativeMicManager?.SetAudioProcessor(processor);
+
+        Console.WriteLine($"AudioInputManager: Audio processor {(processor != null ? "set" : "cleared")}");
+    }
+
+    /// <summary>
     /// Stops and disposes audio capture resources.
     /// </summary>
     public async Task StopAsync()
@@ -302,10 +322,10 @@ public class AudioInputManager : IAsyncDisposable
         if (_isMuted || sample.Length == 0) return;
 
         // Log sample rate and validate consistency once per session
+        int sampleRateHz = AudioResampler.ToHz(samplingRate);
         if (!_loggedSampleRate)
         {
             _loggedSampleRate = true;
-            int sampleRateHz = AudioResampler.ToHz(samplingRate);
             int expectedSamples = AudioPipelineDiagnostics.CalculateExpectedSamples(sampleRateHz, (int)durationMilliseconds);
             int detectedRate = AudioPipelineDiagnostics.DetectSampleRateFromCount(sample.Length, (int)durationMilliseconds);
 
@@ -322,12 +342,38 @@ public class AudioInputManager : IAsyncDisposable
             }
         }
 
+        // Step 0: Process through WebRTC APM (AEC + noise suppression) if available
+        if (_audioProcessor != null && (_audioProcessor.IsAecActive || _audioProcessor.IsNoiseSuppressionEnabled))
+        {
+            // Allocate output buffer if needed
+            if (_processorOutputBuffer == null || _processorOutputBuffer.Length < sample.Length)
+            {
+                _processorOutputBuffer = new short[sample.Length];
+            }
+
+            // Determine number of channels (SDL2 capture is typically mono)
+            int channels = 1; // SDL2AudioSource uses mono
+
+            // Process through WebRTC APM
+            int processedCount = _audioProcessor.ProcessCaptureAudio(
+                sample.AsSpan(),
+                _processorOutputBuffer.AsSpan(),
+                sampleRateHz,
+                channels);
+
+            // Copy processed audio back to sample array
+            if (processedCount > 0)
+            {
+                _processorOutputBuffer.AsSpan(0, processedCount).CopyTo(sample.AsSpan());
+            }
+        }
+
         // Get user settings
         var manualGain = _settingsStore?.Settings.InputGain ?? 1.0f;
         var gateEnabled = _settingsStore?.Settings.GateEnabled ?? true;
         var gateThreshold = _settingsStore?.Settings.GateThreshold ?? 0.02f;
 
-        // Step 1: Calculate input RMS before any processing
+        // Step 1: Calculate input RMS before AGC processing
         double sumOfSquares = 0;
         for (int i = 0; i < sample.Length; i++)
         {

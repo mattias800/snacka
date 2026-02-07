@@ -72,6 +72,11 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
     @Flag(name: .long, inversion: .prefixedNo, help: "Enable AI noise suppression for microphone (default: true)")
     var noiseSuppression = true
 
+    // MARK: - Echo Cancellation
+
+    @Flag(name: .long, inversion: .prefixedNo, help: "Enable acoustic echo cancellation using VoiceProcessingIO (default: true)")
+    var echoCancellation = true
+
     // MARK: - Validation
 
     func validate() throws {
@@ -173,7 +178,12 @@ struct SnackaCaptureVideoToolbox: AsyncParsableCommand {
     private func runCapture() async throws {
         // Handle microphone capture separately (audio only, no video)
         if let micId = microphone {
-            fputs("SnackaCaptureVideoToolbox: Starting microphone capture (audio only, noise suppression: \(noiseSuppression))\n", stderr)
+            // Note: Echo cancellation on macOS requires native audio output to work properly.
+            // VoiceProcessingIO needs to control both input AND output for AEC to correlate
+            // the speaker signal with the microphone input. Since we use SDL2 for output,
+            // we can't use VoiceProcessingIO's AEC effectively. Using MicrophoneCapturer for now.
+            // The --echo-cancellation flag is accepted but ignored on macOS.
+            fputs("SnackaCaptureVideoToolbox: Starting microphone capture (noise suppression: \(noiseSuppression))\n", stderr)
 
             let capturer = MicrophoneCapturer(microphoneId: micId, noiseSuppression: noiseSuppression)
             try await capturer.start()

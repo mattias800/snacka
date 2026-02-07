@@ -352,11 +352,12 @@ public class AudioSettingsViewModelTests : IDisposable
         };
 
         // Act
-        vm.SelectedInputDeviceItem = vm.InputDevices[1]; // "Microphone 1"
+        vm.SelectedInputDeviceItem = vm.InputDevices[1]; // "Microphone 1" (Id: "0")
 
         // Assert
         Assert.True(propertyChangedRaised);
-        Assert.Equal("Microphone 1", _settings.AudioInputDevice);
+        // Settings stores the device ID, not the display name (for native capture compatibility)
+        Assert.Equal("0", _settings.AudioInputDevice);
         _mockSettingsStore.Verify(x => x.Save(), Times.Once);
     }
 

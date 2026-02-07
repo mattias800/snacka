@@ -3,6 +3,7 @@ using System.Runtime.InteropServices;
 using SIPSorcery.Media;
 using SIPSorceryMedia.SDL2;
 using SIPSorceryMedia.Abstractions;
+using Snacka.Client.Services.Audio;
 using Snacka.Client.Services.WebRtc;
 
 namespace Snacka.Client.Services;
@@ -61,6 +62,10 @@ public class AudioDeviceService : IAudioDeviceService
 
     private readonly ISettingsStore? _settingsStore;
     private readonly NativeCaptureLocator _nativeCaptureLocator = new();
+
+    // Audio processor for AEC and noise suppression (shared with voice channels)
+    private AudioProcessorService? _audioProcessorService;
+    private short[]? _processorOutputBuffer;
 
     // Native capture (preferred)
     private NativeMicrophoneManager? _nativeMicManager;
@@ -279,6 +284,14 @@ public class AudioDeviceService : IAudioDeviceService
         _onAgcUpdate = onAgcUpdate;
         _testCts = new CancellationTokenSource();
 
+        // Initialize audio processor for AEC and noise suppression (same as voice channels)
+        if (_settingsStore != null)
+        {
+            _audioProcessorService = new AudioProcessorService(_settingsStore);
+            _audioProcessorService.Initialize();
+            Console.WriteLine($"AudioDeviceService: Audio processor initialized for mic test (AEC={_audioProcessorService.IsEchoCancellationEnabled}, NS={_audioProcessorService.IsNoiseSuppressionEnabled})");
+        }
+
         // Try native capture first (same as voice channels)
         if (_nativeCaptureLocator.IsNativeMicrophoneCaptureAvailable())
         {
@@ -300,12 +313,17 @@ public class AudioDeviceService : IAudioDeviceService
                 // Use device ID (index) directly - deviceName is now the native device index
                 var micId = string.IsNullOrEmpty(deviceName) ? "0" : deviceName;
 
-                // Get noise suppression setting
+                // Get noise suppression and echo cancellation settings
                 var noiseSuppression = _settingsStore?.Settings.NoiseSuppression ?? true;
+                var echoCancellation = _settingsStore?.Settings.EchoCancellation ?? true;
 
-                if (await _nativeMicManager.StartAsync(micId, noiseSuppression))
+                if (await _nativeMicManager.StartAsync(micId, noiseSuppression, echoCancellation))
                 {
                     _useNativeCapture = true;
+
+                    // Set audio processor for AEC
+                    _nativeMicManager.SetAudioProcessor(_audioProcessorService?.Processor);
+
                     Console.WriteLine($"AudioDeviceService: Started native input test on device: {deviceName ?? "(default)"}");
                     return;
                 }
@@ -395,6 +413,10 @@ public class AudioDeviceService : IAudioDeviceService
                 int right = samples[i * 2 + 1];
                 monoSamples[i] = (short)((left + right) / 2);
             }
+
+            // Feed loopback audio to AEC processor as reference (this is what's coming out of speakers)
+            // The processor needs to know what's being played so it can cancel the echo
+            _audioProcessorService?.Processor.FeedPlaybackAudio(monoSamples, 48000, 1);
 
             byte[] pcmBytes = new byte[monoSamples.Length * 2];
             Buffer.BlockCopy(monoSamples, 0, pcmBytes, 0, pcmBytes.Length);
@@ -520,6 +542,12 @@ public class AudioDeviceService : IAudioDeviceService
             _testAudioSink = null;
         }
 
+        // Clean up audio processor
+        _audioProcessorService?.Reset();
+        _audioProcessorService?.Dispose();
+        _audioProcessorService = null;
+        _processorOutputBuffer = null;
+
         _onRmsUpdate = null;
         _onAgcUpdate = null;
         _isLoopbackEnabled = false;
@@ -533,12 +561,37 @@ public class AudioDeviceService : IAudioDeviceService
     {
         if (sample.Length == 0) return;
 
+        // Step 0: Process through WebRTC APM (AEC + noise suppression) if available
+        int sampleRateHz = AudioResampler.ToHz(samplingRate);
+        var processor = _audioProcessorService?.Processor;
+        if (processor != null && (processor.IsAecActive || processor.IsNoiseSuppressionEnabled))
+        {
+            // Allocate output buffer if needed
+            if (_processorOutputBuffer == null || _processorOutputBuffer.Length < sample.Length)
+            {
+                _processorOutputBuffer = new short[sample.Length];
+            }
+
+            // SDL2 capture is mono (1 channel)
+            int processedCount = processor.ProcessCaptureAudio(
+                sample.AsSpan(),
+                _processorOutputBuffer.AsSpan(),
+                sampleRateHz,
+                1); // mono
+
+            // Copy processed audio back to sample array
+            if (processedCount > 0)
+            {
+                _processorOutputBuffer.AsSpan(0, processedCount).CopyTo(sample.AsSpan());
+            }
+        }
+
         // Get user settings
         var manualGain = _settingsStore?.Settings.InputGain ?? 1.0f;
         var gateEnabled = _settingsStore?.Settings.GateEnabled ?? true;
         var gateThreshold = _settingsStore?.Settings.GateThreshold ?? 0.02f;
 
-        // Step 1: Calculate input RMS before any processing
+        // Step 1: Calculate input RMS before AGC processing
         double sumOfSquares = 0;
         for (int i = 0; i < sample.Length; i++)
         {
@@ -629,6 +682,9 @@ public class AudioDeviceService : IAudioDeviceService
             var outputSamples = inputRateHz == AudioResampler.TargetSampleRate
                 ? sample
                 : _loopbackResampler.ResampleToCodecRate(sample, inputRateHz);
+
+            // Feed loopback audio to AEC processor as reference (this is what's coming out of speakers)
+            _audioProcessorService?.Processor.FeedPlaybackAudio(outputSamples, 48000, 1);
 
             byte[] pcmBytes = new byte[outputSamples.Length * 2];
             Buffer.BlockCopy(outputSamples, 0, pcmBytes, 0, pcmBytes.Length);
