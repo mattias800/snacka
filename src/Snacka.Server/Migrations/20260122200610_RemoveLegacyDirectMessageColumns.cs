@@ -168,12 +168,17 @@ namespace Snacka.Server.Migrations
             // Step 4: Update remaining legacy DirectMessages to use newly created conversations
             migrationBuilder.Sql(@"
                 -- Update remaining legacy DirectMessages with their conversation IDs
+                -- PostgreSQL doesn't allow JOIN ... ON clauses inside UPDATE ... FROM to reference the
+                -- update target (dm), so the dm conditions live in WHERE. (The original form failed on
+                -- every fresh database with 42P01 'invalid reference to FROM-clause entry for table dm'.)
                 UPDATE ""DirectMessages"" dm
                 SET ""ConversationId"" = c.""Id""
                 FROM ""Conversations"" c
-                JOIN ""ConversationParticipants"" cp1 ON cp1.""ConversationId"" = c.""Id"" AND cp1.""UserId"" = dm.""SenderId""
-                JOIN ""ConversationParticipants"" cp2 ON cp2.""ConversationId"" = c.""Id"" AND cp2.""UserId"" = dm.""RecipientId""
-                WHERE dm.""ConversationId"" IS NULL
+                JOIN ""ConversationParticipants"" cp1 ON cp1.""ConversationId"" = c.""Id""
+                JOIN ""ConversationParticipants"" cp2 ON cp2.""ConversationId"" = c.""Id""
+                WHERE cp1.""UserId"" = dm.""SenderId""
+                  AND cp2.""UserId"" = dm.""RecipientId""
+                  AND dm.""ConversationId"" IS NULL
                   AND dm.""RecipientId"" IS NOT NULL
                   AND c.""IsGroup"" = false;
             ");

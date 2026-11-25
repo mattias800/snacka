@@ -13,6 +13,7 @@ namespace Snacka.Server.Controllers;
 /// Data channel: sharing client connects one per proxied browser connection.
 /// </summary>
 [ApiController]
+[ApiExplorerSettings(IgnoreApi = true)] // WebSocket endpoints have no HTTP method; including them breaks OpenAPI generation
 public class TunnelWsController : ControllerBase
 {
     private readonly ITunnelService _tunnelService;
