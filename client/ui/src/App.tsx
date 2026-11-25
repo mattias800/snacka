@@ -5,6 +5,7 @@ import { createHub } from "./api/hub";
 import { StreamTest, inNativeApp } from "./StreamTest";
 import { Bench } from "./Bench";
 import { MessageList } from "./MessageList";
+import { VoicePanel, useVoice } from "./VoicePanel";
 import "./App.css";
 
 type Community = Schemas["CommunityResponse"];
@@ -185,6 +186,7 @@ function Chat(props: {
   const [error, setError] = useState<string | null>(null);
   const [hubState, setHubState] = useState("connecting");
   const [showStreamTest, setShowStreamTest] = useState(false);
+  const voice = useVoice(api);
   const hubRef = useRef<HubConnection | null>(null);
   const channelRef = useRef<Channel | null>(null);
   channelRef.current = channel;
@@ -289,16 +291,24 @@ function Chat(props: {
       </nav>
       <aside className="channels">
         <header>{community?.name ?? "Snacka"}</header>
-        {channels.map((ch) => (
-          <button
-            key={ch.id}
-            className={ch.id === channel?.id ? "active" : ""}
-            disabled={ch.type !== ChannelKind.Text}
-            onClick={() => void openChannel(ch)}
-          >
-            {ch.type === ChannelKind.Text ? "#" : "🔊"} {ch.name}
-          </button>
-        ))}
+        {channels.map((ch) =>
+          ch.type === ChannelKind.Text ? (
+            <button key={ch.id} className={ch.id === channel?.id ? "active" : ""} onClick={() => void openChannel(ch)}>
+              # {ch.name}
+            </button>
+          ) : (
+            <div key={ch.id}>
+              <button
+                className={ch.id === voice.channelId ? "active" : ""}
+                data-testid="voice-channel"
+                onClick={() => void (ch.id === voice.channelId ? voice.leave() : voice.join(ch.id))}
+              >
+                🔊 {ch.name}
+              </button>
+              {ch.id === voice.channelId && <VoicePanel voice={voice} />}
+            </div>
+          ),
+        )}
         <footer>
           <span>{props.auth.username}</span>
           <span className={`dot ${hubState}`} title={`Realtime: ${hubState}`} />

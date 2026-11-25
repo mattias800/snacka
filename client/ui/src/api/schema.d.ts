@@ -3456,6 +3456,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voice/channels/{channelId}/token": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    channelId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["VoiceTokenResponse"];
+                        "application/json": components["schemas"]["VoiceTokenResponse"];
+                        "text/json": components["schemas"]["VoiceTokenResponse"];
+                    };
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/WebRtc/ice-servers": {
         parameters: {
             query?: never;
@@ -4166,6 +4205,11 @@ export interface components {
             effectiveDisplayName: string;
             avatar: string | null;
             isOnline: boolean;
+        };
+        VoiceTokenResponse: {
+            url: string;
+            token: string;
+            room: string;
         };
     };
     responses: never;
