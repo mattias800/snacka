@@ -48,7 +48,12 @@ input { font: inherit; color: var(--text); background: var(--bg); border: 1px so
 .message-list > li { position: absolute; top: 0; left: 0; width: 100%; padding: 5px 0; contain: layout paint; }
 .message-list time { color: var(--muted); font-size: 12px; margin-left: 8px; }
 .message-list p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
-.messages form { padding: 0 16px 20px; }
+.messages form { padding: 0 16px 4px; }
+.typing { height: 18px; font-size: 12px; color: var(--muted); padding: 2px 2px 0; }
+.replying { display: flex; align-items: center; gap: 6px; font-size: 13px; color: var(--muted); background: var(--panel); border-radius: 6px 6px 0 0; padding: 4px 10px; }
+.replying .link { margin-left: auto; }
+.reply-quote { font-size: 13px; color: var(--muted); margin-bottom: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.reply-quote strong { color: var(--text); font-weight: 600; }
 .message-list > li:hover { background: #2e3035; }
 .message-list .edited { font-size: 12px; }
 .message-actions { float: right; display: none; gap: 2px; background: var(--panel); border-radius: 6px; padding: 2px; }

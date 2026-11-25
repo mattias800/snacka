@@ -13,6 +13,8 @@ export type ChatMessage = {
   edited: boolean;
   /** null where reactions aren't supported (DMs). */
   reactions: Reaction[] | null;
+  /** The message this one replies to (channels only). */
+  replyTo: { authorName: string; content: string } | null;
 };
 
 export type Reaction = { emoji: string; count: number; mine: boolean };
@@ -29,6 +31,7 @@ export const fromChannel = (m: ChannelMessage): ChatMessage => ({
   createdAt: m.createdAt,
   edited: m.isEdited,
   reactions: (m.reactions ?? []).map((r) => ({ emoji: r.emoji, count: r.count, mine: r.hasReacted })),
+  replyTo: m.replyTo ? { authorName: m.replyTo.authorEffectiveDisplayName, content: m.replyTo.content } : null,
 });
 
 export const fromDm = (m: DmMessage): ChatMessage => ({
@@ -39,6 +42,7 @@ export const fromDm = (m: DmMessage): ChatMessage => ({
   createdAt: m.createdAt,
   edited: m.updatedAt != null,
   reactions: null,
+  replyTo: null,
 });
 
 /** Adds or replaces a message by id, keeping the list in time order. */

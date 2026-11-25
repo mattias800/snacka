@@ -13,7 +13,7 @@ test.beforeAll(() => ensureCommunity(COMMUNITY));
 test("Alice DMs Bob: unread badge, delivery and reply", async ({ browser }) => {
   const alice = await logIn(browser, "alice", COMMUNITY);
   const bob = await logIn(browser, "bob", COMMUNITY);
-  for (const page of [alice, bob]) await expect(page.locator(".dot.connected").last()).toBeVisible({ timeout: 15_000 });
+  for (const page of [alice, bob]) await expect(page.locator("main[data-live=true]")).toBeVisible({ timeout: 15_000 });
   const run = Date.now().toString(36);
 
   // Alice opens a DM from the member list and writes.

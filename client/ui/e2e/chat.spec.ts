@@ -21,7 +21,7 @@ async function send(page: Page, text: string) {
 test("Alice and Bob see each other's messages exactly once", async ({ browser }) => {
   const alice = await logIn(browser, "alice", COMMUNITY);
   const bob = await logIn(browser, "bob", COMMUNITY);
-  for (const page of [alice, bob]) await expect(page.locator(".dot.connected").last()).toBeVisible({ timeout: 15_000 });
+  for (const page of [alice, bob]) await expect(page.locator("main[data-live=true]")).toBeVisible({ timeout: 15_000 });
 
   const run = Date.now().toString(36);
   const hello = `hello bob ${run}`;
@@ -47,7 +47,7 @@ test("Alice and Bob see each other's messages exactly once", async ({ browser })
   const ids = await bob.getByTestId("message").evaluateAll((els) => els.map((e) => e.textContent ?? ""));
   expect(ids.findIndex((t) => t.includes(hello))).toBeLessThan(ids.findIndex((t) => t.includes(reply)));
 
-  await expect(bob.locator(".dot.connected").last()).toBeVisible({ timeout: 15_000 });
+  await expect(bob.locator("main[data-live=true]")).toBeVisible({ timeout: 15_000 });
   const after = `back again ${run}`;
   await send(alice, after);
   await expect(messages(bob, after)).toHaveCount(1, { timeout: 10_000 });
@@ -56,7 +56,7 @@ test("Alice and Bob see each other's messages exactly once", async ({ browser })
 test("Reactions, edits and deletes show up on the other screen", async ({ browser }) => {
   const alice = await logIn(browser, "alice", COMMUNITY);
   const bob = await logIn(browser, "bob", COMMUNITY);
-  for (const page of [alice, bob]) await expect(page.locator(".dot.connected").last()).toBeVisible({ timeout: 15_000 });
+  for (const page of [alice, bob]) await expect(page.locator("main[data-live=true]")).toBeVisible({ timeout: 15_000 });
   const run = Date.now().toString(36);
   const text = `pizza tonight? ${run}`;
   await send(alice, text);
@@ -92,4 +92,39 @@ test("Reactions, edits and deletes show up on the other screen", async ({ browse
   await messages(alice, edited).getByTitle("Delete").click();
   await expect(messages(bob, edited)).toHaveCount(0, { timeout: 10_000 });
   await expect(messages(alice, edited)).toHaveCount(0);
+});
+
+test("Typing indicator, replies and online status", async ({ browser }) => {
+  const alice = await logIn(browser, "alice", COMMUNITY);
+  const bob = await logIn(browser, "bob", COMMUNITY);
+  for (const page of [alice, bob]) await expect(page.locator("main[data-live=true]")).toBeVisible({ timeout: 15_000 });
+  const run = Date.now().toString(36);
+
+  // Alice sees Bob online.
+  const bobOnAlice = alice.locator('[data-testid="member"][data-name="bob"] .dot');
+  await expect(bobOnAlice).toHaveClass(/connected/, { timeout: 10_000 });
+
+  // Alice types: Bob sees it; when she sends, it goes away.
+  const question = `anyone up for a game? ${run}`;
+  await alice.getByLabel("Message", { exact: true }).pressSequentially("anyone up", { delay: 20 });
+  await expect(bob.getByTestId("typing")).toContainText("alice is typing", { timeout: 10_000 });
+  await alice.getByLabel("Message", { exact: true }).fill(question);
+  await alice.getByLabel("Message", { exact: true }).press("Enter");
+  await expect(messages(bob, question)).toHaveCount(1, { timeout: 10_000 });
+  await expect(bob.getByTestId("typing")).toHaveText("");
+
+  // Bob replies to that message: Alice sees the quote.
+  await messages(bob, question).hover();
+  await messages(bob, question).getByTitle("Reply").click();
+  await expect(bob.getByTestId("replying")).toContainText("alice");
+  const answer = `me! ${run}`;
+  await send(bob, answer);
+  const onAlice = messages(alice, answer);
+  await expect(onAlice).toHaveCount(1, { timeout: 10_000 });
+  await expect(onAlice.getByTestId("reply-quote")).toContainText(question);
+  await expect(bob.getByTestId("replying")).toHaveCount(0);
+
+  // Bob closes the app: Alice sees him go offline.
+  await bob.context().close();
+  await expect(bobOnAlice).not.toHaveClass(/connected/, { timeout: 15_000 });
 });

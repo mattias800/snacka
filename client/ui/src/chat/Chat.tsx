@@ -43,6 +43,12 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   const [error, setError] = useState<string | null>(null);
   const [hubState, setHubState] = useState("connecting");
   const [showStreamTest, setShowStreamTest] = useState(false);
+  const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  /** The view whose realtime events we're receiving (joined its channel group while connected). */
+  const [liveView, setLiveView] = useState<View>(null);
+  /** Who is typing in the open channel/DM, and until when (ms) to show it. */
+  const [typing, setTyping] = useState<Record<string, { name: string; until: number }>>({});
+  const lastTypingSentRef = useRef(0);
   /** Replaces the message pane: joining/creating communities, or inviting friends. */
   const [panel, setPanel] = useState<"browse" | "invite" | null>(null);
   const voice = useVoice(api);
@@ -87,14 +93,37 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   useEffect(() => {
     const hub = createHub(serverUrl, () => tokenRef.current);
     hubRef.current = hub;
-    hub.on("ReceiveChannelMessage", (m: ChannelMessage) => isOpen("channel", m.channelId) && setMessages((prev) => upsert(prev, fromChannel(m))));
+    const stopTyping = (userId: string) =>
+      setTyping((prev) => {
+        if (!(userId in prev)) return prev;
+        const next = { ...prev };
+        delete next[userId];
+        return next;
+      });
+    const startTyping = (userId: string, name: string) =>
+      userId !== myId && setTyping((prev) => ({ ...prev, [userId]: { name, until: Date.now() + 5000 } }));
+    hub.on("UserTyping", (e: { channelId: string; userId: string; effectiveDisplayName: string }) => isOpen("channel", e.channelId) && startTyping(e.userId, e.effectiveDisplayName));
+    hub.on("ConversationUserTyping", (e: { conversationId: string; userId: string; effectiveDisplayName: string }) => isOpen("dm", e.conversationId) && startTyping(e.userId, e.effectiveDisplayName));
+    // Online status of members (the hub sends this for every user; we only show members).
+    const setOnline = (online: boolean) => (e: { userId: string }) => setMembers((prev) => prev.map((m) => (m.userId === e.userId ? { ...m, isOnline: online } : m)));
+    hub.on("UserOnline", setOnline(true));
+    hub.on("UserOffline", setOnline(false));
+
+    hub.on("ReceiveChannelMessage", (m: ChannelMessage) => {
+      if (!isOpen("channel", m.channelId)) return;
+      stopTyping(m.authorId);
+      setMessages((prev) => upsert(prev, fromChannel(m)));
+    });
     hub.on("ChannelMessageEdited", (m: ChannelMessage) => isOpen("channel", m.channelId) && setMessages((prev) => upsert(prev, fromChannel(m))));
     hub.on("ChannelMessageDeleted", (e: { channelId: string; messageId: string }) => setMessages((prev) => prev.filter((m) => m.id !== e.messageId)));
     hub.on("ReactionUpdated", (e: ReactionUpdated) => isOpen("channel", e.channelId) && setMessages((prev) => applyReaction(prev, e, myId)));
 
     hub.on("ConversationMessageReceived", (m: DmMessage) => {
       const open = isOpen("dm", m.conversationId);
-      if (open) setMessages((prev) => upsert(prev, fromDm(m)));
+      if (open) {
+        stopTyping(m.senderId);
+        setMessages((prev) => upsert(prev, fromDm(m)));
+      }
       setConversations((prev) => {
         if (!prev.some((c) => c.id === m.conversationId)) {
           void loadConversations().catch(() => {}); // a conversation we haven't seen yet
@@ -122,7 +151,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     hub.on("VoiceParticipantLeft", (e: { channelId: string; userId: string }) =>
       setPresence((prev) => prev.filter((p) => !(p.userId === e.userId && p.channelId === e.channelId))),
     );
-    hub.onreconnecting(() => setHubState("reconnecting"));
+    hub.onreconnecting(() => {
+      setHubState("reconnecting");
+      setLiveView(null);
+    });
     hub.onreconnected(() => {
       setHubState("connected");
       // Events may have been missed while disconnected: refetch what's on screen.
@@ -135,7 +167,15 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     hub.onclose(() => setHubState("disconnected"));
     hub
       .start()
-      .then(() => setHubState("connected"))
+      .then(() => {
+        setHubState("connected");
+        // A channel opened before the connection was up never joined its realtime group
+        // (and may have missed messages): open it again now.
+        const v = viewRef.current;
+        if (v) void openViewRef.current(v);
+        const c = communityRef.current;
+        if (c) void hub.invoke("JoinServer", c.id).catch(() => {});
+      })
       .catch((e: Error) => setHubState(`failed: ${e.message}`));
     return () => {
       void hub.stop();
@@ -155,10 +195,14 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       setView(next);
       viewRef.current = next;
       setMessages([]);
+      setReplyingTo(null);
+      setTyping({});
+      setLiveView(null);
       if (!next) return;
       const hub = hubRef.current;
+      const connected = hub?.state === "Connected";
       if (next.kind === "channel") {
-        if (hub?.state === "Connected") {
+        if (hub && connected) {
           if (previous?.kind === "channel" && previous.channel.id !== next.channel.id) await hub.invoke("LeaveChannel", previous.channel.id);
           await hub.invoke("JoinChannel", next.channel.id);
         }
@@ -171,6 +215,8 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
         setConversations((prev) => prev.map((c) => (c.id === id ? { ...c, unreadCount: 0 } : c)));
         await api.POST("/api/conversations/{conversationId}/read", { params: { path: { conversationId: id } } });
       }
+      // DMs need no join: their events go to the participants directly.
+      if (connected && viewRef.current === next) setLiveView(next);
     });
 
   useEffect(() => {
@@ -228,14 +274,38 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     const v = view;
     if (!content || !v) return;
     setDraft("");
+    const replyToId = replyingTo?.id ?? null;
+    setReplyingTo(null);
+    lastTypingSentRef.current = 0;
     void run(async () => {
       const m =
         v.kind === "channel"
-          ? fromChannel(ok(await api.POST("/api/channels/{channelId}/messages", { params: { path: { channelId: v.channel.id } }, body: { content, replyToId: null } })))
+          ? fromChannel(ok(await api.POST("/api/channels/{channelId}/messages", { params: { path: { channelId: v.channel.id } }, body: { content, replyToId } })))
           : fromDm(ok(await api.POST("/api/conversations/{conversationId}/messages", { params: { path: { conversationId: v.conversation.id } }, body: { content } })));
       if (viewRef.current === v) setMessages((prev) => upsert(prev, m));
     });
   };
+
+  /** Tells the others we're typing, at most every 3 s while the draft changes. */
+  const onDraftChange = (value: string) => {
+    setDraft(value);
+    const hub = hubRef.current;
+    const v = view;
+    if (!value || !v || hub?.state !== "Connected" || Date.now() - lastTypingSentRef.current < 3000) return;
+    lastTypingSentRef.current = Date.now();
+    void (v.kind === "channel" ? hub.invoke("SendTyping", v.channel.id) : hub.invoke("SendConversationTyping", v.conversation.id)).catch(() => {});
+  };
+
+  // Typing indicators expire 5 s after the last event.
+  const typingNames = Object.values(typing).map((t) => t.name);
+  useEffect(() => {
+    if (typingNames.length === 0) return;
+    const timer = setInterval(() => {
+      const now = Date.now();
+      setTyping((prev) => Object.fromEntries(Object.entries(prev).filter(([, t]) => t.until > now)));
+    }, 1000);
+    return () => clearInterval(timer);
+  }, [typingNames.length]);
 
   const me = members.find((m) => m.userId === myId);
   const actions = useMemo<MessageActions | undefined>(() => {
@@ -257,6 +327,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
             if (!res.response.ok) throw new Error(`Delete failed: ${res.response.status}`);
             setMessages((prev) => prev.filter((m) => m.id !== id));
           }),
+        onReply: (m) => setReplyingTo(m),
         onReact: (id, emoji, add) =>
           void run(async () => {
             if (add) {
@@ -396,13 +467,24 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
           <StreamTest />
         </main>
       ) : (
-        <main className="messages">
+        // data-live: this view receives realtime events (tests wait for it before acting).
+        <main className="messages" data-live={view !== null && liveView === view}>
           <header>{title}</header>
           {error && <p className="error">{error}</p>}
           <MessageList messages={messages} actions={actions} />
           {view && (
             <form onSubmit={send}>
-              <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={placeholder} aria-label="Message" autoFocus />
+              {replyingTo && (
+                <div className="replying" data-testid="replying">
+                  Replying to <strong>{replyingTo.authorName}</strong>
+                  <button type="button" className="link" title="Cancel reply" onClick={() => setReplyingTo(null)}>✕</button>
+                </div>
+              )}
+              <input value={draft} onChange={(e) => onDraftChange(e.target.value)} placeholder={placeholder} aria-label="Message" autoFocus />
+              <div className="typing" data-testid="typing">
+                {typingNames.length === 1 && <><strong>{typingNames[0]}</strong> is typing…</>}
+                {typingNames.length > 1 && <><strong>{typingNames.join(", ")}</strong> are typing…</>}
+              </div>
             </form>
           )}
         </main>

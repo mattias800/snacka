@@ -1,4 +1,4 @@
-import type { Browser, Page } from "@playwright/test";
+import { test, type Browser, type BrowserContext, type Page } from "@playwright/test";
 
 /** Shared setup for multi-user e2e tests: Alice and Bob against a running dev server. */
 
@@ -39,9 +39,22 @@ export async function ensureCommunity(name: string): Promise<string> {
   return community.id;
 }
 
+/** Contexts opened by a test; closed after it so users go offline (otherwise they'd stay "online" across tests). */
+const openContexts: BrowserContext[] = [];
+
+export async function newPage(browser: Browser): Promise<Page> {
+  const context = await browser.newContext();
+  openContexts.push(context);
+  return context.newPage();
+}
+
+test.afterEach(async () => {
+  await Promise.all(openContexts.splice(0).map((c) => c.close()));
+});
+
 /** A fresh browser context logged in as `name`, with `community` open. */
 export async function logIn(browser: Browser, name: string, community: string): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
+  const page = await newPage(browser);
   await page.goto("/");
   await page.getByLabel("Server").fill(SERVER);
   await page.getByLabel("Email").fill(`${name}@test.com`);
