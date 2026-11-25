@@ -9,11 +9,15 @@ pub mod wire;
 #[cfg(target_os = "macos")]
 pub mod videotoolbox;
 
+#[cfg(windows)]
+pub mod windows;
+
 /// Video codec of an encoded stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Codec {
     H264,
     Hevc,
+    Av1,
 }
 
 impl Codec {
@@ -21,7 +25,33 @@ impl Codec {
         match id {
             1 => Some(Codec::H264),
             2 => Some(Codec::Hevc),
+            3 => Some(Codec::Av1),
             _ => None,
+        }
+    }
+
+    pub fn wire_id(self) -> u8 {
+        match self {
+            Codec::H264 => 1,
+            Codec::Hevc => 2,
+            Codec::Av1 => 3,
+        }
+    }
+
+    pub fn parse(name: &str) -> Option<Codec> {
+        match name.to_ascii_lowercase().as_str() {
+            "h264" | "avc" => Some(Codec::H264),
+            "hevc" | "h265" => Some(Codec::Hevc),
+            "av1" => Some(Codec::Av1),
+            _ => None,
+        }
+    }
+
+    pub fn name(self) -> &'static str {
+        match self {
+            Codec::H264 => "h264",
+            Codec::Hevc => "hevc",
+            Codec::Av1 => "av1",
         }
     }
 }

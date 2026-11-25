@@ -1789,7 +1789,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6e9ec52138abedcc58dc17a7c6c0c00a2bdb4f3427c7f63fa97fd0d859155caf"
 dependencies = [
  "gtk-sys",
- "libloading",
+ "libloading 0.7.4",
  "once_cell",
 ]
 
@@ -1816,6 +1816,16 @@ checksum = "b67380fd3b2fbe7527a606e18729d21c6f3951633d0500574c4dc22d2d638b9f"
 dependencies = [
  "cfg-if",
  "winapi",
+]
+
+[[package]]
+name = "libloading"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a1832accd5a4ca2795ace4d05d15c4039be15b62d3b950eff99746a990e3cc10"
+dependencies = [
+ "cfg-if",
+ "windows-link",
 ]
 
 [[package]]
@@ -1896,6 +1906,29 @@ name = "mime"
 version = "0.3.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d5848f5a9e8117cf94f2f90faac24a87ff81600ff8628c1e3deaab572e76bfa1"
+
+[[package]]
+name = "mini-cuda"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "687da568fa3f957199c1ff89033a49d6408d1fe01fa97d6c803fc0e2730a8b62"
+dependencies = [
+ "libloading 0.9.1",
+ "log",
+ "thiserror 2.0.21",
+]
+
+[[package]]
+name = "mini-nvcodec"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2cae762ec96a433116f963d9d8c59300008cdb1cbc1ed4787f62c9e70ca4179c"
+dependencies = [
+ "libloading 0.9.1",
+ "log",
+ "mini-cuda",
+ "thiserror 2.0.21",
+]
 
 [[package]]
 name = "miniz_oxide"
@@ -3038,6 +3071,9 @@ version = "0.1.0"
 dependencies = [
  "core-foundation",
  "core-foundation-sys",
+ "mini-nvcodec",
+ "socket2",
+ "windows",
 ]
 
 [[package]]
