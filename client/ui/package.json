@@ -12,6 +12,7 @@
   },
   "dependencies": {
     "@microsoft/signalr": "^11.0.0",
+    "@tauri-apps/api": "^2.12.5",
     "openapi-fetch": "^0.17.0",
     "react": "^19.3.1",
     "react-dom": "^19.3.1"

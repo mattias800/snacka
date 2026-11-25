@@ -11,6 +11,9 @@ importers:
       '@microsoft/signalr':
         specifier: ^11.0.0
         version: 11.0.0
+      '@tauri-apps/api':
+        specifier: ^2.12.5
+        version: 2.12.5
       openapi-fetch:
         specifier: ^0.17.0
         version: 0.17.0
@@ -292,6 +295,9 @@ packages:
 
   '@rolldown/pluginutils@1.1.1':
     resolution: {integrity: sha512-glFIJDvLNDtJhT9qrMFWLPbvS+skxgt4L0K8Ei2YtnhPysAJnsI7nyxSJxKj4ADeKX0OLjC4ntRkwpLOoS3rwA==}
+
+  '@tauri-apps/api@2.12.5':
+    resolution: {integrity: sha512-G9QIMt5fzED+aS4QhVK3w1HWLKpLIwH/MnpCr9z1ugGEHnS2ORmqrLkc0uALOjRK4qXJy+4Yiw8LDl/KicC1Hg==}
 
   '@tybys/wasm-util@0.10.5':
     resolution: {integrity: sha512-dOGOPxlaNV+G046mZzN+9C0dAcQZeSKcXiVaM0TYy/LM4ttTmgSBDxYfovcYI8Em3+eAbiAYpvWLOv8+ZVRJKA==}
@@ -873,6 +879,8 @@ snapshots:
     optional: true
 
   '@rolldown/pluginutils@1.1.1': {}
+
+  '@tauri-apps/api@2.12.5': {}
 
   '@tybys/wasm-util@0.10.5':
     dependencies:
