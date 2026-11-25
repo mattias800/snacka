@@ -57,8 +57,8 @@ public class AuthController : ControllerBase
         {
             var response = await _authService.RegisterAsync(request, cancellationToken);
 
-            // Broadcast to all connected clients that a new user registered
-            // This allows admin panels to update in real-time
+            // Tell admins (admin panel updates live). Only admins: the payload contains the email
+            // address, which used to be broadcast to every connected client (#20).
             var newUser = await _db.Users
                 .Include(u => u.InvitedBy)
                 .FirstOrDefaultAsync(u => u.Id == response.UserId, cancellationToken);
@@ -74,7 +74,11 @@ public class AuthController : ControllerBase
                     newUser.CreatedAt,
                     newUser.InvitedBy?.Username
                 );
-                await _hubContext.Clients.All.SendAsync("UserRegistered", adminUserResponse, cancellationToken);
+                var adminIds = await _db.Users
+                    .Where(u => u.IsServerAdmin)
+                    .Select(u => u.Id.ToString())
+                    .ToListAsync(cancellationToken);
+                await _hubContext.Clients.Users(adminIds).SendAsync("UserRegistered", adminUserResponse, cancellationToken);
             }
 
             return Ok(response);
