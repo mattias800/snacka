@@ -64,7 +64,7 @@ Idle CPU with the 10k-message list mounted, over 60 s, all processes of the app:
 - WebKit also has a feature `PreferPageRenderingUpdatesNear60FPS` (default on), possibly also what caps WKWebView
   on macOS. The app can turn it off (`SNACKA_WEBKIT_FULL_RATE=1`, `src-tauri/src/webkit_linux.rs`).
 - **Fixing both still gives 60 fps** (vblank match forced with an `LD_PRELOAD` shim + preference off), so a third
-  60 Hz limit remains, which I didn't find. Follow-up issue filed. None of this blocks shipping.
+  60 Hz limit remains, which I didn't find (#64). None of this blocks shipping.
 
 ## 2. Encode → UDP → decode matrix (loopback, #49)
 
@@ -118,7 +118,7 @@ distrobox). Columns as in the Windows table.
 6. **AV1 encode hangs the VCN** (`ring vcn_unified_0 timeout`, kernel ring reset, no full GPU reset) in 8 of 10 AV1
    runs: 1080p60, 1440p120, 4K60, 4K120; 1080p120 and 720p worked. `ffmpeg … -c:v av1_vaapi` with the same rate
    control (paced or not) from `testsrc2` + `hwupload` did **not** hang, so it's something specific to this pipeline
-   (VPP-written input surfaces or content) on Mesa 26.2.7. AV1 decode works. Follow-up issue filed; the GPU test
+   (VPP-written input surfaces or content) on Mesa 26.2.7. AV1 decode works. Tracked in #63; the GPU test
    only encodes AV1 with `SNACKA_TEST_AV1=1`.
 7. **Recovery works:** a receiver joining mid-stream asks for one keyframe and decodes within the first second; a
    sender restart (even switching H.264 → HEVC) is picked up as a new stream with no keyframe request needed.
@@ -140,7 +140,7 @@ distrobox). Columns as in the Windows table.
    aspect fit (the box is black, so no letterbox buffer), an empty input region passes clicks to the webview, and
    `wp_presentation` feedback reports when each frame reached the screen. Zero copies from decoder to compositor.
 2. **X11 child window: not done.** Plasma 6.7 has no X11 session, and under XWayland the app now returns an error
-   ("needs Wayland"). Follow-up issue.
+   ("needs Wayland"). Tracked in #65.
 3. GtkGLArea overlay: not needed.
 
 | Stream | Window | fps | Decode p50 | Capture → commit p50 / p99 | **Capture → on screen** p50 / p99 | Dropped / bad |
@@ -152,7 +152,7 @@ distrobox). Columns as in the Windows table.
 - "Commit" is the counterpart of Windows' "handed to DWM". "On screen" comes from `wp_presentation` (KWin reports the
   real scanout time on CLOCK_MONOTONIC, the same clock as the capture stamp), so it includes the compositor: KWin adds
   ~10 ms (1.8 refreshes at 180 Hz) after the commit. KWin **composites** the subsurface (0 zero-copy/overlay
-  presentations, even fullscreen); direct scanout of the video plane would remove most of that. Follow-up issue.
+  presentations, even fullscreen); direct scanout of the video plane would remove most of that (#65).
 - **Placement was verified on screenshots** at 150 % scaling: windowed, maximised (box 1675×877 CSS px → video
   1559×877 at x=74, pillarboxed), fullscreen (no title bar: box 1675×949 → video 1675×942) and resized to 900×820
   (box 868×652 → video 868×488, letterboxed). GTK 3 under KWin uses server-side decorations, so the webview starts at
@@ -166,9 +166,9 @@ Resized: [linux-native-surface-resized.jpg](linux-native-surface-resized.jpg) ·
 
 ## 4. Cross-machine (Mac → Linux)
 
-Not done yet: it needs the Mac running `spikes/stream-probe … send --host <linux-ip>`. The receiver side is ready
+Not done yet (#66): it needs the Mac running `spikes/stream-probe … send --host <linux-ip>`. The receiver side is ready
 (`examples/recv`, or the app with `SNACKA_STREAM_TEST_PORT`). Note that HEVC from VideoToolbox must decode on VAAPI.
 
 ## Not tested
-NVIDIA (NVENC/NVDEC on Linux; this machine is AMD only), Intel VAAPI, a real X11 session, IME input, window-resize
+NVIDIA (NVENC/NVDEC on Linux; this machine is AMD only) and Intel VAAPI (#66), a real X11 session, IME input, window-resize
 smoothness by eye, multi-monitor with mixed scaling, and the release build.
