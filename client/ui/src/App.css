@@ -106,3 +106,17 @@ ul.voice-presence { padding: 0 8px 4px 32px; }
 .voice-controls { display: flex; gap: 6px; margin-top: 6px; }
 .voice-controls button { background: var(--panel-2); border-radius: 4px; padding: 3px 10px; font-size: 13px; }
 .voice-controls button.danger { background: var(--danger); }
+
+.panel { padding: 24px; max-width: 640px; overflow-y: auto; display: flex; flex-direction: column; gap: 12px; }
+.panel h2 { font-size: 18px; margin: 8px 0 0; }
+.primary { background: var(--accent); border-radius: 6px; padding: 6px 14px; font-weight: 600; }
+.row { display: flex; gap: 8px; }
+.community-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 6px; }
+.community-list li { display: flex; align-items: center; gap: 12px; padding: 10px 12px; background: var(--panel); border-radius: 8px; }
+.community-list .avatar { width: 40px; height: 40px; border-radius: 12px; background: var(--panel-2); display: grid; place-items: center; font-weight: 600; flex: none; }
+.grow { flex: 1; min-width: 0; }
+.block { display: block; }
+.invite { display: grid; grid-template-columns: auto 1fr; gap: 8px 16px; align-items: center; margin: 0; }
+.invite dt { color: var(--muted); font-size: 13px; }
+.invite dd { margin: 0; display: flex; gap: 8px; align-items: center; }
+.invite [data-testid="invite-code"] { font-family: ui-monospace, monospace; font-size: 18px; letter-spacing: 1px; }

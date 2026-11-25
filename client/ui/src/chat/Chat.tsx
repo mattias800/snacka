@@ -5,6 +5,7 @@ import { createHub } from "../api/hub";
 import { MessageList, type MessageActions } from "../MessageList";
 import { StreamTest, inNativeApp } from "../StreamTest";
 import { VoicePanel, useVoice } from "../VoicePanel";
+import { BrowseCommunities, InviteFriends } from "./Onboarding";
 import { applyReaction, fromChannel, fromDm, upsert, type ChannelMessage, type ChatMessage, type DmMessage, type ReactionUpdated } from "./model";
 
 type Community = Schemas["CommunityResponse"];
@@ -42,6 +43,8 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   const [error, setError] = useState<string | null>(null);
   const [hubState, setHubState] = useState("connecting");
   const [showStreamTest, setShowStreamTest] = useState(false);
+  /** Replaces the message pane: joining/creating communities, or inviting friends. */
+  const [panel, setPanel] = useState<"browse" | "invite" | null>(null);
   const voice = useVoice(api);
   // Who is in which voice channel of the open community (LiveKit webhooks -> server -> hub).
   const [presence, setPresence] = useState<VoiceParticipant[]>([]);
@@ -109,6 +112,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     hub.on("ConversationMessageDeleted", (e: { conversationId: string; messageId: string }) => setMessages((prev) => prev.filter((m) => m.id !== e.messageId)));
     hub.on("ConversationCreated", () => void loadConversations().catch(() => {}));
 
+    hub.on("CommunityMemberAdded", (communityId: string) => {
+      if (communityRef.current?.id !== communityId) return;
+      void api.GET("/api/communities/{communityId}/members", { params: { path: { communityId } } }).then(ok).then(setMembers).catch(() => {});
+    });
     hub.on("VoiceParticipantJoined", (e: { channelId: string; participant: VoiceParticipant }) =>
       setPresence((prev) => [...prev.filter((p) => p.userId !== e.participant.userId), e.participant]),
     );
@@ -172,6 +179,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
 
   const openCommunity = (c: Community) =>
     run(async () => {
+      setPanel(null);
       setCommunity(c);
       communityRef.current = c;
       setPresence([]);
@@ -190,6 +198,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
 
   const openHome = () =>
     run(async () => {
+      setPanel(null);
       setCommunity(null);
       communityRef.current = null;
       await loadConversations();
@@ -198,6 +207,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
 
   const messageUser = (userId: string) =>
     run(async () => {
+      setPanel(null);
       const conversation = ok(await api.GET("/api/conversations/direct/{otherUserId}", { params: { path: { otherUserId: userId } } }));
       setCommunity(null);
       communityRef.current = null;
@@ -205,12 +215,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       await openView({ kind: "dm", conversation });
     });
 
-  const createCommunity = () =>
+  /** After joining or creating a community from the browse panel. */
+  const enterCommunity = (c: Community) =>
     run(async () => {
-      const name = prompt("Community name");
-      if (!name) return;
-      const c = ok(await api.POST("/api/communities", { body: { name, description: null } }));
-      await loadCommunities();
+      setCommunities(ok(await api.GET("/api/communities")));
       await openCommunity(c);
     });
 
@@ -296,7 +304,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
             {c.name.slice(0, 2).toUpperCase()}
           </button>
         ))}
-        <button title="Create community" onClick={() => void createCommunity()}>+</button>
+        <button className={panel === "browse" ? "active" : ""} title="Join or create a community" data-testid="browse" onClick={() => setPanel("browse")}>+</button>
       </nav>
       <aside className="channels">
         <header>{community?.name ?? "Direct messages"}</header>
@@ -364,6 +372,11 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
         )}
         <footer>
           <span>{auth.username}</span>
+          {auth.isServerAdmin && (
+            <button className="link" title="Invite a friend to this server" onClick={() => setPanel("invite")}>
+              Invite
+            </button>
+          )}
           <span className={`dot ${hubState}`} title={`Realtime: ${hubState}`} />
           {inNativeApp && (
             <button className="link" title="Native video surface test (spike #51)" onClick={() => setShowStreamTest((v) => !v)}>
@@ -373,7 +386,11 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
           <button className="link" onClick={props.onLogout}>Log out</button>
         </footer>
       </aside>
-      {showStreamTest ? (
+      {panel ? (
+        <main className="messages">
+          {panel === "browse" ? <BrowseCommunities api={api} onOpen={(c) => void enterCommunity(c)} /> : <InviteFriends api={api} serverUrl={serverUrl} />}
+        </main>
+      ) : showStreamTest ? (
         <main className="messages">
           <header>Stream test</header>
           <StreamTest />

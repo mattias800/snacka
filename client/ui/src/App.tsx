@@ -43,7 +43,9 @@ function useStreamTestHash(): number | null {
 
 export default function App() {
   const streamTestPort = useStreamTestHash();
-  const [serverUrl, setServerUrl] = useState<string>(load<string>(SERVER_KEY) ?? "http://localhost:5117");
+  // Invite links look like ?server=<url>&invite=<code> (see InviteFriends in chat/Chat.tsx).
+  const linkParams = useMemo(() => new URLSearchParams(window.location.search), []);
+  const [serverUrl, setServerUrl] = useState<string>(linkParams.get("server") ?? load<string>(SERVER_KEY) ?? "http://localhost:5117");
   const [auth, setAuth] = useState<Auth | null>(load<Auth>(AUTH_KEY));
   const tokenRef = useRef<string | null>(auth?.accessToken ?? null);
   tokenRef.current = auth?.accessToken ?? null;
@@ -68,7 +70,7 @@ export default function App() {
   return auth ? (
     <Chat serverUrl={serverUrl} api={api} auth={auth} tokenRef={tokenRef} onLogout={() => onAuth(null)} />
   ) : (
-    <Login serverUrl={serverUrl} setServerUrl={setServerUrl} api={api} onAuth={onAuth} />
+    <Login serverUrl={serverUrl} setServerUrl={setServerUrl} api={api} onAuth={onAuth} inviteCode={linkParams.get("invite")} />
   );
 }
 
@@ -77,13 +79,14 @@ function Login(props: {
   setServerUrl: (s: string) => void;
   api: ReturnType<typeof createApi>;
   onAuth: (a: Auth) => void;
+  inviteCode: string | null;
 }) {
   const { api } = props;
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register">(props.inviteCode ? "register" : "login");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [username, setUsername] = useState("");
-  const [invite, setInvite] = useState("");
+  const [invite, setInvite] = useState(props.inviteCode ?? "");
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<Schemas["SetupServerInfoResponse"] | null>(null);
 
