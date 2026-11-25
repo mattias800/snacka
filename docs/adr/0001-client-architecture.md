@@ -58,3 +58,30 @@ Findings from the November 2026 review:
   2. Tauri on Linux (WebKitGTK quirks).
   3. How mature Tauri's Android support is.
   4. The LiveKit Rust SDK's hardware encoding on Windows (#46).
+
+## Spike results (2026-11-25)
+
+The spike (#51, #49) answered the first three risks on real hardware. **The decision stands.**
+
+| Risk | Result |
+|---|---|
+| 1. Native video surface in the Tauri window | **Works on all three desktop OSes.** macOS: a layer-backed NSView above the WKWebView showing VideoToolbox IOSurfaces. Windows: a DXGI flip-model child window with Media Foundation D3D11 decode (#57). Linux: a Wayland subsurface with zero-copy VAAPI DMA-BUFs (#58; X11 still to do, #65). |
+| 2. Tauri on Linux (WebKitGTK) | **Good enough to ship.** No hitches, 30–40 ms mount, 17 ms typing→frame, near-zero idle CPU, on Wayland and XWayland. Like WKWebView on macOS, it renders the UI at 60 fps on high-refresh displays (#64). That only affects UI smoothness: game streams bypass the webview. |
+| 3. Tauri on Android | **Works:** the same UI with login and realtime chat in the emulator. Mobile layout and MediaCodec video remain (#47). |
+| 4. LiveKit Rust SDK hardware encoding on Windows | Not tested yet (#46). Voice works through the LiveKit JS SDK in the browser (#52). |
+
+Game-streaming loopback (synthetic GPU frames → hardware encode → UDP wire format → hardware decode), capture → decoded p50:
+
+| Machine | 1440p120 | 4K120 |
+|---|---|---|
+| Windows, RTX 4090 (NVENC, HEVC) | ~2–3 ms | **4.0 ms** |
+| Linux, Radeon 8060S iGPU (VAAPI, HEVC) | 5.5–8 ms | 12–13.5 ms |
+| macOS, M4 Pro (VideoToolbox, HEVC) | 6–9 ms | not reachable (~17 ms encode per frame) |
+
+Capture → on screen in the Tauri window: about 10 ms on macOS (1440p120) and 4.4–4.7 ms on Windows (4K120). On Linux it's 19–23 ms at 1440p120, measured end to end with `wp_presentation`; #65 tracks reducing it.
+
+The full reports are in `spikes/stream-probe/results-m4pro.md`, `client/results/windows-rtx4090.md` and `client/results/linux-radeon-8060s.md`.
+
+**Consequences for the engine (#49):**
+- **Pick the codec per GPU:** HEVC by default; AV1 where the encoder is reliable (it isn't on AMD/Mesa today, #63).
+- **Adaptive quality is required.** Laptops in power-saving modes and integrated GPUs at 4K120 sit right at the frame budget.
