@@ -92,13 +92,25 @@ func reportLoop(until endNs: UInt64?) {
 
 // MARK: sender side
 
+final class Counter {
+    private let lock = NSLock()
+    private var value = 0
+    func increment() { lock.lock(); value += 1; lock.unlock() }
+    func load() -> Int { lock.lock(); defer { lock.unlock() }; return value }
+}
+let sourceFrames = Counter()
+
 func runSender(host: String, port: UInt16) throws -> Thread {
     let source = FrameSource(width: width, height: height)
     let encoder = try Encoder(codec: codec, width: width, height: height, fps: fps, bitrateMbps: bitrate,
                               lowLatencyRC: lowLatency, realTime: realTime, quality: quality)
     config["lowLatencyRC"] = encoder.lowLatencyRC
     let sender = UdpSender(host: host, port: port)
-    encoder.onFrame = { frame in sender.send(frame, codec: codec) }
+    encoder.onFrame = { frame in
+        sender.send(frame, codec: codec)
+        stats.count("sentFrames")
+        stats.add("encodeOnly", frame.encodedNs - frame.captureNs)
+    }
     let thread = Thread {
         let period = UInt64(1_000_000_000 / fps)
         let start = nowNs() + 50_000_000
@@ -109,6 +121,7 @@ func runSender(host: String, port: UInt16) throws -> Thread {
             let deadline = start + frameId * period
             if nowNs() > deadline + period { late += 1 } else { sleepUntil(deadline) }
             let (buffer, captureNs) = source.next(frameId: frameId)
+            sourceFrames.increment()
             encoder.encode(buffer, frameId: frameId, captureNs: captureNs, forceKeyframe: frameId == 0)
             frameId += 1
         }
@@ -146,7 +159,20 @@ case "recv":
 case "send":
     let tx = try runSender(host: host, port: port)
     tx.start()
-    sleepUntil(nowNs() + UInt64((seconds + 1) * 1e9))
+    // Per-second sender report: frames that came out of the encoder and were sent.
+    let begin = nowNs()
+    var last = begin
+    var generatedBefore = 0
+    while nowNs() < begin + UInt64((seconds + 1) * 1e9) {
+        sleepUntil(last + 1_000_000_000)
+        let now = nowNs()
+        let line = stats.line(seconds: Double(now - last) / 1e9)
+        let generated = sourceFrames.load()
+        print("sender: generated \(generated - generatedBefore)/s | \(line)")
+        fflush(stdout)
+        generatedBefore = generated
+        last = now
+    }
 default:
     fputs("usage: stream-probe [loop|send|recv] [--width W --height H --fps N --codec h264|hevc --bitrate Mbps --seconds S --warmup S --realtime on|off --quality 0..1 --host H --port P --no-lowlatency --json path]\n", stderr)
     exit(2)

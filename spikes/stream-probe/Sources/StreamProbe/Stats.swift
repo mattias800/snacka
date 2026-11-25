@@ -8,7 +8,7 @@ final class Stats {
     private var interval: [String: [UInt64]] = [:]  // since the last printed line
     private var intervalCounters: [String: Int] = [:]
     var recording = false                            // false during warm-up
-    let stageOrder = ["encode", "network", "decode", "total"]
+    let stageOrder = ["encode", "encodeOnly", "network", "decode", "total"]
 
     func add(_ stage: String, _ ns: UInt64) {
         lock.lock()
@@ -50,7 +50,7 @@ final class Stats {
             parts.append(String(format: "%@ p50 %5.2f p99 %5.2f", stage, Stats.pct(v, 0.5), Stats.pct(v, 0.99)))
         }
         if let bytes = c["wireBytes"] { parts.append(String(format: "%.1f Mbps", Double(bytes) * 8 / seconds / 1e6)) }
-        for k in ["badBarcode", "dropped", "decodeErrors"] where (c[k] ?? 0) > 0 { parts.append("\(k) \(c[k]!)") }
+        for k in ["sentFrames", "badBarcode", "dropped", "decodeErrors"] where (c[k] ?? 0) > 0 { parts.append("\(k) \(c[k]!)") }
         return parts.joined(separator: " | ")
     }
 
