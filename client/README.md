@@ -20,3 +20,17 @@ cd ui && pnpm install && pnpm dev                              # http://localhos
 On a fresh server, the first account becomes admin. It needs the invite code printed in the server console.
 
 Regenerate the typed API client after server API changes: `pnpm gen:api` (needs the server running).
+
+## Android
+
+Needs a JDK 17+ and the Android SDK + NDK (on this Mac: `brew install openjdk@21 android-commandlinetools`).
+
+```bash
+export JAVA_HOME=/opt/homebrew/opt/openjdk@21/libexec/openjdk.jdk/Contents/Home
+export ANDROID_HOME=/opt/homebrew/share/android-commandlinetools
+export NDK_HOME=$ANDROID_HOME/ndk/27.0.12077973
+rustup target add aarch64-linux-android
+pnpm tauri android build --debug --target aarch64 --apk   # -> src-tauri/gen/android/app/build/outputs/apk/
+```
+
+From the Android emulator, the dev server on the Mac is `http://10.0.2.2:5117`. From a phone on the same Wi-Fi, run the server with `--urls http://0.0.0.0:5117` and use the Mac's LAN IP.
