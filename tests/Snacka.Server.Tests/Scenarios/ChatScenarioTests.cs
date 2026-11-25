@@ -117,15 +117,18 @@ public class ChatScenarioTests
     }
 
     [TestMethod]
-    public async Task OthersCannotEditOrDeleteYourMessage()
+    public async Task OthersCannotEditYourMessage_NorMembersDeleteIt()
     {
         await using var w = await CreateWorldAsync();
         var sent = await SendAsync(w.Bob, w.General, "bob's words");
 
         var edit = await w.Carol.Http.PutAsJsonAsync($"/api/channels/{w.General}/messages/{sent.Id}", new UpdateMessageRequest("carol was here"));
-        Assert.IsFalse(edit.IsSuccessStatusCode, "non-member edit");
+        Assert.AreEqual(HttpStatusCode.Forbidden, edit.StatusCode, "non-member edit");
         var memberEdit = await w.Alice.Http.PutAsJsonAsync($"/api/channels/{w.General}/messages/{sent.Id}", new UpdateMessageRequest("alice was here"));
-        Assert.IsFalse(memberEdit.IsSuccessStatusCode, "another member's edit");
+        Assert.AreEqual(HttpStatusCode.Forbidden, memberEdit.StatusCode, "another member's edit");
+        // A regular member can't delete someone else's message (the owner can: moderation).
+        var alices = await SendAsync(w.Alice, w.General, "alice's words");
+        Assert.AreEqual(HttpStatusCode.Forbidden, (await w.Bob.Http.DeleteAsync($"/api/channels/{w.General}/messages/{alices.Id}")).StatusCode, "a member deleting another's message");
 
         var history = await w.Bob.Http.GetFromJsonAsync<List<MessageResponse>>($"/api/channels/{w.General}/messages");
         Assert.AreEqual("bob's words", history!.Single(m => m.Id == sent.Id).Content);
@@ -236,5 +239,91 @@ public class ChatScenarioTests
         await w.Bob.WaitForAsync<ConversationMessageResponse>("ConversationMessageReceived", m => m.Id == secret.Id);
         await w.Carol.SettleAsync();
         Assert.IsFalse(w.Carol.Received<ConversationMessageResponse>("ConversationMessageReceived").Any(m => m.Id == secret.Id), "Carol still receives after removal");
+    }
+
+    [TestMethod]
+    public async Task Reactions_ReachOtherMembersOnce_WithTheRightCount()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Alice.Hub().InvokeAsync("JoinChannel", w.General);
+        var sent = await SendAsync(w.Alice, w.General, "pizza tonight?");
+
+        await Ok<ReactionUpdatedEvent>(await w.Bob.Http.PostAsJsonAsync($"/api/channels/{w.General}/messages/{sent.Id}/reactions", new AddReactionRequest("🍕")));
+        var added = await w.Alice.WaitForAsync<ReactionUpdatedEvent>("ReactionUpdated", e => e.MessageId == sent.Id && e.Added);
+        Assert.AreEqual(1, added.Count);
+        Assert.AreEqual(w.Bob.Id, added.UserId);
+
+        // Reacting twice with the same emoji doesn't count twice.
+        await w.Bob.Http.PostAsJsonAsync($"/api/channels/{w.General}/messages/{sent.Id}/reactions", new AddReactionRequest("🍕"));
+        var history = await w.Alice.Http.GetFromJsonAsync<List<MessageResponse>>($"/api/channels/{w.General}/messages");
+        Assert.AreEqual(1, history!.Single(m => m.Id == sent.Id).Reactions!.Single(r => r.Emoji == "🍕").Count);
+
+        (await w.Bob.Http.DeleteAsync($"/api/channels/{w.General}/messages/{sent.Id}/reactions/{Uri.EscapeDataString("🍕")}")).EnsureSuccessStatusCode();
+        await w.Alice.WaitForAsync<ReactionUpdatedEvent>("ReactionUpdated", e => e.MessageId == sent.Id && !e.Added && e.Count == 0);
+    }
+
+    [TestMethod]
+    public async Task MessageActions_ThroughAnotherChannelsUrl_AreRejected()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Bob.Hub().InvokeAsync("JoinChannel", w.General);
+        var sent = await SendAsync(w.Alice, w.General, "in #general");
+
+        // Same message id, but the URL says #random.
+        var react = await w.Alice.Http.PostAsJsonAsync($"/api/channels/{w.Random}/messages/{sent.Id}/reactions", new AddReactionRequest("👍"));
+        var edit = await w.Alice.Http.PutAsJsonAsync($"/api/channels/{w.Random}/messages/{sent.Id}", new UpdateMessageRequest("edited"));
+
+        Assert.AreEqual(HttpStatusCode.NotFound, react.StatusCode);
+        Assert.AreEqual(HttpStatusCode.NotFound, edit.StatusCode);
+        var history = await w.Bob.Http.GetFromJsonAsync<List<MessageResponse>>($"/api/channels/{w.General}/messages");
+        Assert.AreEqual("in #general", history!.Single(m => m.Id == sent.Id).Content);
+    }
+
+    [TestMethod]
+    public async Task Pins_AuthorOrAdminOnly_AndOthersSeeThem()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Alice.Hub().InvokeAsync("JoinChannel", w.General);
+        var alices = await SendAsync(w.Alice, w.General, "house rules");
+
+        var bobPins = await w.Bob.Http.PostAsync($"/api/channels/{w.General}/messages/{alices.Id}/pin", null);
+        Assert.AreEqual(HttpStatusCode.Forbidden, bobPins.StatusCode, "a regular member pinning someone else's message");
+
+        await w.Bob.Hub().InvokeAsync("JoinChannel", w.General);
+        (await w.Alice.Http.PostAsync($"/api/channels/{w.General}/messages/{alices.Id}/pin", null)).EnsureSuccessStatusCode();
+        var pinned = await w.Bob.WaitForAsync<MessagePinnedEvent>("MessagePinned", e => e.MessageId == alices.Id);
+        Assert.IsTrue(pinned.IsPinned);
+    }
+
+    [TestMethod]
+    public async Task ThreadReply_ReachesTheChannel_WithReplyCount()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Bob.Hub().InvokeAsync("JoinChannel", w.General);
+        var parent = await SendAsync(w.Bob, w.General, "who's in for saturday?");
+
+        for (var i = 1; i <= 2; i++)
+            await Ok<MessageResponse>(await w.Alice.Http.PostAsJsonAsync($"/api/messages/{parent.Id}/replies", new SendMessageRequest($"me {i}")));
+
+        await w.Bob.WaitForAsync<System.Text.Json.JsonElement>("ThreadMetadataUpdated", e => e.GetProperty("replyCount").GetInt32() == 2);
+        var thread = await w.Bob.Http.GetFromJsonAsync<ThreadResponse>($"/api/messages/{parent.Id}/thread");
+        Assert.AreEqual(2, thread!.TotalReplyCount);
+        // Thread replies stay out of the main channel history.
+        var history = await w.Bob.Http.GetFromJsonAsync<List<MessageResponse>>($"/api/channels/{w.General}/messages");
+        Assert.AreEqual(1, history!.Count);
+    }
+
+    [TestMethod]
+    public async Task ConversationTyping_ReachesTheOtherParticipantOnly()
+    {
+        await using var w = await CreateWorldAsync();
+        var dm = await Ok<ConversationResponse>(await w.Alice.Http.PostAsJsonAsync("/api/conversations", new CreateConversationRequest([w.Bob.Id], null)));
+
+        await w.Alice.Hub().InvokeAsync("SendConversationTyping", dm.Id);
+
+        await w.Bob.WaitForAsync<ConversationTypingEvent>("ConversationUserTyping", e => e.ConversationId == dm.Id && e.UserId == w.Alice.Id);
+        await Task.WhenAll(w.Alice.SettleAsync(), w.Carol.SettleAsync());
+        Assert.AreEqual(0, w.Alice.Received<ConversationTypingEvent>("ConversationUserTyping").Count, "own typing echoed back");
+        Assert.AreEqual(0, w.Carol.Received<ConversationTypingEvent>("ConversationUserTyping").Count);
     }
 }

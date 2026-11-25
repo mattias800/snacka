@@ -18,7 +18,8 @@ public sealed class SimulatedUser : IAsyncDisposable
     /// <summary>Hub events this user listens for (add more as scenarios need them).</summary>
     private static readonly string[] Events =
     [
-        "ReceiveChannelMessage", "ChannelMessageEdited", "ChannelMessageDeleted", "ReactionUpdated",
+        "ReceiveChannelMessage", "ChannelMessageEdited", "ChannelMessageDeleted", "ReactionUpdated", "MessagePinned",
+        "ReceiveThreadReply", "ThreadMetadataUpdated", "ConversationUserTyping",
         "ConversationCreated", "ConversationMessageReceived", "ConversationMessageUpdated", "ConversationMessageDeleted",
         "AddedToConversation", "VoiceParticipantJoined", "VoiceParticipantLeft", "CommunityMemberAdded",
     ];
