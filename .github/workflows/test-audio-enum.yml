@@ -39,7 +39,7 @@ jobs:
           dotnet build src/Snacka.Client -c Release
 
   test-macos:
-    runs-on: macos-14
+    runs-on: macos-latest
     steps:
       - uses: actions/checkout@v4
 
