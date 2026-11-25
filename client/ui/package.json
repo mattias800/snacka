@@ -1,0 +1,28 @@
+{
+  "name": "snacka-ui",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -b && vite build",
+    "lint": "oxlint",
+    "preview": "vite preview",
+    "gen:api": "pnpm dlx --package openapi-typescript@7 --package typescript@5.9 openapi-typescript ${SNACKA_SERVER:-http://localhost:5117}/openapi/v1.json -o src/api/schema.d.ts"
+  },
+  "dependencies": {
+    "@microsoft/signalr": "^11.0.0",
+    "openapi-fetch": "^0.17.0",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1"
+  },
+  "devDependencies": {
+    "@types/node": "^24.19.2",
+    "@types/react": "^19.3.0",
+    "@types/react-dom": "^19.3.0",
+    "@vitejs/plugin-react": "^6.1.2",
+    "oxlint": "^1.90.0",
+    "typescript": "~7.0.2",
+    "vite": "^8.3.6"
+  }
+}
