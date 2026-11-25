@@ -1,17 +1,79 @@
-import { memo, useEffect, useLayoutEffect, useRef } from "react";
+import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { Schemas } from "./api/client";
+import type { ChatMessage } from "./chat/model";
 
-export type Message = Schemas["MessageResponse"];
+export type Message = ChatMessage;
+
+/** What the current user may do to messages in this list (all optional: the benchmark has none). */
+export type MessageActions = {
+  myId: string;
+  /** Owners, admins and moderators may delete anyone's message. */
+  canModerate: boolean;
+  onEdit?: (id: string, content: string) => void;
+  onDelete?: (id: string) => void;
+  onReact?: (id: string, emoji: string, add: boolean) => void;
+};
+
+const QUICK_REACTIONS = ["👍", "❤️", "😂"];
 
 const timeFormat = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", second: "2-digit" });
 
-const MessageBody = memo(function MessageBody({ m }: { m: Message }) {
+const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; actions?: MessageActions }) {
+  const [editing, setEditing] = useState(false);
+  const mine = actions?.myId === m.authorId;
+  const canDelete = actions?.onDelete && (mine || actions.canModerate);
   return (
     <>
-      <strong>{m.authorEffectiveDisplayName}</strong>
+      <strong>{m.authorName}</strong>
       <time>{timeFormat.format(new Date(m.createdAt))}</time>
-      <p>{m.content}</p>
+      {m.edited && <span className="muted edited"> (edited)</span>}
+      {actions && !editing && (
+        <span className="message-actions">
+          {actions.onReact && m.reactions !== null &&
+            QUICK_REACTIONS.map((emoji) => (
+              <button key={emoji} title={`React ${emoji}`} onClick={() => actions.onReact?.(m.id, emoji, !m.reactions?.some((r) => r.emoji === emoji && r.mine))}>
+                {emoji}
+              </button>
+            ))}
+          {mine && actions.onEdit && <button title="Edit" onClick={() => setEditing(true)}>✏️</button>}
+          {canDelete && (
+            <button title="Delete" onClick={() => confirm("Delete this message?") && actions.onDelete?.(m.id)}>
+              🗑️
+            </button>
+          )}
+        </span>
+      )}
+      {editing ? (
+        <form
+          className="edit-message"
+          onSubmit={(e) => {
+            e.preventDefault();
+            const content = String(new FormData(e.currentTarget).get("content") ?? "").trim();
+            if (content && content !== m.content) actions?.onEdit?.(m.id, content);
+            setEditing(false);
+          }}
+        >
+          <input name="content" defaultValue={m.content} autoFocus onKeyDown={(e) => e.key === "Escape" && setEditing(false)} aria-label="Edit message" />
+        </form>
+      ) : (
+        <p>{m.content}</p>
+      )}
+      {m.reactions && m.reactions.length > 0 && (
+        <div className="reactions">
+          {m.reactions.map((r) => (
+            <button
+              key={r.emoji}
+              className={r.mine ? "mine" : ""}
+              data-testid="reaction"
+              data-emoji={r.emoji}
+              data-count={r.count}
+              onClick={() => actions?.onReact?.(m.id, r.emoji, !r.mine)}
+            >
+              {r.emoji} {r.count}
+            </button>
+          ))}
+        </div>
+      )}
     </>
   );
 });
@@ -26,7 +88,7 @@ const STICKY_THRESHOLD = 48;
  *
  * Used by the chat view and by the UI benchmark, so both measure the same thing.
  */
-export function MessageList({ messages }: { messages: Message[] }) {
+export function MessageList({ messages, actions }: { messages: Message[]; actions?: MessageActions }) {
   const scrollerRef = useRef<HTMLDivElement>(null);
   const atBottomRef = useRef(true);
 
@@ -67,7 +129,7 @@ export function MessageList({ messages }: { messages: Message[] }) {
             ref={virtualizer.measureElement}
             style={{ transform: `translateY(${row.start}px)` }}
           >
-            <MessageBody m={messages[row.index]} />
+            <MessageBody m={messages[row.index]} actions={actions} />
           </li>
         ))}
       </ol>

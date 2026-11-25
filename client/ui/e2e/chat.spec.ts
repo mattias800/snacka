@@ -13,7 +13,7 @@ test.beforeAll(() => ensureCommunity(COMMUNITY));
 const messages = (page: Page, text: string) => page.getByTestId("message").filter({ hasText: text });
 
 async function send(page: Page, text: string) {
-  const input = page.getByPlaceholder(/^Message #/);
+  const input = page.getByLabel("Message", { exact: true });
   await input.fill(text);
   await input.press("Enter");
 }
@@ -21,7 +21,7 @@ async function send(page: Page, text: string) {
 test("Alice and Bob see each other's messages exactly once", async ({ browser }) => {
   const alice = await logIn(browser, "alice", COMMUNITY);
   const bob = await logIn(browser, "bob", COMMUNITY);
-  for (const page of [alice, bob]) await expect(page.locator(".dot.connected")).toBeVisible({ timeout: 15_000 });
+  for (const page of [alice, bob]) await expect(page.locator(".dot.connected").last()).toBeVisible({ timeout: 15_000 });
 
   const run = Date.now().toString(36);
   const hello = `hello bob ${run}`;
@@ -47,8 +47,49 @@ test("Alice and Bob see each other's messages exactly once", async ({ browser })
   const ids = await bob.getByTestId("message").evaluateAll((els) => els.map((e) => e.textContent ?? ""));
   expect(ids.findIndex((t) => t.includes(hello))).toBeLessThan(ids.findIndex((t) => t.includes(reply)));
 
-  await expect(bob.locator(".dot.connected")).toBeVisible({ timeout: 15_000 });
+  await expect(bob.locator(".dot.connected").last()).toBeVisible({ timeout: 15_000 });
   const after = `back again ${run}`;
   await send(alice, after);
   await expect(messages(bob, after)).toHaveCount(1, { timeout: 10_000 });
+});
+
+test("Reactions, edits and deletes show up on the other screen", async ({ browser }) => {
+  const alice = await logIn(browser, "alice", COMMUNITY);
+  const bob = await logIn(browser, "bob", COMMUNITY);
+  for (const page of [alice, bob]) await expect(page.locator(".dot.connected").last()).toBeVisible({ timeout: 15_000 });
+  const run = Date.now().toString(36);
+  const text = `pizza tonight? ${run}`;
+  await send(alice, text);
+  const onBob = messages(bob, text);
+  await expect(onBob).toHaveCount(1, { timeout: 10_000 });
+
+  // Bob reacts; Alice sees the count.
+  await onBob.hover();
+  await onBob.getByTitle("React 👍").click();
+  const chip = messages(alice, text).locator('[data-testid="reaction"][data-emoji="👍"]');
+  await expect(chip).toHaveAttribute("data-count", "1", { timeout: 10_000 });
+
+  // Alice reacts too (count 2), then Bob takes his back (count 1).
+  await chip.click();
+  await expect(onBob.locator('[data-testid="reaction"][data-emoji="👍"]')).toHaveAttribute("data-count", "2", { timeout: 10_000 });
+  await onBob.locator('[data-testid="reaction"][data-emoji="👍"]').click();
+  await expect(chip).toHaveAttribute("data-count", "1", { timeout: 10_000 });
+
+  // Alice edits; Bob sees the new text, marked edited.
+  const edited = `pizza at 7? ${run}`;
+  const mine = messages(alice, text);
+  await mine.hover();
+  await mine.getByTitle("Edit").click();
+  await alice.getByLabel("Edit message").fill(edited);
+  await alice.getByLabel("Edit message").press("Enter");
+  await expect(messages(bob, edited)).toHaveCount(1, { timeout: 10_000 });
+  await expect(messages(bob, edited)).toContainText("(edited)");
+  await expect(messages(bob, text)).toHaveCount(0);
+
+  // Alice deletes; it disappears for Bob.
+  alice.on("dialog", (d) => void d.accept());
+  await messages(alice, edited).hover();
+  await messages(alice, edited).getByTitle("Delete").click();
+  await expect(messages(bob, edited)).toHaveCount(0, { timeout: 10_000 });
+  await expect(messages(alice, edited)).toHaveCount(0);
 });

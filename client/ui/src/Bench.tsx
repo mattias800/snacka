@@ -27,10 +27,11 @@ function makeMessages(n: number, offset = 0): Message[] {
       id: `bench-${offset + i}`,
       content: rand() < 0.05 ? `${content}\n${content}` : content,
       authorId: author,
-      authorUsername: author,
-      authorEffectiveDisplayName: author,
+      authorName: author,
       createdAt: new Date(Date.UTC(2026, 10, 25, 12, 0, 0) + (offset + i) * 7000).toISOString(),
-    } as Message;
+      edited: false,
+      reactions: null,
+    };
   });
 }
 
