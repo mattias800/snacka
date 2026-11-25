@@ -62,6 +62,8 @@ export function MessageList({ messages }: { messages: Message[] }) {
           <li
             key={row.key}
             data-index={row.index}
+            data-testid="message"
+            data-message-id={messages[row.index].id}
             ref={virtualizer.measureElement}
             style={{ transform: `translateY(${row.start}px)` }}
           >

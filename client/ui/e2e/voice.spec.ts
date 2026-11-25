@@ -1,4 +1,5 @@
-import { expect, test, type Browser, type Page } from "@playwright/test";
+import { expect, test, type Page } from "@playwright/test";
+import { ensureCommunity, logIn } from "./support";
 
 /**
  * "Alice & Bob as code" (#23) for voice (#52): two browsers with fake microphones join the same
@@ -6,52 +7,9 @@ import { expect, test, type Browser, type Page } from "@playwright/test";
  * Chrome's fake-mic beep), which proves server tokens, LiveKit, WebRTC and the UI end to end.
  */
 
-const SERVER = process.env.SNACKA_SERVER ?? "http://localhost:5117";
-const PASSWORD = "Password123!";
 const COMMUNITY = "Voice E2E";
 
-async function api<T>(path: string, init: RequestInit & { token?: string } = {}): Promise<T> {
-  const res = await fetch(`${SERVER}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init.token ? { Authorization: `Bearer ${init.token}` } : {}) },
-  });
-  if (!res.ok) throw new Error(`${init.method ?? "GET"} ${path}: ${res.status} ${await res.text()}`);
-  return (res.status === 204 ? undefined : await res.json()) as T;
-}
-
-/** Logs in, registering first if needed (dev servers expose a bootstrap invite). */
-async function ensureUser(name: string): Promise<string> {
-  const email = `${name}@test.com`;
-  const login = async () => (await api<{ accessToken: string }>("/api/Auth/login", { method: "POST", body: JSON.stringify({ email, password: PASSWORD }) })).accessToken;
-  try {
-    return await login();
-  } catch {
-    const { bootstrapInviteCode } = await api<{ bootstrapInviteCode: string | null }>("/api/health");
-    await api("/api/Auth/register", { method: "POST", body: JSON.stringify({ username: name, email, password: PASSWORD, inviteCode: bootstrapInviteCode }) });
-    return await login();
-  }
-}
-
-test.beforeAll(async () => {
-  const alice = await ensureUser("alice");
-  const bob = await ensureUser("bob");
-  type Community = { id: string; name: string };
-  let community = (await api<Community[]>("/api/communities", { token: alice })).find((c) => c.name === COMMUNITY);
-  community ??= await api<Community>("/api/communities", { method: "POST", token: alice, body: JSON.stringify({ name: COMMUNITY, description: null }) });
-  const bobs = await api<Community[]>("/api/communities", { token: bob });
-  if (!bobs.some((c) => c.id === community!.id)) await api(`/api/communities/${community.id}/join`, { method: "POST", token: bob });
-});
-
-async function logIn(browser: Browser, name: string): Promise<Page> {
-  const page = await (await browser.newContext()).newPage();
-  await page.goto("/");
-  await page.getByLabel("Server").fill(SERVER);
-  await page.getByLabel("Email").fill(`${name}@test.com`);
-  await page.getByLabel("Password").fill(PASSWORD);
-  await page.getByRole("button", { name: "Log in" }).click();
-  await page.getByTitle(COMMUNITY).click();
-  return page;
-}
+test.beforeAll(() => ensureCommunity(COMMUNITY));
 
 async function joinVoice(page: Page) {
   await page.getByTestId("voice-channel").first().click();
@@ -59,8 +17,8 @@ async function joinVoice(page: Page) {
 }
 
 test("Alice and Bob hear each other in a voice channel", async ({ browser }) => {
-  const alice = await logIn(browser, "alice");
-  const bob = await logIn(browser, "bob");
+  const alice = await logIn(browser, "alice", COMMUNITY);
+  const bob = await logIn(browser, "bob", COMMUNITY);
   // Presence: Bob, not in voice, sees Alice appear in the channel list (LiveKit webhook -> server -> hub).
   await expect(bob.getByTestId("voice-presence")).toHaveCount(0, { timeout: 15_000 });
   await joinVoice(alice);
