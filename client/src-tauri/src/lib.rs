@@ -26,6 +26,15 @@ fn start_test_stream(app: tauri::AppHandle, window: tauri::WebviewWindow, port: 
     }
 }
 
+/// Receives UI benchmark results (see ui/src/Bench.tsx) and prints them for automated runs.
+#[tauri::command]
+fn report_bench(app: tauri::AppHandle, json: String) {
+    println!("BENCH {json}");
+    if std::env::var_os("SNACKA_BENCH_EXIT").is_some() {
+        app.exit(0);
+    }
+}
+
 /// Places the native video surface over the given rectangle (CSS pixels, top-left origin).
 #[tauri::command]
 fn set_video_rect(x: f64, y: f64, width: f64, height: f64, viewport_height: f64, visible: bool) {
@@ -40,6 +49,13 @@ pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
             // SNACKA_STREAM_TEST_PORT=9300 opens the native surface test directly (automated runs).
+            // SNACKA_BENCH=1 runs the UI benchmark (results printed as `BENCH {json}`).
+            if std::env::var_os("SNACKA_BENCH").is_some() {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.eval("location.hash = 'bench'; location.reload()");
+                }
+            }
             if let Ok(port) = std::env::var("SNACKA_STREAM_TEST_PORT") {
                 use tauri::Manager;
                 if let Some(w) = app.get_webview_window("main") {
@@ -48,7 +64,7 @@ pub fn run() {
             }
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![core_info, start_test_stream, set_video_rect])
+        .invoke_handler(tauri::generate_handler![core_info, start_test_stream, set_video_rect, report_bench])
         .run(tauri::generate_context!())
         .expect("error while running Snacka");
 }

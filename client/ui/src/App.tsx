@@ -3,6 +3,8 @@ import type { HubConnection } from "@microsoft/signalr";
 import { createApi, ok, type Auth, type Schemas } from "./api/client";
 import { createHub } from "./api/hub";
 import { StreamTest, inNativeApp } from "./StreamTest";
+import { Bench } from "./Bench";
+import { MessageList } from "./MessageList";
 import "./App.css";
 
 type Community = Schemas["CommunityResponse"];
@@ -61,6 +63,8 @@ export default function App() {
     save(AUTH_KEY, a);
     save(SERVER_KEY, serverUrl);
   };
+
+  if (window.location.hash === "#bench") return <Bench />;
 
   if (streamTestPort !== null && inNativeApp) {
     return (
@@ -315,15 +319,7 @@ function Chat(props: {
       <main className="messages">
         <header>{channel ? `# ${channel.name}` : "Pick a community"}</header>
         {error && <p className="error">{error}</p>}
-        <ol>
-          {messages.map((m) => (
-            <li key={m.id}>
-              <strong>{m.authorEffectiveDisplayName}</strong>
-              <time>{new Date(m.createdAt).toLocaleTimeString()}</time>
-              <p>{m.content}</p>
-            </li>
-          ))}
-        </ol>
+        <MessageList messages={messages} />
         {channel && (
           <form onSubmit={send}>
             <input value={draft} onChange={(e) => setDraft(e.target.value)} placeholder={`Message #${channel.name}`} autoFocus />

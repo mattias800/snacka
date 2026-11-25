@@ -55,3 +55,10 @@ input { font: inherit; color: var(--text); background: var(--bg); border: 1px so
 .stream-controls button { background: var(--accent); border-radius: 6px; padding: 6px 14px; }
 .stream-box { flex: 1; min-height: 200px; background: #000; border-radius: 8px; }
 .stream-stats { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
+
+.bench { height: 100vh; display: flex; flex-direction: column; background: var(--panel-2); }
+.bench header { padding: 10px 16px; font-weight: 600; display: flex; gap: 12px; align-items: center; }
+.bench header button { background: var(--accent); border-radius: 6px; padding: 4px 10px; font-weight: 400; }
+.bench pre { margin: 0 16px; max-height: 30vh; overflow: auto; font-size: 12px; color: var(--muted); }
+.bench-list { flex: 1; min-height: 0; }
+.bench input { margin: 8px 16px 16px; width: auto; }
