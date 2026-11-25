@@ -2,6 +2,10 @@
 mod video_surface;
 #[cfg(windows)]
 mod video_surface_windows;
+#[cfg(target_os = "linux")]
+mod video_surface_linux;
+#[cfg(target_os = "linux")]
+mod webkit_linux;
 
 /// Reports which native core is running, so the UI can tell it's inside the desktop/Android app.
 #[tauri::command]
@@ -28,10 +32,16 @@ fn start_test_stream(app: tauri::AppHandle, window: tauri::WebviewWindow, port: 
         video_surface_windows::attach(hwnd.0 as isize)?;
         video_surface_windows::start(app, port)
     }
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    {
+        // A Wayland subsurface of the Tauri window, above the WebKitGTK content.
+        video_surface_linux::attach(&window)?;
+        video_surface_linux::start(app, port)
+    }
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     {
         let _ = (app, window, port);
-        Err("native video surface is only implemented on macOS and Windows so far".into())
+        Err("native video surface is only implemented on macOS, Windows and Linux so far".into())
     }
 }
 
@@ -51,7 +61,9 @@ fn set_video_rect(x: f64, y: f64, width: f64, height: f64, viewport_height: f64,
     video_surface::set_rect(x, y, width, height, viewport_height, visible);
     #[cfg(windows)]
     video_surface_windows::set_rect(x, y, width, height, viewport_height, visible);
-    #[cfg(not(any(target_os = "macos", windows)))]
+    #[cfg(target_os = "linux")]
+    video_surface_linux::set_rect(x, y, width, height, viewport_height, visible);
+    #[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
     let _ = (x, y, width, height, viewport_height, visible);
 }
 
@@ -59,6 +71,20 @@ fn set_video_rect(x: f64, y: f64, width: f64, height: f64, viewport_height: f64,
 pub fn run() {
     tauri::Builder::default()
         .setup(|app| {
+            // WebKit renders pages near 60 fps by default, whatever the display's refresh rate.
+            // SNACKA_WEBKIT_FULL_RATE=1 turns that off (being evaluated, see #58).
+            #[cfg(target_os = "linux")]
+            if std::env::var_os("SNACKA_WEBKIT_FULL_RATE").is_some() {
+                use tauri::Manager;
+                if let Some(w) = app.get_webview_window("main") {
+                    let _ = w.with_webview(|webview| {
+                        use gtk::glib::object::ObjectType;
+                        let view = webview.inner();
+                        let previous = webkit_linux::set_feature(view.as_ptr().cast(), "PreferPageRenderingUpdatesNear60FPS", false);
+                        eprintln!("webkit: PreferPageRenderingUpdatesNear60FPS was {previous:?}, now false");
+                    });
+                }
+            }
             // SNACKA_STREAM_TEST_PORT=9300 opens the native surface test directly (automated runs).
             // SNACKA_BENCH=1 runs the UI benchmark (results printed as `BENCH {json}`).
             if std::env::var_os("SNACKA_BENCH").is_some() {

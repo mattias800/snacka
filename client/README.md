@@ -21,6 +21,21 @@ On a fresh server, the first account becomes admin. It needs the invite code pri
 
 Regenerate the typed API client after server API changes: `pnpm gen:api` (needs the server running).
 
+## Linux
+
+Needs the Tauri prerequisites plus VAAPI and FFmpeg development files (the Rust core links the system libavcodec and generates libva bindings with bindgen):
+
+```bash
+# Fedora (H.264/HEVC need RPM Fusion's ffmpeg and mesa-va-drivers-freeworld)
+sudo dnf install webkit2gtk4.1-devel gtk3-devel libsoup3-devel openssl-devel librsvg2-devel libxdo-devel \
+  clang-devel libva-devel ffmpeg-devel
+# Debian/Ubuntu
+sudo apt install libwebkit2gtk-4.1-dev libgtk-3-dev libssl-dev librsvg2-dev libxdo-dev \
+  libclang-dev libva-dev libavcodec-dev libavutil-dev
+```
+
+On immutable distros (Bazzite, Silverblue) build inside a distrobox/toolbox with those packages. `cargo test -p snacka-core` includes a VAAPI encode/decode round trip on the GPU (skipped without a VAAPI device). Results and how to run the matrix: [results/linux-radeon-8060s.md](results/linux-radeon-8060s.md).
+
 ## Android
 
 Needs a JDK 17+ and the Android SDK + NDK (on this Mac: `brew install openjdk@21 android-commandlinetools`).
