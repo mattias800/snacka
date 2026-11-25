@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HubConnection } from "@microsoft/signalr";
 import { createApi, ok, type Auth, type Schemas } from "./api/client";
 import { createHub } from "./api/hub";
+import { StreamTest, inNativeApp } from "./StreamTest";
 import "./App.css";
 
 type Community = Schemas["CommunityResponse"];
@@ -32,7 +33,23 @@ function save(key: string, value: unknown): void {
   }
 }
 
+/** `#stream-test-<port>` opens the native video surface test directly (used by automated runs). */
+function useStreamTestHash(): number | null {
+  const parse = () => {
+    const m = /^#stream-test-(\d+)$/.exec(window.location.hash);
+    return m ? Number(m[1]) : null;
+  };
+  const [port, setPort] = useState<number | null>(parse);
+  useEffect(() => {
+    const onHash = () => setPort(parse());
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, []);
+  return port;
+}
+
 export default function App() {
+  const streamTestPort = useStreamTestHash();
   const [serverUrl, setServerUrl] = useState<string>(load<string>(SERVER_KEY) ?? "http://localhost:5117");
   const [auth, setAuth] = useState<Auth | null>(load<Auth>(AUTH_KEY));
   const tokenRef = useRef<string | null>(auth?.accessToken ?? null);
@@ -44,6 +61,14 @@ export default function App() {
     save(AUTH_KEY, a);
     save(SERVER_KEY, serverUrl);
   };
+
+  if (streamTestPort !== null && inNativeApp) {
+    return (
+      <main className="messages" style={{ height: "100vh" }}>
+        <StreamTest autoStartPort={streamTestPort} />
+      </main>
+    );
+  }
 
   return auth ? (
     <Chat serverUrl={serverUrl} api={api} auth={auth} tokenRef={tokenRef} onLogout={() => onAuth(null)} />
@@ -155,6 +180,7 @@ function Chat(props: {
   const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [hubState, setHubState] = useState("connecting");
+  const [showStreamTest, setShowStreamTest] = useState(false);
   const hubRef = useRef<HubConnection | null>(null);
   const channelRef = useRef<Channel | null>(null);
   channelRef.current = channel;
@@ -272,9 +298,20 @@ function Chat(props: {
         <footer>
           <span>{props.auth.username}</span>
           <span className={`dot ${hubState}`} title={`Realtime: ${hubState}`} />
+          {inNativeApp && (
+            <button className="link" title="Native video surface test (spike #51)" onClick={() => setShowStreamTest((v) => !v)}>
+              📺
+            </button>
+          )}
           <button className="link" onClick={props.onLogout}>Log out</button>
         </footer>
       </aside>
+      {showStreamTest ? (
+        <main className="messages">
+          <header>Stream test</header>
+          <StreamTest />
+        </main>
+      ) : (
       <main className="messages">
         <header>{channel ? `# ${channel.name}` : "Pick a community"}</header>
         {error && <p className="error">{error}</p>}
@@ -293,6 +330,7 @@ function Chat(props: {
           </form>
         )}
       </main>
+      )}
     </div>
   );
 }

@@ -48,3 +48,10 @@ input { font: inherit; color: var(--text); background: var(--bg); border: 1px so
   .messages { grid-column: 1 / -1; }
   .communities { grid-row: 1 / 2; }
 }
+
+.stream-test { display: flex; flex-direction: column; gap: 12px; padding: 16px; flex: 1; min-height: 0; }
+.stream-controls { display: flex; gap: 12px; align-items: center; }
+.stream-controls input { width: 100px; }
+.stream-controls button { background: var(--accent); border-radius: 6px; padding: 6px 14px; }
+.stream-box { flex: 1; min-height: 200px; background: #000; border-radius: 8px; }
+.stream-stats { margin: 0; color: var(--muted); font-variant-numeric: tabular-nums; }
