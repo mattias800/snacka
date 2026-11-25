@@ -2,6 +2,8 @@ import { useEffect, useLayoutEffect, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 
+const fmt = (v: number | null) => (v === null ? "–" : v.toFixed(1));
+
 /** True when running inside the Tauri desktop/mobile app (not a plain browser). */
 export const inNativeApp = typeof window !== "undefined" && "__TAURI_INTERNALS__" in window;
 
@@ -9,9 +11,9 @@ type StreamStats = {
   fps: number;
   width: number;
   height: number;
-  decode_p50_ms: number;
-  to_layer_p50_ms: number;
-  to_layer_p99_ms: number;
+  decode_p50_ms: number | null;
+  to_layer_p50_ms: number | null;
+  to_layer_p99_ms: number | null;
   dropped: number;
   bad: number;
 };
@@ -36,7 +38,14 @@ export function StreamTest({ autoStartPort }: { autoStartPort?: number }) {
     if (!el || !running) return;
     const sync = () => {
       const r = el.getBoundingClientRect();
-      void invoke("set_video_rect", { x: r.left, y: r.top, width: r.width, height: r.height, visible: true });
+      void invoke("set_video_rect", {
+        x: r.left,
+        y: r.top,
+        width: r.width,
+        height: r.height,
+        viewportHeight: window.innerHeight,
+        visible: true,
+      });
     };
     sync();
     const observer = new ResizeObserver(sync);
@@ -47,7 +56,7 @@ export function StreamTest({ autoStartPort }: { autoStartPort?: number }) {
       observer.disconnect();
       window.removeEventListener("resize", sync);
       window.removeEventListener("scroll", sync, true);
-      void invoke("set_video_rect", { x: 0, y: 0, width: 0, height: 0, visible: false });
+      void invoke("set_video_rect", { x: 0, y: 0, width: 0, height: 0, viewportHeight: window.innerHeight, visible: false });
     };
   }, [running]);
 
@@ -87,8 +96,8 @@ export function StreamTest({ autoStartPort }: { autoStartPort?: number }) {
       <div ref={boxRef} className="stream-box" />
       {stats && (
         <p className="stream-stats">
-          {stats.width}×{stats.height} · {stats.fps.toFixed(0)} fps · decode {stats.decode_p50_ms.toFixed(1)} ms ·
-          capture→layer p50 <strong>{stats.to_layer_p50_ms.toFixed(1)} ms</strong> p99 {stats.to_layer_p99_ms.toFixed(1)} ms ·
+          {stats.width}×{stats.height} · {stats.fps.toFixed(0)} fps · decode {fmt(stats.decode_p50_ms)} ms ·
+          capture→layer p50 <strong>{fmt(stats.to_layer_p50_ms)} ms</strong> p99 {fmt(stats.to_layer_p99_ms)} ms ·
           dropped {stats.dropped} · bad {stats.bad}
         </p>
       )}

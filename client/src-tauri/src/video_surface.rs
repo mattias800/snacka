@@ -24,7 +24,8 @@ extern "C" {
 
 /// The overlay view and its layer. Only ever touched on the main thread.
 struct Surface {
-    content: *mut AnyObject,
+    /// The WKWebView. Rects from the UI are in its coordinate space.
+    webview: *mut AnyObject,
     view: *mut AnyObject,
     layer: *mut AnyObject,
 }
@@ -48,35 +49,54 @@ unsafe fn transaction<R>(f: impl FnOnce() -> R) -> R {
     result
 }
 
-/// Creates the overlay above the webview. Main thread only.
-pub fn attach(content_view: *mut c_void) {
+/// Creates the overlay as a sibling directly above the webview. Main thread only.
+pub fn attach(webview: *mut c_void) {
     let mut slot = SURFACE.lock().unwrap_or_else(|e| e.into_inner());
     if slot.is_some() {
         return;
     }
     unsafe {
-        let content = content_view as *mut AnyObject;
+        let webview = webview as *mut AnyObject;
+        let parent: *mut AnyObject = msg_send![webview, superview];
         let view: *mut AnyObject = msg_send![class!(NSView), alloc];
         let view: *mut AnyObject = msg_send![view, initWithFrame: NSRect::new(NSPoint::new(0.0, 0.0), NSSize::new(0.0, 0.0))];
         let _: () = msg_send![view, setWantsLayer: true];
         let layer: *mut AnyObject = msg_send![view, layer];
         let _: () = msg_send![layer, setContentsGravity: kCAGravityResizeAspect];
-        let _: () = msg_send![content, addSubview: view]; // last subview = above the webview
-        *slot = Some(Surface { content, view, layer });
+        const NS_WINDOW_ABOVE: isize = 1;
+        let _: () = msg_send![parent, addSubview: view, positioned: NS_WINDOW_ABOVE, relativeTo: webview];
+        *slot = Some(Surface { webview, view, layer });
     }
 }
 
-/// Positions the overlay. Coordinates are CSS pixels from the top-left of the webview,
-/// which on macOS are points in the window's content view. Main thread only.
-pub fn set_rect(x: f64, y: f64, w: f64, h: f64, visible: bool) {
+/// Positions the overlay. Coordinates are CSS pixels from the top-left of the webview, which
+/// on macOS equal points (page zoom 1). AppKit converts from the webview's space to the
+/// overlay's parent, which handles the title bar offset and flipped coordinates. Main thread only.
+///
+/// `viewport_height` is the page's `innerHeight`. WKWebView can extend under the title bar and
+/// push the page down with a content inset; the difference between its native height and the
+/// CSS viewport height is that hidden top inset, whatever produces it.
+pub fn set_rect(x: f64, y: f64, w: f64, h: f64, viewport_height: f64, visible: bool) {
     let slot = SURFACE.lock().unwrap_or_else(|e| e.into_inner());
     let Some(s) = slot.as_ref() else { return };
     unsafe {
-        let bounds: NSRect = msg_send![s.content, bounds];
-        let flipped: bool = msg_send![s.content, isFlipped];
-        let y_ns = if flipped { y } else { bounds.size.height - y - h };
+        let bounds: NSRect = msg_send![s.webview, bounds];
+        let flipped: bool = msg_send![s.webview, isFlipped];
+        let top_inset = (bounds.size.height - viewport_height).max(0.0);
+        let y = y + top_inset;
+        let local_y = if flipped { y } else { bounds.size.height - y - h };
+        static LOGGED: AtomicBool = AtomicBool::new(false);
+        if visible && !LOGGED.swap(true, Ordering::Relaxed) {
+            eprintln!(
+                "video surface: webview bounds {:.0}x{:.0} flipped={} css viewport h={:.0} => top inset {:.0}",
+                bounds.size.width, bounds.size.height, flipped, viewport_height, top_inset
+            );
+        }
+        let local = NSRect::new(NSPoint::new(x, local_y), NSSize::new(w, h));
+        let parent: *mut AnyObject = msg_send![s.view, superview];
+        let frame: NSRect = msg_send![s.webview, convertRect: local, toView: parent];
         transaction(|| {
-            let _: () = msg_send![s.view, setFrame: NSRect::new(NSPoint::new(x, y_ns), NSSize::new(w, h))];
+            let _: () = msg_send![s.view, setFrame: frame];
             let _: () = msg_send![s.view, setHidden: !visible];
         });
     }
@@ -103,16 +123,17 @@ pub struct StreamStats {
     pub fps: f64,
     pub width: usize,
     pub height: usize,
-    pub decode_p50_ms: f64,
-    pub to_layer_p50_ms: f64,
-    pub to_layer_p99_ms: f64,
+    // None (JSON null) when there were no samples in this window; never NaN.
+    pub decode_p50_ms: Option<f64>,
+    pub to_layer_p50_ms: Option<f64>,
+    pub to_layer_p99_ms: Option<f64>,
     pub dropped: u64,
     pub bad: u64,
 }
 
-fn pct(v: &mut [u64], q: f64) -> f64 {
+fn pct(v: &mut [u64], q: f64) -> Option<f64> {
     v.sort_unstable();
-    v.get(((v.len() as f64) * q) as usize).copied().map(ms).unwrap_or(f64::NAN)
+    v.get(((v.len() as f64) * q) as usize).copied().map(ms)
 }
 
 /// Starts receiving a stream-probe stream on `port` and presenting it on the overlay.
@@ -161,7 +182,7 @@ pub fn start(app: AppHandle, port: u16) -> Result<(), String> {
                         bad,
                     };
                     eprintln!(
-                        "stream: {}x{} {:.0} fps | decode p50 {:.2} ms | capture->layer p50 {:.2} p99 {:.2} ms | dropped {} bad {}",
+                        "stream: {}x{} {:.0} fps | decode p50 {:.2?} ms | capture->layer p50 {:.2?} p99 {:.2?} ms | dropped {} bad {}",
                         stats.width, stats.height, stats.fps, stats.decode_p50_ms, stats.to_layer_p50_ms,
                         stats.to_layer_p99_ms, stats.dropped, stats.bad
                     );

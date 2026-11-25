@@ -13,8 +13,10 @@ fn core_info() -> String {
 fn start_test_stream(app: tauri::AppHandle, window: tauri::WebviewWindow, port: u16) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     {
-        let view = window.ns_view().map_err(|e| e.to_string())?;
-        video_surface::attach(view);
+        // Attach to the WKWebView itself so UI coordinates map exactly (title bar, flipping).
+        window
+            .with_webview(|webview| video_surface::attach(webview.inner()))
+            .map_err(|e| e.to_string())?;
         video_surface::start(app, port)
     }
     #[cfg(not(target_os = "macos"))]
@@ -26,11 +28,11 @@ fn start_test_stream(app: tauri::AppHandle, window: tauri::WebviewWindow, port: 
 
 /// Places the native video surface over the given rectangle (CSS pixels, top-left origin).
 #[tauri::command]
-fn set_video_rect(x: f64, y: f64, width: f64, height: f64, visible: bool) {
+fn set_video_rect(x: f64, y: f64, width: f64, height: f64, viewport_height: f64, visible: bool) {
     #[cfg(target_os = "macos")]
-    video_surface::set_rect(x, y, width, height, visible);
+    video_surface::set_rect(x, y, width, height, viewport_height, visible);
     #[cfg(not(target_os = "macos"))]
-    let _ = (x, y, width, height, visible);
+    let _ = (x, y, width, height, viewport_height, visible);
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
