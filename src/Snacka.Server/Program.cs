@@ -186,6 +186,8 @@ builder.Services.AddAuthorization();
 
 // Add services
 builder.Services.AddScoped<IAuthService, AuthService>();
+builder.Services.Configure<LiveKitSettings>(builder.Configuration.GetSection(LiveKitSettings.SectionName));
+builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
 builder.Services.AddScoped<IServerInviteService, ServerInviteService>();
 builder.Services.AddScoped<IDirectMessageService, DirectMessageService>();
 builder.Services.AddScoped<IConversationService, ConversationService>();

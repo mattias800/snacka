@@ -279,3 +279,6 @@ public record UserSearchResult(
     string? Avatar,
     bool IsOnline
 );
+
+/// <summary>Everything a client needs to join a voice channel's LiveKit room.</summary>
+public record VoiceTokenResponse(string Url, string Token, string Room);
