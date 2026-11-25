@@ -503,7 +503,7 @@ public class MainAppViewModel : ViewModelBase, IDisposable
 
         // Create sharer annotation overlay manager
         _sharerAnnotationOverlay = new SharerAnnotationOverlayManager();
-        _sharerAnnotationOverlay.CloseRequested += () => _screenShare?.OnAnnotationToolbarCloseRequested();
+        _sharerAnnotationOverlay.CloseRequested += () => _ = _screenShare?.OnAnnotationToolbarCloseRequested();
 
         // Wire up screen share events to overlay manager
         _screenShare.ShowAnnotationOverlayRequested += (settings, annotationVm) =>

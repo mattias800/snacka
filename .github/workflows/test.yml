@@ -1,0 +1,81 @@
+name: Tests
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+    branches: [master]
+  workflow_dispatch:
+
+env:
+  DOTNET_VERSION: '9.0.x'
+  DOTNET_NOLOGO: true
+  DOTNET_CLI_TELEMETRY_OPTOUT: true
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test (${{ matrix.os }})
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, windows-latest, macos-14]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore Snacka.sln
+
+      - name: Build
+        run: dotnet build Snacka.sln --no-restore -c Release
+
+      # --blame-hang-timeout guards against the Avalonia headless hang seen in Jan 2026:
+      # a hung test run is killed and a dump is captured instead of burning the job timeout.
+      - name: Test
+        run: >
+          dotnet test Snacka.sln --no-build -c Release
+          --logger GitHubActions
+          --logger trx
+          --results-directory TestResults
+          --blame-hang-timeout 5m
+
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-${{ matrix.os }}
+          path: TestResults
+          if-no-files-found: ignore
+
+  vulnerable-packages:
+    name: Vulnerable package check
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - name: Restore
+        run: dotnet restore Snacka.sln
+
+      # Warning-only until the known advisories are fixed (#12). Then switch ::warning to ::error and exit 1.
+      - name: List vulnerable packages
+        shell: bash
+        run: |
+          dotnet list Snacka.sln package --vulnerable --include-transitive | tee vulnerable.txt
+          if grep -q "has the following vulnerable packages" vulnerable.txt; then
+            echo "::warning title=Vulnerable packages::Known-vulnerable NuGet packages found (tracked in #12). See job log."
+          fi

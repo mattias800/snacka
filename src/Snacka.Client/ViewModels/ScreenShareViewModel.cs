@@ -268,10 +268,7 @@ public class ScreenShareViewModel : ReactiveObject, IDisposable
     /// Called when the annotation toolbar close button is clicked.
     /// Stops screen sharing.
     /// </summary>
-    public void OnAnnotationToolbarCloseRequested()
-    {
-        _ = StopScreenShareAsync();
-    }
+    public Task OnAnnotationToolbarCloseRequested() => StopScreenShareAsync();
 
     /// <summary>
     /// Starts screen sharing from a gaming station command (no picker).
