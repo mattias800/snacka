@@ -89,13 +89,18 @@ public class AttachmentsController : ControllerBase
         if (author is null)
             return Unauthorized();
 
+        // Only messages in this channel can be replied to (the reply shows a preview of it).
+        var replyTo = replyToId is { } rid
+            ? await _db.Messages.Include(m => m.Author).FirstOrDefaultAsync(m => m.Id == rid && m.ChannelId == channelId, ct)
+            : null;
+
         // Create message
         var message = new Message
         {
             Content = content ?? string.Empty,
             AuthorId = userId.Value,
             ChannelId = channelId,
-            ReplyToId = replyToId
+            ReplyToId = replyTo?.Id
         };
 
         _db.Messages.Add(message);
@@ -141,7 +146,12 @@ public class AttachmentsController : ControllerBase
             message.UpdatedAt,
             message.IsEdited,
             message.ReplyToId,
-            null, // ReplyTo preview (simplified for now)
+            replyTo is null ? null : new ReplyPreview(
+                replyTo.Id,
+                replyTo.Content,
+                replyTo.AuthorId,
+                replyTo.Author?.Username ?? "Unknown",
+                replyTo.Author?.EffectiveDisplayName ?? replyTo.Author?.Username ?? "Unknown"),
             null, // Reactions
             message.IsPinned,
             message.PinnedAt,

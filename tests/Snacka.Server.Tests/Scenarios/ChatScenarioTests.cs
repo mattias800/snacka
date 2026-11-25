@@ -326,4 +326,55 @@ public class ChatScenarioTests
         Assert.AreEqual(0, w.Alice.Received<ConversationTypingEvent>("ConversationUserTyping").Count, "own typing echoed back");
         Assert.AreEqual(0, w.Carol.Received<ConversationTypingEvent>("ConversationUserTyping").Count);
     }
+
+    private static MultipartFormDataContent Upload(string content, Guid? replyToId, string fileName = "note.txt", string body = "hello")
+    {
+        var form = new MultipartFormDataContent { { new StringContent(content), "content" } };
+        if (replyToId is { } id) form.Add(new StringContent(id.ToString()), "replyToId");
+        var file = new ByteArrayContent(System.Text.Encoding.UTF8.GetBytes(body));
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("text/plain");
+        form.Add(file, "files", fileName);
+        return form;
+    }
+
+    [TestMethod]
+    public async Task Attachment_ReachesOthers_AndOnlyMembersCanDownloadIt()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Bob.Hub().InvokeAsync("JoinChannel", w.General);
+
+        var sent = await Ok<MessageResponse>(await w.Alice.Http.PostAsync($"/api/channels/{w.General}/messages/with-attachments", Upload("see attached", null, body: "the plan")));
+
+        var received = await w.Bob.WaitForAsync<MessageResponse>("ReceiveChannelMessage", m => m.Id == sent.Id);
+        var url = new Uri(received.Attachments!.Single().Url).PathAndQuery;
+        Assert.AreEqual("the plan", await w.Bob.Http.GetStringAsync(url));
+        Assert.AreEqual(HttpStatusCode.Forbidden, (await w.Carol.Http.GetAsync(url)).StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Attachment_ReplyToAMessageElsewhere_DoesNotLeakItsContent()
+    {
+        await using var w = await CreateWorldAsync();
+        var secret = await SendAsync(w.Alice, w.General, "alice's private plans");
+
+        // Carol, in her own community, "replies" to Alice's message id with an attachment.
+        var own = await Ok<CommunityResponse>(await w.Carol.Http.PostAsJsonAsync("/api/communities", new CreateCommunityRequest("Carol's", null)));
+        var ownChannel = (await w.Carol.Http.GetFromJsonAsync<List<ChannelResponse>>($"/api/communities/{own.Id}/channels"))!.First(c => c.Type == ChannelType.Text);
+        var posted = await Ok<MessageResponse>(await w.Carol.Http.PostAsync($"/api/channels/{ownChannel.Id}/messages/with-attachments", Upload("hmm", secret.Id)));
+
+        Assert.IsNull(posted.ReplyTo?.Content);
+        var history = await w.Carol.Http.GetFromJsonAsync<List<MessageResponse>>($"/api/channels/{ownChannel.Id}/messages");
+        Assert.IsNull(history!.Single(m => m.Id == posted.Id).ReplyTo, "reply preview leaked another community's message");
+    }
+
+    [TestMethod]
+    public async Task Attachment_ReplyInTheSameChannel_ShowsTheQuote()
+    {
+        await using var w = await CreateWorldAsync();
+        var question = await SendAsync(w.Alice, w.General, "photo of the setup?");
+
+        var reply = await Ok<MessageResponse>(await w.Bob.Http.PostAsync($"/api/channels/{w.General}/messages/with-attachments", Upload("here", question.Id, "setup.txt")));
+
+        Assert.AreEqual("photo of the setup?", reply.ReplyTo?.Content);
+    }
 }
