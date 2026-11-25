@@ -138,8 +138,11 @@ public sealed partial class AuthService : IAuthService
 
     public async Task<AuthResponse> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        var principal = GetPrincipalFromExpiredToken(refreshToken);
-        var userIdClaim = principal?.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+        // SECURITY (#15): only unexpired tokens of type "refresh", issued for the user's current
+        // password, may mint new tokens. Previously any token ever issued (expired, or an access
+        // token) worked forever, and changing the password revoked nothing.
+        var principal = ValidateRefreshToken(refreshToken);
+        var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
 
         if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
             throw new SecurityTokenException("Invalid refresh token.");
@@ -147,6 +150,9 @@ public sealed partial class AuthService : IAuthService
         var user = await _db.Users.FindAsync([userId], cancellationToken);
         if (user is null)
             throw new SecurityTokenException("User not found.");
+
+        if (principal.FindFirst(PasswordVersionClaim)?.Value != PasswordVersion(user))
+            throw new SecurityTokenException("Refresh token was revoked by a password change.");
 
         return GenerateTokens(user);
     }
@@ -275,7 +281,8 @@ public sealed partial class AuthService : IAuthService
         var claims = new[]
         {
             new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim("token_type", "refresh")
+            new Claim(TokenTypeClaim, RefreshTokenType),
+            new Claim(PasswordVersionClaim, PasswordVersion(user))
         };
 
         var token = new JwtSecurityToken(
@@ -289,7 +296,18 @@ public sealed partial class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private ClaimsPrincipal? GetPrincipalFromExpiredToken(string token)
+    public const string TokenTypeClaim = "token_type";
+    public const string RefreshTokenType = "refresh";
+    private const string PasswordVersionClaim = "pwv";
+
+    /// <summary>
+    /// Fingerprint of the current password hash. BCrypt hashes are salted, so it changes on every
+    /// password change, which revokes all refresh tokens issued before it without server-side storage.
+    /// </summary>
+    private static string PasswordVersion(User user) =>
+        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(user.PasswordHash)))[..16];
+
+    private ClaimsPrincipal ValidateRefreshToken(string token)
     {
         var tokenValidationParameters = new TokenValidationParameters
         {
@@ -297,19 +315,29 @@ public sealed partial class AuthService : IAuthService
             ValidateIssuer = true,
             ValidateIssuerSigningKey = true,
             IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey)),
-            ValidateLifetime = false,
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.Zero,
             ValidIssuer = _jwtSettings.Issuer,
             ValidAudience = _jwtSettings.Audience
         };
 
-        var tokenHandler = new JwtSecurityTokenHandler();
-        var principal = tokenHandler.ValidateToken(token, tokenValidationParameters, out var securityToken);
+        ClaimsPrincipal principal;
+        SecurityToken securityToken;
+        try
+        {
+            principal = new JwtSecurityTokenHandler().ValidateToken(token, tokenValidationParameters, out securityToken);
+        }
+        catch (Exception ex) when (ex is SecurityTokenException or ArgumentException)
+        {
+            throw new SecurityTokenException("Invalid or expired refresh token.");
+        }
 
         if (securityToken is not JwtSecurityToken jwtSecurityToken ||
             !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
-        {
             throw new SecurityTokenException("Invalid token.");
-        }
+
+        if (principal.FindFirst(TokenTypeClaim)?.Value != RefreshTokenType)
+            throw new SecurityTokenException("Not a refresh token.");
 
         return principal;
     }

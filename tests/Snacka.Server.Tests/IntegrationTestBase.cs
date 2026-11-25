@@ -20,9 +20,9 @@ public class IntegrationTestBase : IDisposable
     public readonly HttpClient Client;
     private readonly string _dbName;
 
-    private const string TestSecretKey = "ThisIsATestSecretKeyThatIsLongEnoughForHmacSha256Testing!";
-    private const string TestIssuer = "TestIssuer";
-    private const string TestAudience = "TestAudience";
+    internal const string TestSecretKey = "ThisIsATestSecretKeyThatIsLongEnoughForHmacSha256Testing!";
+    internal const string TestIssuer = "TestIssuer";
+    internal const string TestAudience = "TestAudience";
 
     /// <param name="extraConfig">Additional configuration values (override the defaults below).</param>
     public IntegrationTestBase(IDictionary<string, string?>? extraConfig = null)

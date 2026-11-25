@@ -164,6 +164,13 @@ builder.Services.AddAuthentication(options =>
                 context.Token = accessToken;
             }
             return Task.CompletedTask;
+        },
+        // SECURITY (#15): refresh tokens are long-lived and must never work as access tokens.
+        OnTokenValidated = context =>
+        {
+            if (context.Principal?.FindFirst(AuthService.TokenTypeClaim)?.Value == AuthService.RefreshTokenType)
+                context.Fail("Refresh tokens can't be used as access tokens.");
+            return Task.CompletedTask;
         }
     };
 });
