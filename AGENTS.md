@@ -8,7 +8,7 @@ Snacka is a self-hosted Discord alternative for **friends talking and playing ga
 
 Product requirements:
 - **Windows, Linux and macOS:** chat, voice, webcam, screen share, and game streaming / remote play as both **host and viewer**, at the highest achievable quality (up to 4K120) with input lag as close to local play as possible.
-- **Android:** client only (chat, voice, viewing streams).
+- **Android, iOS and iPadOS:** client only (chat, voice, viewing streams). iOS/iPadOS comes later.
 - **Web:** browser client.
 - Hosting must be easy for a non-expert friend.
 
@@ -18,7 +18,7 @@ Product requirements:
 
 | Part | Technology | Location |
 |---|---|---|
-| UI (web, desktop and Android from one codebase) | TypeScript, React, Vite | `client/ui` (new) |
+| UI (web, desktop, Android and iOS from one codebase) | TypeScript, React, Vite | `client/ui` (new) |
 | Desktop and Android shell | Tauri 2 | `client/src-tauri` (new) |
 | Client core: voice/video via LiveKit, game-streaming engine, input/virtual gamepads | Rust | `client/crates/snacka-core` (new) |
 | Server: accounts, communities, chat, DMs, files, presence, LiveKit tokens | ASP.NET Core + SignalR + EF Core | `src/Snacka.Server` (kept) |
