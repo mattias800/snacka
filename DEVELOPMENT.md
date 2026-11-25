@@ -261,7 +261,7 @@ The server follows a layered architecture:
 - Screen sharing
 - Community invites UI
 
-See [PLAN.md](PLAN.md) for the complete roadmap.
+See the roadmap issue (#45), the new client epic (#54) and `docs/adr/` for current direction; old plans are in `docs/plans/`.
 
 ## Contributing
 
