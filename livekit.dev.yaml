@@ -1,0 +1,7 @@
+# LiveKit for local development: livekit-server --dev --bind 0.0.0.0 --config livekit.dev.yaml
+# --dev gives the API key "devkey" with secret "secret" (matches appsettings.Development.json).
+# The webhook tells the Snacka server who joins and leaves voice channels (#52).
+webhook:
+  api_key: devkey
+  urls:
+    - http://localhost:5117/api/livekit/webhook

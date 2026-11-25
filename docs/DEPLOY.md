@@ -103,7 +103,28 @@ snacka.example.com {
 }
 ```
 
-## TURN Server (Recommended)
+## Voice with LiveKit (new client)
+
+The new client (`client/`) uses [LiveKit](https://livekit.io) for voice, webcam and screen share. LiveKit includes its own TURN, so coturn isn't needed for it. Add to `.env`:
+
+```bash
+LIVEKIT_URL=wss://voice.your-domain.com   # what clients connect to (ws://<lan-ip>:7880 on a LAN)
+LIVEKIT_API_SECRET=$(openssl rand -base64 32)  # at least 32 characters
+```
+
+Start it with `docker compose --profile livekit up -d`. LiveKit tells the Snacka server who joins and leaves voice through a webhook to `http://localhost:5117/api/livekit/webhook`, signed with the API secret.
+
+| Port | Protocol | Purpose |
+|------|----------|---------|
+| 7880 | TCP | Signalling (WebSocket). Put it behind your HTTPS reverse proxy as `LIVEKIT_URL` |
+| 7881 | TCP | Media over TCP (fallback) |
+| 7882 | UDP | Media |
+
+Forward 7881/tcp and 7882/udp on your router.
+
+**Development:** `livekit-server --dev --bind 0.0.0.0 --config livekit.dev.yaml` (from `brew install livekit`) next to `dotnet run --project src/Snacka.Server`; `appsettings.Development.json` already has the matching keys. A VPN that filters local UDP (seen with a corporate VPN on macOS) stops browsers on the same machine from connecting to LiveKit; turn it off for voice tests.
+
+## TURN Server (legacy client)
 
 A TURN server enables voice/video for users behind restrictive firewalls or VPNs. The docker-compose.yml includes coturn.
 

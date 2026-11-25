@@ -73,9 +73,10 @@ input { font: inherit; color: var(--text); background: var(--bg); border: 1px so
 .channels > div > button { width: calc(100% - 16px); text-align: left; padding: 6px 16px; margin: 1px 8px; border-radius: 4px; color: var(--muted); }
 .channels > div > button.active { background: #404249; color: var(--text); }
 .voice-panel { padding: 2px 8px 8px 32px; }
-.voice-panel ul { list-style: none; margin: 0; padding: 0; }
-.voice-panel li { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--muted); }
-.voice-panel .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-size: 11px; color: var(--text); box-shadow: 0 0 0 2px transparent; transition: box-shadow 0.1s; }
+.voice-panel ul, ul.voice-presence { list-style: none; margin: 0; padding: 0; }
+ul.voice-presence { padding: 0 8px 4px 32px; }
+.voice-panel li, .voice-presence li { display: flex; align-items: center; gap: 8px; padding: 3px 0; color: var(--muted); }
+.voice-panel .avatar, .voice-presence .avatar { width: 22px; height: 22px; border-radius: 50%; background: var(--panel-2); display: grid; place-items: center; font-size: 11px; color: var(--text); box-shadow: 0 0 0 2px transparent; transition: box-shadow 0.1s; }
 .voice-panel li.speaking .avatar { box-shadow: 0 0 0 2px #23a55a; }
 .voice-panel li.speaking { color: var(--text); }
 .voice-controls { display: flex; gap: 6px; margin-top: 6px; }

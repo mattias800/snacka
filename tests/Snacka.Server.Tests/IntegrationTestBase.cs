@@ -2,7 +2,9 @@ using System.Net.Http.Headers;
 using System.Net.Http.Json;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
+using Microsoft.AspNetCore.SignalR.Client;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -128,6 +130,24 @@ public class IntegrationTestBase : IDisposable
     public void SetAuthToken(string token)
     {
         Client.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", token);
+    }
+
+    /// <summary>
+    /// A real SignalR client connected to this test server as the owner of <paramref name="accessToken"/>,
+    /// for multi-client scenarios (one per simulated user).
+    /// </summary>
+    public async Task<HubConnection> ConnectHubAsync(string accessToken)
+    {
+        var connection = new HubConnectionBuilder()
+            .WithUrl(new Uri(Factory.Server.BaseAddress, "hubs/snacka"), options =>
+            {
+                options.Transports = HttpTransportType.LongPolling;
+                options.HttpMessageHandlerFactory = _ => Factory.Server.CreateHandler();
+                options.AccessTokenProvider = () => Task.FromResult<string?>(accessToken);
+            })
+            .Build();
+        await connection.StartAsync();
+        return connection;
     }
 
     public void ClearAuthToken()

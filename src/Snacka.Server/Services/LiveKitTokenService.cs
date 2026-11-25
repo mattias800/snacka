@@ -26,6 +26,13 @@ public interface ILiveKitTokenService
 
     /// <summary>Creates a token that lets <paramref name="userId"/> join <paramref name="room"/>.</summary>
     string CreateJoinToken(Guid userId, string displayName, string room, bool canPublish);
+
+    /// <summary>
+    /// Checks that a webhook request came from our LiveKit server: the Authorization header is a
+    /// JWT signed with the API secret, issued by the API key, whose "sha256" claim is the base64
+    /// SHA-256 of the body.
+    /// </summary>
+    bool IsValidWebhook(string? authorization, ReadOnlySpan<byte> body);
 }
 
 /// <summary>
@@ -66,6 +73,43 @@ public sealed class LiveKitTokenService(IOptions<LiveKitSettings> options) : ILi
         var body = Base64Url(JsonSerializer.SerializeToUtf8Bytes(payload));
         var signature = HMACSHA256.HashData(Encoding.UTF8.GetBytes(_settings.ApiSecret!), Encoding.ASCII.GetBytes($"{header}.{body}"));
         return $"{header}.{body}.{Base64Url(signature)}";
+    }
+
+    public bool IsValidWebhook(string? authorization, ReadOnlySpan<byte> body)
+    {
+        if (!IsConfigured || string.IsNullOrEmpty(authorization)) return false;
+        var token = authorization.StartsWith("Bearer ", StringComparison.OrdinalIgnoreCase) ? authorization[7..] : authorization;
+        var parts = token.Split('.');
+        if (parts.Length != 3) return false;
+        try
+        {
+            var expected = HMACSHA256.HashData(Encoding.UTF8.GetBytes(_settings.ApiSecret!), Encoding.ASCII.GetBytes($"{parts[0]}.{parts[1]}"));
+            if (!CryptographicOperations.FixedTimeEquals(expected, FromBase64Url(parts[2]))) return false;
+
+            using var header = JsonDocument.Parse(FromBase64Url(parts[0]));
+            if (header.RootElement.GetProperty("alg").GetString() != "HS256") return false;
+
+            using var claims = JsonDocument.Parse(FromBase64Url(parts[1]));
+            var root = claims.RootElement;
+            if (root.GetProperty("iss").GetString() != _settings.ApiKey) return false;
+            var now = DateTimeOffset.UtcNow.ToUnixTimeSeconds();
+            const long skew = 60;
+            if (root.TryGetProperty("exp", out var exp) && exp.GetInt64() + skew < now) return false;
+            if (root.TryGetProperty("nbf", out var nbf) && nbf.GetInt64() - skew > now) return false;
+
+            var bodyHash = Convert.FromBase64String(root.GetProperty("sha256").GetString() ?? "");
+            return CryptographicOperations.FixedTimeEquals(bodyHash, SHA256.HashData(body));
+        }
+        catch (Exception e) when (e is FormatException or JsonException or KeyNotFoundException or InvalidOperationException)
+        {
+            return false;
+        }
+    }
+
+    private static byte[] FromBase64Url(string s)
+    {
+        var b = s.Replace('-', '+').Replace('_', '/');
+        return Convert.FromBase64String(b.PadRight(b.Length + (4 - b.Length % 4) % 4, '='));
     }
 
     private static string Base64Url(byte[] bytes) =>

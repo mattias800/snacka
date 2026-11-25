@@ -43,6 +43,11 @@ services:
       - Turn__Secret=${TURN_SECRET:-}
       - Turn__Port=3478
       - Turn__TlsPort=5349
+      # LiveKit (voice for the new client, #52). LIVEKIT_URL is what clients connect to, e.g.
+      # wss://voice.example.com behind your reverse proxy, or ws://<your-ip>:7880 on a LAN.
+      - LiveKit__Url=${LIVEKIT_URL:-}
+      - LiveKit__ApiKey=${LIVEKIT_API_KEY:-snacka}
+      - LiveKit__ApiSecret=${LIVEKIT_API_SECRET:-}
     volumes:
       # Persist uploaded files (attachments, avatars)
       - snacka-uploads:/app/uploads
@@ -74,7 +79,31 @@ services:
       retries: 5
       start_period: 10s
 
-  # TURN server for WebRTC NAT traversal (optional but recommended)
+  # LiveKit: voice, webcam and screen share for the new client (#52); has its own TURN.
+  # Opt in with `docker compose --profile livekit up -d` and LIVEKIT_URL + LIVEKIT_API_SECRET
+  # (at least 32 characters, e.g. `openssl rand -base64 32`) in .env. Forward 7881/tcp and
+  # 7882/udp on your router; put 7880 behind your HTTPS reverse proxy (see docs/DEPLOY.md).
+  livekit:
+    image: livekit/livekit-server:v1.13
+    profiles: ["livekit"]
+    container_name: snacka-livekit
+    network_mode: host  # WebRTC media needs the host's real ports
+    environment:
+      - "LIVEKIT_KEYS=${LIVEKIT_API_KEY:-snacka}: ${LIVEKIT_API_SECRET:-}"
+      - |
+        LIVEKIT_CONFIG=
+        port: 7880
+        rtc:
+          tcp_port: 7881
+          udp_port: 7882
+          use_external_ip: true
+        webhook:
+          api_key: ${LIVEKIT_API_KEY:-snacka}
+          urls:
+            - http://localhost:5117/api/livekit/webhook
+    restart: unless-stopped
+
+  # Legacy client only: TURN server for WebRTC NAT traversal (optional but recommended)
   # Required for users behind restrictive firewalls/VPNs
   coturn:
     image: coturn/coturn:4.6-alpine

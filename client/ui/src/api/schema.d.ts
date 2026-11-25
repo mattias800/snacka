@@ -3495,6 +3495,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/voice/communities/{communityId}/participants": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path: {
+                    communityId: string;
+                };
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["VoiceParticipantResponse"][];
+                        "application/json": components["schemas"]["VoiceParticipantResponse"][];
+                        "text/json": components["schemas"]["VoiceParticipantResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/WebRtc/ice-servers": {
         parameters: {
             query?: never;
@@ -4205,6 +4244,28 @@ export interface components {
             effectiveDisplayName: string;
             avatar: string | null;
             isOnline: boolean;
+        };
+        VoiceParticipantResponse: {
+            /** Format: uuid */
+            id: string;
+            /** Format: uuid */
+            userId: string;
+            username: string;
+            /** Format: uuid */
+            channelId: string;
+            isMuted: boolean;
+            isDeafened: boolean;
+            isServerMuted: boolean;
+            isServerDeafened: boolean;
+            isScreenSharing: boolean;
+            screenShareHasAudio: boolean;
+            isCameraOn: boolean;
+            /** Format: date-time */
+            joinedAt: string;
+            /** @default false */
+            isGamingStation: boolean;
+            /** @default null */
+            gamingStationMachineId: string | null;
         };
         VoiceTokenResponse: {
             url: string;

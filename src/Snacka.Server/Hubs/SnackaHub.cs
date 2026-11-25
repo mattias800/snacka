@@ -869,6 +869,9 @@ public class SnackaHub : Hub
 
     public async Task<IEnumerable<VoiceParticipantResponse>> GetVoiceParticipants(Guid channelId)
     {
+        var userId = GetUserId();
+        if (userId is null) return [];
+        await _db.EnsureChannelMemberAsync(channelId, userId.Value, Context.ConnectionAborted);
         return await _voiceService.GetParticipantsAsync(channelId);
     }
 

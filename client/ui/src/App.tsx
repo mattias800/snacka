@@ -11,6 +11,7 @@ import "./App.css";
 type Community = Schemas["CommunityResponse"];
 type Channel = Schemas["ChannelResponse"];
 type Message = Schemas["MessageResponse"];
+type VoiceParticipant = Schemas["VoiceParticipantResponse"];
 
 /** Mirrors Snacka.Shared ChannelType (serialized as a number). */
 const ChannelKind = { Text: 0, Voice: 1 } as const;
@@ -187,6 +188,10 @@ function Chat(props: {
   const [hubState, setHubState] = useState("connecting");
   const [showStreamTest, setShowStreamTest] = useState(false);
   const voice = useVoice(api);
+  // Who is in which voice channel of the open community (LiveKit webhooks -> server -> hub).
+  const [presence, setPresence] = useState<VoiceParticipant[]>([]);
+  const communityRef = useRef<Community | null>(null);
+  communityRef.current = community;
   const hubRef = useRef<HubConnection | null>(null);
   const channelRef = useRef<Channel | null>(null);
   channelRef.current = channel;
@@ -205,6 +210,14 @@ function Chat(props: {
     [api, run],
   );
 
+  const loadPresence = useCallback(
+    async (communityId: string) => {
+      const list = ok(await api.GET("/api/voice/communities/{communityId}/participants", { params: { path: { communityId } } }));
+      if (communityRef.current?.id === communityId) setPresence(list);
+    },
+    [api],
+  );
+
   // One hub connection per session; live messages go to the open channel.
   useEffect(() => {
     const hub = createHub(serverUrl, () => tokenRef.current);
@@ -213,8 +226,19 @@ function Chat(props: {
       if (m.channelId !== channelRef.current?.id) return;
       setMessages((prev) => (prev.some((p) => p.id === m.id) ? prev : [...prev, m]));
     });
+    hub.on("VoiceParticipantJoined", (e: { channelId: string; participant: VoiceParticipant }) =>
+      setPresence((prev) => [...prev.filter((p) => p.userId !== e.participant.userId), e.participant]),
+    );
+    hub.on("VoiceParticipantLeft", (e: { channelId: string; userId: string }) =>
+      setPresence((prev) => prev.filter((p) => !(p.userId === e.userId && p.channelId === e.channelId))),
+    );
     hub.onreconnecting(() => setHubState("reconnecting"));
-    hub.onreconnected(() => setHubState("connected"));
+    hub.onreconnected(() => {
+      setHubState("connected");
+      // Events may have been missed while disconnected.
+      const c = communityRef.current;
+      if (c) void loadPresence(c.id).catch(() => {});
+    });
     hub.onclose(() => setHubState("disconnected"));
     hub
       .start()
@@ -223,7 +247,7 @@ function Chat(props: {
     return () => {
       void hub.stop();
     };
-  }, [serverUrl, tokenRef]);
+  }, [serverUrl, tokenRef, loadPresence]);
 
   useEffect(() => {
     void loadCommunities();
@@ -232,8 +256,11 @@ function Chat(props: {
   const openCommunity = (c: Community) =>
     run(async () => {
       setCommunity(c);
+      communityRef.current = c;
       setChannel(null);
       setMessages([]);
+      setPresence([]);
+      void loadPresence(c.id).catch(() => {});
       const list = ok(await api.GET("/api/communities/{communityId}/Channels", { params: { path: { communityId: c.id } } }));
       setChannels(list);
       if (hubRef.current?.state === "Connected") await hubRef.current.invoke("JoinServer", c.id);
@@ -305,7 +332,20 @@ function Chat(props: {
               >
                 🔊 {ch.name}
               </button>
-              {ch.id === voice.channelId && <VoicePanel voice={voice} />}
+              {ch.id === voice.channelId ? (
+                <VoicePanel voice={voice} />
+              ) : (
+                <ul className="voice-presence">
+                  {presence
+                    .filter((p) => p.channelId === ch.id)
+                    .map((p) => (
+                      <li key={p.userId} data-testid="voice-presence" data-name={p.username}>
+                        <span className="avatar">{p.username.slice(0, 1).toUpperCase()}</span>
+                        {p.username}
+                      </li>
+                    ))}
+                </ul>
+              )}
             </div>
           ),
         )}
