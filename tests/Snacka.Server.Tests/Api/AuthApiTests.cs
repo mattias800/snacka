@@ -9,9 +9,9 @@ namespace Snacka.Server.Tests.Api;
 public class AuthApiTests
 {
     [TestMethod]
-    public async Task GetServerInfo_WithNoUsers_ReturnsBootstrapInviteCode()
+    public async Task GetServerInfo_FreshServer_DoesNotExposeBootstrapInviteCode()
     {
-        // Arrange
+        // Arrange: a server with no users, default configuration (#55)
         using var test = new IntegrationTestBase();
 
         // Act
@@ -22,7 +22,22 @@ public class AuthApiTests
         var info = await response.Content.ReadFromJsonAsync<ServerInfoResponse>();
         Assert.IsNotNull(info);
         Assert.IsFalse(info.HasUsers);
-        Assert.IsFalse(string.IsNullOrEmpty(info.BootstrapInviteCode), "Bootstrap invite code should be returned when no users exist");
+        Assert.IsNull(info.BootstrapInviteCode, "The first-admin invite must only be shown in the server console");
+    }
+
+    [TestMethod]
+    public async Task GetServerInfo_WhenExposeBootstrapInviteEnabled_ReturnsCode()
+    {
+        // Arrange: development setting used by dev-start.sh auto-login
+        using var test = new IntegrationTestBase(new Dictionary<string, string?> { ["Setup:ExposeBootstrapInvite"] = "true" });
+
+        // Act
+        var response = await test.Client.GetAsync("/api/health");
+
+        // Assert
+        var info = await response.Content.ReadFromJsonAsync<ServerInfoResponse>();
+        Assert.IsNotNull(info);
+        Assert.IsFalse(string.IsNullOrEmpty(info.BootstrapInviteCode));
     }
 
     [TestMethod]
@@ -40,9 +55,8 @@ public class AuthApiTests
         var info = await response.Content.ReadFromJsonAsync<ServerInfoResponse>();
         Assert.IsNotNull(info);
         Assert.IsTrue(info.HasUsers, "HasUsers should be true when users exist");
-        // Note: In development mode, bootstrap invite code IS returned even with users
-        // to support multi-client dev testing (dev-start.sh). In production mode,
-        // it would NOT be returned when users exist.
+        // Note: the bootstrap invite code is only returned when Setup:ExposeBootstrapInvite is
+        // enabled (development, for dev-start.sh); see GetServerInfo_* tests above.
     }
 
     [TestMethod]

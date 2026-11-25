@@ -24,7 +24,8 @@ public class IntegrationTestBase : IDisposable
     private const string TestIssuer = "TestIssuer";
     private const string TestAudience = "TestAudience";
 
-    public IntegrationTestBase()
+    /// <param name="extraConfig">Additional configuration values (override the defaults below).</param>
+    public IntegrationTestBase(IDictionary<string, string?>? extraConfig = null)
     {
         _dbName = Guid.NewGuid().ToString();
 
@@ -40,6 +41,8 @@ public class IntegrationTestBase : IDisposable
             ["Jwt:AccessTokenExpirationMinutes"] = "60",
             ["Jwt:RefreshTokenExpirationDays"] = "7"
         };
+        foreach (var (key, value) in extraConfig ?? new Dictionary<string, string?>())
+            testConfig[key] = value;
 
         Factory = new WebApplicationFactory<Program>()
             .WithWebHostBuilder(builder =>
