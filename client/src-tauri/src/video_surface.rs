@@ -179,10 +179,11 @@ pub fn start(app: AppHandle, port: u16) -> Result<(), String> {
                         dropped: rx.frames_dropped(),
                         bad,
                     };
+                    let f = |v: Option<f64>| v.map_or_else(|| "-".to_string(), |v| format!("{v:.2}"));
                     eprintln!(
-                        "stream: {}x{} {:.0} fps | decode p50 {:.2?} ms | capture->layer p50 {:.2?} p99 {:.2?} ms | dropped {} bad {}",
-                        stats.width, stats.height, stats.fps, stats.decode_p50_ms, stats.to_layer_p50_ms,
-                        stats.to_layer_p99_ms, stats.dropped, stats.bad
+                        "stream: {}x{} {:.0} fps | decode p50 {} ms | capture->layer p50 {} p99 {} ms | dropped {} bad {}",
+                        stats.width, stats.height, stats.fps, f(stats.decode_p50_ms), f(stats.to_layer_p50_ms),
+                        f(stats.to_layer_p99_ms), stats.dropped, stats.bad
                     );
                     let _ = app.emit("stream-stats", stats);
                     decode_times.clear();

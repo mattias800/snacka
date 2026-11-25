@@ -13,6 +13,7 @@ public sealed class ReactionService : IReactionService
 
     public async Task<ReactionUpdatedEvent> AddReactionAsync(Guid messageId, Guid userId, string emoji, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureMessageMemberAsync(messageId, userId, cancellationToken);
         var message = await _db.Messages
             .Include(m => m.Channel)
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
@@ -56,6 +57,7 @@ public sealed class ReactionService : IReactionService
 
     public async Task<ReactionUpdatedEvent?> RemoveReactionAsync(Guid messageId, Guid userId, string emoji, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureMessageMemberAsync(messageId, userId, cancellationToken);
         var message = await _db.Messages
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
             ?? throw new InvalidOperationException("Message not found.");
@@ -90,6 +92,7 @@ public sealed class ReactionService : IReactionService
 
     public async Task<List<ReactionSummary>> GetReactionsAsync(Guid messageId, Guid currentUserId, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureMessageMemberAsync(messageId, currentUserId, cancellationToken);
         var reactions = await _db.MessageReactions
             .Include(r => r.User)
             .Where(r => r.MessageId == messageId)

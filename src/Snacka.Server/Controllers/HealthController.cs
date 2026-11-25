@@ -27,11 +27,12 @@ public class HealthController : ControllerBase
     public async Task<ActionResult<ServerInfoResponse>> GetHealth(CancellationToken cancellationToken)
     {
         var hasUsers = await _inviteService.HasAnyUsersAsync(cancellationToken);
+        // SECURITY (#55): the bootstrap invite makes whoever uses it the first server admin. It is
+        // printed to the server console for the setup wizard; over HTTP it is only returned when
+        // explicitly enabled (appsettings.Development.json, for dev-start.sh auto-login). Returning
+        // it to anyone on a fresh server let the first visitor claim admin.
         string? bootstrapInviteCode = null;
-
-        // Return bootstrap invite code when there are no users (first-time setup)
-        // OR in development mode (for dev-start.sh multi-client testing)
-        if (!hasUsers || _environment.IsDevelopment())
+        if (_configuration.GetValue("Setup:ExposeBootstrapInvite", false))
         {
             bootstrapInviteCode = await _inviteService.GetOrCreateBootstrapInviteAsync(cancellationToken);
         }

@@ -1,5 +1,7 @@
 #[cfg(target_os = "macos")]
 mod video_surface;
+#[cfg(windows)]
+mod video_surface_windows;
 
 /// Reports which native core is running, so the UI can tell it's inside the desktop/Android app.
 #[tauri::command]
@@ -19,10 +21,17 @@ fn start_test_stream(app: tauri::AppHandle, window: tauri::WebviewWindow, port: 
             .map_err(|e| e.to_string())?;
         video_surface::start(app, port)
     }
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    {
+        // A child window of the Tauri window, above the WebView2 window.
+        let hwnd = window.hwnd().map_err(|e| e.to_string())?;
+        video_surface_windows::attach(hwnd.0 as isize)?;
+        video_surface_windows::start(app, port)
+    }
+    #[cfg(not(any(target_os = "macos", windows)))]
     {
         let _ = (app, window, port);
-        Err("native video surface is only implemented on macOS so far".into())
+        Err("native video surface is only implemented on macOS and Windows so far".into())
     }
 }
 
@@ -40,7 +49,9 @@ fn report_bench(app: tauri::AppHandle, json: String) {
 fn set_video_rect(x: f64, y: f64, width: f64, height: f64, viewport_height: f64, visible: bool) {
     #[cfg(target_os = "macos")]
     video_surface::set_rect(x, y, width, height, viewport_height, visible);
-    #[cfg(not(target_os = "macos"))]
+    #[cfg(windows)]
+    video_surface_windows::set_rect(x, y, width, height, viewport_height, visible);
+    #[cfg(not(any(target_os = "macos", windows)))]
     let _ = (x, y, width, height, viewport_height, visible);
 }
 

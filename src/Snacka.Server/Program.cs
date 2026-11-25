@@ -16,24 +16,31 @@ var builder = WebApplication.CreateBuilder(args);
 
 // Configure forwarded headers for reverse proxy support (NGINX, etc.)
 // This must be configured before other middleware to get correct client IPs and hostnames
+// SECURITY (#19): only trust X-Forwarded-* from known proxies. Trusting everyone let any client
+// pick its own IP and bypass every IP-based rate limit (including login). Default: loopback only
+// (a proxy on the same host). Add networks for other setups, e.g. Docker behind a host proxy:
+//   ReverseProxy__TrustedNetworks__0=172.16.0.0/12
 builder.Services.Configure<ForwardedHeadersOptions>(options =>
 {
     options.ForwardedHeaders = ForwardedHeaders.XForwardedFor | ForwardedHeaders.XForwardedProto | ForwardedHeaders.XForwardedHost;
-    // Clear default restrictions to trust any proxy (configure KnownProxies/KnownNetworks in production if needed)
-    options.KnownNetworks.Clear();
-    options.KnownProxies.Clear();
+    foreach (var cidr in builder.Configuration.GetSection("ReverseProxy:TrustedNetworks").Get<string[]>() ?? [])
+    {
+        var parts = cidr.Split('/');
+        if (parts.Length != 2 || !System.Net.IPAddress.TryParse(parts[0], out var address) || !int.TryParse(parts[1], out var prefix))
+            throw new InvalidOperationException($"Invalid ReverseProxy:TrustedNetworks entry '{cidr}' (expected CIDR like 172.16.0.0/12).");
+        options.KnownNetworks.Add(new Microsoft.AspNetCore.HttpOverrides.IPNetwork(address, prefix));
+    }
 });
 
 // SECURITY: Get JWT secret from environment variable or config
 var jwtSecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
-    ?? builder.Configuration.GetSection(JwtSettings.SectionName)["SecretKey"]
-    ?? throw new InvalidOperationException(
-        "JWT secret key is not configured. Set the JWT_SECRET_KEY environment variable or copy .env.example to .env");
+    ?? builder.Configuration.GetSection(JwtSettings.SectionName)["SecretKey"];
 
-if (jwtSecretKey.Length < 32)
+if (SecretValidator.ValidateJwtSecret(jwtSecretKey) is { } secretError)
 {
-    throw new InvalidOperationException("JWT secret key must be at least 32 characters long.");
+    throw new InvalidOperationException(secretError);
 }
+ArgumentNullException.ThrowIfNull(jwtSecretKey);
 
 // Configure JWT settings with resolved secret key
 builder.Services.Configure<JwtSettings>(options =>
@@ -164,6 +171,13 @@ builder.Services.AddAuthentication(options =>
                 context.Token = accessToken;
             }
             return Task.CompletedTask;
+        },
+        // SECURITY (#15): refresh tokens are long-lived and must never work as access tokens.
+        OnTokenValidated = context =>
+        {
+            if (context.Principal?.FindFirst(AuthService.TokenTypeClaim)?.Value == AuthService.RefreshTokenType)
+                context.Fail("Refresh tokens can't be used as access tokens.");
+            return Task.CompletedTask;
         }
     };
 });
@@ -220,7 +234,7 @@ builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IImageProcessingService, ImageProcessingService>();
 
 // Add controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers(options => options.Filters.Add<Snacka.Server.Middleware.AccessDeniedExceptionFilter>());
 
 // Add OpenAPI/Swagger
 builder.Services.AddOpenApi();
