@@ -31,7 +31,17 @@ pub fn now_ns() -> u64 {
     (c / freq) * 1_000_000_000 + (c % freq) * 1_000_000_000 / freq
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+/// CLOCK_MONOTONIC is system-wide, so separate processes share it. It is also the clock Wayland
+/// compositors use for presentation feedback, so on-screen times compare directly.
+#[cfg(any(target_os = "linux", target_os = "android"))]
+pub fn now_ns() -> u64 {
+    let mut ts = libc::timespec { tv_sec: 0, tv_nsec: 0 };
+    // SAFETY: valid out pointer; CLOCK_MONOTONIC always exists on Linux.
+    unsafe { libc::clock_gettime(libc::CLOCK_MONOTONIC, &mut ts) };
+    ts.tv_sec as u64 * 1_000_000_000 + ts.tv_nsec as u64
+}
+
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux", target_os = "android")))]
 pub fn now_ns() -> u64 {
     use std::sync::OnceLock;
     use std::time::Instant;

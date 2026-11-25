@@ -4,6 +4,7 @@
 //! act as the sender while this crate is the receiver.
 
 pub mod barcode;
+pub mod synthetic;
 pub mod wire;
 
 #[cfg(target_os = "macos")]
@@ -11,6 +12,9 @@ pub mod videotoolbox;
 
 #[cfg(windows)]
 pub mod windows;
+
+#[cfg(target_os = "linux")]
+pub mod linux;
 
 /// Video codec of an encoded stream.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
@@ -63,7 +67,8 @@ mod receiver {
     use super::Codec;
     use std::io;
 
-    /// A platform hardware decoder (VideoToolbox on macOS, Media Foundation/D3D11 on Windows).
+    /// A platform hardware decoder (VideoToolbox on macOS, Media Foundation/D3D11 on Windows,
+    /// VAAPI on Linux).
     pub trait VideoDecoder: Send {
         type Frame: Send;
         /// Decodes one access unit. `data` is AVCC (H.264/HEVC) or OBUs (AV1); `parameter_sets`

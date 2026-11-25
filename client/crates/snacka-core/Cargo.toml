@@ -11,6 +11,19 @@ socket2 = "0.6"
 core-foundation = "0.10"
 core-foundation-sys = "0.8"
 
+[target.'cfg(any(target_os = "linux", target_os = "android"))'.dependencies]
+libc = "0.2"
+
+[target.'cfg(target_os = "linux")'.dependencies]
+# libavcodec's VAAPI encoders and hwaccel decoders (system FFmpeg 8.x, found with pkg-config).
+ffmpeg-sys-next = { version = "8.1", default-features = false, features = ["avcodec"] }
+
+# libva bindings for what FFmpeg doesn't wrap (DMA-BUF export, sub-rectangle image copies, VPP),
+# generated from the system headers. Build dependencies follow the host platform.
+[target.'cfg(target_os = "linux")'.build-dependencies]
+bindgen = "0.72"
+pkg-config = "0.3"
+
 [target.'cfg(windows)'.dependencies]
 # NVENC/NVDEC bindings (SDK 13.1 layouts, ABI-checked), loaded from the driver at run time.
 mini-nvcodec = "0.2"

@@ -1,14 +1,14 @@
 //! Receives a stream-probe / `send` stream, hardware-decodes it and reports latency from the
-//! barcode (VideoToolbox on macOS, Media Foundation + D3D11 on Windows).
+//! barcode (VideoToolbox on macOS, Media Foundation + D3D11 on Windows, VAAPI on Linux).
 //!
 //!   cargo run --release --example recv -- 9000 [--seconds 10 --warmup 1 --json path]
 //!   (other terminal, macOS) spikes/stream-probe/.build/release/StreamProbe send --port 9000 --width 2560 --height 1440 --fps 120 --codec hevc --bitrate 50 --seconds 10
-//!   (other terminal, Windows) cargo run --release --example send -- --port 9000 --width 3840 --height 2160 --fps 120 --codec hevc --bitrate 100
+//!   (other terminal, Windows/Linux) cargo run --release --example send -- --port 9000 --width 3840 --height 2160 --fps 120 --codec hevc --bitrate 100
 //!
 //! Latency ("total" = capture timestamp in the pixels -> decoded) is only meaningful when sender
 //! and receiver share a clock, i.e. run on the same machine.
 
-#[cfg(any(target_os = "macos", windows))]
+#[cfg(any(target_os = "macos", windows, target_os = "linux"))]
 fn main() -> std::io::Result<()> {
     use snacka_core::clock::{ms, now_ns};
     use snacka_core::stream::barcode;
@@ -28,7 +28,12 @@ fn main() -> std::io::Result<()> {
         let dev = snacka_core::stream::windows::d3d11::create_device(None)?;
         (snacka_core::stream::windows::mf_decode::receiver(port, &dev.device, &dev.context)?, dev.adapter_name)
     };
-    #[cfg(not(windows))]
+    #[cfg(target_os = "linux")]
+    let (mut rx, gpu) = {
+        let device = snacka_core::stream::linux::device::VaDevice::open()?;
+        (snacka_core::stream::linux::decode::receiver(port, &device)?, device.name.clone())
+    };
+    #[cfg(target_os = "macos")]
     let gpu = String::from("apple");
     rx.set_timeout(Some(Duration::from_millis(500)))?;
     println!("listening on udp/{port}");
@@ -72,9 +77,9 @@ fn main() -> std::io::Result<()> {
         codec = f.codec.name();
         size = (frame.width(), frame.height());
         bytes += f.wire_bytes as u64;
-        #[cfg(windows)]
+        #[cfg(not(target_os = "macos"))]
         let code = frame.with_luma(barcode::read).flatten();
-        #[cfg(not(windows))]
+        #[cfg(target_os = "macos")]
         let code = frame.with_luma(barcode::read);
         match code {
             Some((id, capture_ns)) if id & 0xFFFF_FFFF == f.frame_id && capture_ns == f.capture_ns => {
@@ -121,8 +126,8 @@ fn main() -> std::io::Result<()> {
         format!("{{\"p50\":{:.2},\"p95\":{:.2},\"p99\":{:.2}}}", pct(v, 0.5), pct(v, 0.95), pct(v, 0.99)).replace("NaN", "null")
     };
     let summary = format!(
-        "{{\"gpu\":\"{gpu}\",\"codec\":\"{codec}\",\"width\":{},\"height\":{},\"fps\":{:.1},\"encode_ms\":{},\"decode_ms\":{},\"total_ms\":{},\"mbps\":{:.1},\"dropped\":{},\"bad\":{bad},\"keyframe_requests\":{}}}",
-        size.0, size.1, all_total.len().saturating_sub(1) as f64 / span, stage(&mut all_enc), stage(&mut all_dec), stage(&mut all_total),
+        "{{\"gpu\":\"{}\",\"codec\":\"{codec}\",\"width\":{},\"height\":{},\"fps\":{:.1},\"encode_ms\":{},\"decode_ms\":{},\"total_ms\":{},\"mbps\":{:.1},\"dropped\":{},\"bad\":{bad},\"keyframe_requests\":{}}}",
+        gpu.replace('"', "'"), size.0, size.1, all_total.len().saturating_sub(1) as f64 / span, stage(&mut all_enc), stage(&mut all_dec), stage(&mut all_total),
         all_bytes as f64 * 8.0 / span / 1e6, rx.frames_dropped(), rx.keyframe_requests()
     );
     println!("SUMMARY {summary}");
@@ -137,7 +142,7 @@ fn pct(v: &mut [u64], q: f64) -> f64 {
     v.get(((v.len() as f64) * q) as usize).copied().map(snacka_core::clock::ms).unwrap_or(f64::NAN)
 }
 
-#[cfg(not(any(target_os = "macos", windows)))]
+#[cfg(not(any(target_os = "macos", windows, target_os = "linux")))]
 fn main() {
-    eprintln!("recv example needs a platform decoder (macOS or Windows)");
+    eprintln!("recv example needs a platform decoder (macOS, Windows or Linux)");
 }
