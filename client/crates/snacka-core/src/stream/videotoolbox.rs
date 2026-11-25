@@ -232,6 +232,9 @@ impl Decoder {
                     kCFAllocatorDefault, params.len(), pointers.as_ptr(), sizes.as_ptr(), 4, &mut format),
                 Codec::Hevc => CMVideoFormatDescriptionCreateFromHEVCParameterSets(
                     kCFAllocatorDefault, params.len(), pointers.as_ptr(), sizes.as_ptr(), 4, ptr::null(), &mut format),
+                // AV1 (from the Windows NVENC sender) isn't wired up here yet; AV1 has no
+                // parameter sets, so this is only reached if a sender mislabels a stream.
+                Codec::Av1 => -12906, // kVTCouldNotFindVideoDecoderErr
             }
         };
         if st != 0 || format.is_null() {
