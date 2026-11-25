@@ -11,7 +11,7 @@ use objc2::{class, msg_send};
 use objc2_foundation::{NSPoint, NSRect, NSSize};
 use serde::Serialize;
 use snacka_core::clock::{ms, now_ns};
-use snacka_core::stream::{barcode, videotoolbox::{DecodedFrame, Decoder}, wire::Receiver};
+use snacka_core::stream::{barcode, videotoolbox::DecodedFrame, VideoReceiver};
 use std::ffi::c_void;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Mutex;
@@ -141,21 +141,19 @@ pub fn start(app: AppHandle, port: u16) -> Result<(), String> {
     if RUNNING.swap(true, Ordering::AcqRel) {
         return Ok(());
     }
-    let mut rx = Receiver::bind(port).map_err(|e| {
+    let mut rx = VideoReceiver::bind(port).map_err(|e| {
         RUNNING.store(false, Ordering::Release);
         format!("bind udp/{port}: {e}")
     })?;
     std::thread::Builder::new()
         .name("snacka-stream-rx".into())
         .spawn(move || {
-            let mut decoder: Option<Decoder> = None;
             let mut decode_times = Vec::new();
             let (mut bad, mut frames, mut size) = (0u64, 0u64, (0, 0));
             let mut window = now_ns();
             while RUNNING.load(Ordering::Acquire) {
-                let Ok(f) = rx.next_frame() else { break };
-                let d = decoder.get_or_insert_with(|| Decoder::new(f.codec));
-                let Some(frame) = d.decode(f.keyframe, &f.parameter_sets, &f.avcc) else { continue };
+                let Ok(decoded) = rx.next() else { break };
+                let (f, frame) = (decoded.meta, decoded.frame);
                 match frame.with_luma(barcode::read) {
                     Some((_, capture_ns)) if capture_ns == f.capture_ns => {
                         decode_times.push(frame.decoded_ns - f.received_ns);
@@ -178,7 +176,7 @@ pub fn start(app: AppHandle, port: u16) -> Result<(), String> {
                         decode_p50_ms: pct(&mut decode_times, 0.5),
                         to_layer_p50_ms: pct(&mut presented, 0.5),
                         to_layer_p99_ms: pct(&mut presented, 0.99),
-                        dropped: rx.frames_dropped,
+                        dropped: rx.frames_dropped(),
                         bad,
                     };
                     eprintln!(

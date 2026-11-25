@@ -122,12 +122,14 @@ func runSender(host: String, port: UInt16) throws -> Thread {
             if nowNs() > deadline + period { late += 1 } else { sleepUntil(deadline) }
             let (buffer, captureNs) = source.next(frameId: frameId)
             sourceFrames.increment()
-            encoder.encode(buffer, frameId: frameId, captureNs: captureNs, forceKeyframe: frameId == 0)
+            let forceKey = frameId == 0 || sender.takeKeyframeRequest()
+            encoder.encode(buffer, frameId: frameId, captureNs: captureNs, forceKeyframe: forceKey)
             frameId += 1
         }
         encoder.flush()
         if late > 0 { fputs("sender: \(late) frames generated late (source could not keep up)\n", stderr) }
         if sender.sendRetries > 0 { fputs("sender: \(sender.sendRetries) send retries (socket buffer full)\n", stderr) }
+        fputs("sender: stream id \(sender.streamId), \(sender.keyframeRequests) keyframe requests served\n", stderr)
     }
     thread.qualityOfService = .userInteractive
     return thread
