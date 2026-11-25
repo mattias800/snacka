@@ -61,6 +61,12 @@ The server is now running on port 5117.
 
 For production, run behind a reverse proxy (nginx, Caddy, etc.) for SSL termination.
 
+> **Trusted proxies:** Snacka only trusts `X-Forwarded-For` from loopback by default, so clients can't fake their IP to dodge rate limits. If your proxy reaches Snacka from another address (for example Docker, where requests arrive from the bridge network), add it:
+> ```
+> ReverseProxy__TrustedNetworks__0=172.16.0.0/12
+> ```
+> Only do this when port 5117 is **not** reachable directly from the internet. Otherwise anyone could send fake headers through the trusted network.
+
 ### NGINX Proxy Manager
 
 Works out of the box - create a proxy host pointing to `localhost:5117` and enable SSL.
