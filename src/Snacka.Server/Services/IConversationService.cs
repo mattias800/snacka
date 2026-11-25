@@ -134,4 +134,10 @@ public interface IConversationService
         Guid conversationId,
         Guid userId,
         CancellationToken cancellationToken = default);
+
+    /// <summary>
+    /// User ids of everyone in the conversation. Realtime conversation events go to these users
+    /// directly (not to a SignalR group), so new and removed participants are always right.
+    /// </summary>
+    Task<List<Guid>> GetParticipantIdsAsync(Guid conversationId, CancellationToken cancellationToken = default);
 }

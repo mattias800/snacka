@@ -469,6 +469,12 @@ public sealed class ConversationService : IConversationService
             .AnyAsync(cp => cp.ConversationId == conversationId && cp.UserId == userId, cancellationToken);
     }
 
+    public Task<List<Guid>> GetParticipantIdsAsync(Guid conversationId, CancellationToken cancellationToken = default) =>
+        _db.ConversationParticipants
+            .Where(cp => cp.ConversationId == conversationId)
+            .Select(cp => cp.UserId)
+            .ToListAsync(cancellationToken);
+
     private async Task<Conversation?> FindDirectConversationAsync(
         Guid userId1,
         Guid userId2,

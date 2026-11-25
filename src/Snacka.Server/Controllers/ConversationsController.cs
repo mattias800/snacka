@@ -130,9 +130,7 @@ public class ConversationsController : ControllerBase
             var message = await _conversationService.SendMessageAsync(
                 conversationId, userId.Value, request.Content, cancellationToken);
 
-            // Notify all participants via SignalR group
-            await _hubContext.Clients.Group($"conv:{conversationId}")
-                .SendAsync("ConversationMessageReceived", message, cancellationToken);
+            await SendToParticipantsAsync(conversationId, "ConversationMessageReceived", message, cancellationToken);
 
             return Ok(message);
         }
@@ -164,9 +162,7 @@ public class ConversationsController : ControllerBase
             var message = await _conversationService.UpdateMessageAsync(
                 conversationId, messageId, userId.Value, request.Content, cancellationToken);
 
-            // Notify all participants via SignalR group
-            await _hubContext.Clients.Group($"conv:{conversationId}")
-                .SendAsync("ConversationMessageUpdated", message, cancellationToken);
+            await SendToParticipantsAsync(conversationId, "ConversationMessageUpdated", message, cancellationToken);
 
             return Ok(message);
         }
@@ -197,9 +193,7 @@ public class ConversationsController : ControllerBase
             await _conversationService.DeleteMessageAsync(
                 conversationId, messageId, userId.Value, cancellationToken);
 
-            // Notify all participants via SignalR group
-            await _hubContext.Clients.Group($"conv:{conversationId}")
-                .SendAsync("ConversationMessageDeleted", new { ConversationId = conversationId, MessageId = messageId }, cancellationToken);
+            await SendToParticipantsAsync(conversationId, "ConversationMessageDeleted", new { ConversationId = conversationId, MessageId = messageId }, cancellationToken);
 
             return NoContent();
         }
@@ -230,9 +224,7 @@ public class ConversationsController : ControllerBase
             var conversation = await _conversationService.UpdateConversationAsync(
                 conversationId, userId.Value, request.Name, request.IconFileName, cancellationToken);
 
-            // Notify all participants via SignalR group
-            await _hubContext.Clients.Group($"conv:{conversationId}")
-                .SendAsync("ConversationUpdated", conversation, cancellationToken);
+            await SendToParticipantsAsync(conversationId, "ConversationUpdated", conversation, cancellationToken);
 
             return Ok(conversation);
         }
@@ -263,9 +255,7 @@ public class ConversationsController : ControllerBase
             var participant = await _conversationService.AddParticipantAsync(
                 conversationId, request.UserId, userId.Value, cancellationToken);
 
-            // Notify all participants via SignalR group
-            await _hubContext.Clients.Group($"conv:{conversationId}")
-                .SendAsync("ConversationParticipantAdded", new { ConversationId = conversationId, Participant = participant }, cancellationToken);
+            await SendToParticipantsAsync(conversationId, "ConversationParticipantAdded", new { ConversationId = conversationId, Participant = participant }, cancellationToken);
 
             // Also notify the new participant
             await _hubContext.Clients.User(request.UserId.ToString())
@@ -300,9 +290,7 @@ public class ConversationsController : ControllerBase
             await _conversationService.RemoveParticipantAsync(
                 conversationId, participantUserId, userId.Value, cancellationToken);
 
-            // Notify remaining participants via SignalR group
-            await _hubContext.Clients.Group($"conv:{conversationId}")
-                .SendAsync("ConversationParticipantRemoved", new { ConversationId = conversationId, UserId = participantUserId }, cancellationToken);
+            await SendToParticipantsAsync(conversationId, "ConversationParticipantRemoved", new { ConversationId = conversationId, UserId = participantUserId }, cancellationToken);
 
             // Notify the removed user
             await _hubContext.Clients.User(participantUserId.ToString())
@@ -370,5 +358,16 @@ public class ConversationsController : ControllerBase
     {
         var userIdClaim = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
         return Guid.TryParse(userIdClaim, out var userId) ? userId : null;
+    }
+
+    /// <summary>
+    /// Sends a realtime event to every participant's connections, by user id. Group membership
+    /// would miss connections opened before the conversation existed (losing the first DM) and
+    /// keep sending to people who were removed.
+    /// </summary>
+    private async Task SendToParticipantsAsync(Guid conversationId, string eventName, object payload, CancellationToken cancellationToken)
+    {
+        var userIds = await _conversationService.GetParticipantIdsAsync(conversationId, cancellationToken);
+        await _hubContext.Clients.Users(userIds.Select(id => id.ToString())).SendAsync(eventName, payload, cancellationToken);
     }
 }

@@ -47,6 +47,10 @@ public class SnackaHub : Hub
         bool IsScreenSharing = false
     );
 
+    // From the hub's own scope: a connection's HttpContext.RequestServices is already disposed
+    // for long polling (and in OnDisconnectedAsync), so it must not be used for services.
+    private readonly IGamingStationService _stationService;
+
     public SnackaHub(
         SnackaDbContext db,
         IVoiceService voiceService,
@@ -55,8 +59,10 @@ public class SnackaHub : Hub
         IHubContext<SnackaHub> hubContext,
         INotificationService notificationService,
         IConversationService conversationService,
+        IGamingStationService stationService,
         ILogger<SnackaHub> logger)
     {
+        _stationService = stationService;
         _db = db;
         _voiceService = voiceService;
         _sfuService = sfuService;
@@ -287,7 +293,7 @@ public class SnackaHub : Hub
             // Handle gaming station disconnect cleanup
             try
             {
-                var stationService = Context.GetHttpContext()?.RequestServices.GetService<IGamingStationService>();
+                IGamingStationService? stationService = _stationService;
                 if (stationService is not null)
                 {
                     // Check if this connection was a station
@@ -536,8 +542,11 @@ public class SnackaHub : Hub
         var user = await _db.Users.FindAsync(userId.Value);
         if (user is null) return;
 
-        // Send to all participants in the conversation group (except sender)
-        await Clients.OthersInGroup($"conv:{conversationId}")
+        // Send to the other participants (by user id, see ConversationsController.SendToParticipantsAsync)
+        var others = (await _conversationService.GetParticipantIdsAsync(conversationId))
+            .Where(id => id != userId.Value)
+            .Select(id => id.ToString());
+        await Clients.Users(others)
             .SendAsync("ConversationUserTyping", new ConversationTypingEvent(conversationId, userId.Value, user.Username, user.EffectiveDisplayName));
     }
 
@@ -2093,7 +2102,7 @@ public class SnackaHub : Hub
         var userId = GetUserId();
         if (userId is null) return;
 
-        var stationService = Context.GetHttpContext()?.RequestServices.GetService<IGamingStationService>();
+        IGamingStationService? stationService = _stationService;
         if (stationService is null) return;
 
         var station = await stationService.SetStationOnlineAsync(stationId, userId.Value, machineId, Context.ConnectionId);
@@ -2126,7 +2135,7 @@ public class SnackaHub : Hub
         var userId = GetUserId();
         if (userId is null) return;
 
-        var stationService = Context.GetHttpContext()?.RequestServices.GetService<IGamingStationService>();
+        IGamingStationService? stationService = _stationService;
         if (stationService is null) return;
 
         await stationService.SetStationOfflineAsync(Context.ConnectionId);
@@ -2154,7 +2163,7 @@ public class SnackaHub : Hub
         var userId = GetUserId();
         if (userId is null) return null;
 
-        var stationService = Context.GetHttpContext()?.RequestServices.GetService<IGamingStationService>();
+        IGamingStationService? stationService = _stationService;
         if (stationService is null) return null;
 
         try
@@ -2220,7 +2229,7 @@ public class SnackaHub : Hub
         var userId = GetUserId();
         if (userId is null) return;
 
-        var stationService = Context.GetHttpContext()?.RequestServices.GetService<IGamingStationService>();
+        IGamingStationService? stationService = _stationService;
         if (stationService is null) return;
 
         await stationService.DisconnectUserAsync(stationId, userId.Value);
@@ -2249,7 +2258,7 @@ public class SnackaHub : Hub
         if (stationUserId is null) return;
 
         // Get the station for this connection
-        var stationService = Context.GetHttpContext()?.RequestServices.GetService<IGamingStationService>();
+        IGamingStationService? stationService = _stationService;
         if (stationService is null) return;
 
         var station = await stationService.GetStationByConnectionIdAsync(Context.ConnectionId);
@@ -2337,7 +2346,7 @@ public class SnackaHub : Hub
         if (userId is null) return;
 
         // Verify user is connected to station with appropriate input mode
-        var stationService = Context.GetHttpContext()?.RequestServices.GetService<IGamingStationService>();
+        IGamingStationService? stationService = _stationService;
         if (stationService is null) return;
 
         var permission = await stationService.GetUserPermissionAsync(input.StationId, userId.Value);
