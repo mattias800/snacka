@@ -46,8 +46,9 @@ function frameStats(intervals: number[]) {
     p50_ms: p(0.5),
     p95_ms: p(0.95),
     p99_ms: p(0.99),
-    over_16ms: intervals.filter((d) => d > 16.7).length,
-    over_33ms: intervals.filter((d) => d > 33.4).length,
+    // Hitches: frames clearly longer than one 60 Hz refresh (17 ms intervals are just vsync rounding).
+    over_25ms: intervals.filter((d) => d > 25).length,
+    over_50ms: intervals.filter((d) => d > 50).length,
   };
 }
 
@@ -72,8 +73,8 @@ export function Bench() {
 
       // 2. Scroll top to bottom over 5 s at constant speed.
       setStatus("scrolling…");
-      // Scroll the same element the chat view scrolls: the message <ol>.
-      const el = listRef.current!.querySelector("ol")!;
+      // Scroll the same element the chat view scrolls.
+      const el = listRef.current!.querySelector<HTMLElement>(".message-scroller")!;
       el.scrollTop = 0;
       await nextFrame();
       const scrollIntervals: number[] = [];

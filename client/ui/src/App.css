@@ -37,9 +37,11 @@ input { font: inherit; color: var(--text); background: var(--bg); border: 1px so
 .dot.connected { background: #23a55a; }
 .dot.reconnecting { background: #f0b232; }
 .messages { background: var(--panel-2); display: flex; flex-direction: column; min-width: 0; }
-.messages ol { list-style: none; margin: 0; padding: 16px; flex: 1; overflow-y: auto; display: flex; flex-direction: column; gap: 10px; }
-.messages li time { color: var(--muted); font-size: 12px; margin-left: 8px; }
-.messages li p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
+.message-scroller { flex: 1; min-height: 0; overflow-y: auto; overflow-anchor: none; padding: 0 16px; }
+.message-list { list-style: none; margin: 0; padding: 0; position: relative; }
+.message-list > li { position: absolute; top: 0; left: 0; width: 100%; padding: 5px 0; contain: layout paint; }
+.message-list time { color: var(--muted); font-size: 12px; margin-left: 8px; }
+.message-list p { margin: 2px 0 0; white-space: pre-wrap; overflow-wrap: anywhere; }
 .messages form { padding: 0 16px 20px; }
 
 @media (max-width: 700px) {
