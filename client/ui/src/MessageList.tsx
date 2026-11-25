@@ -1,6 +1,8 @@
 import { memo, useEffect, useLayoutEffect, useRef, useState } from "react";
 import { useVirtualizer } from "@tanstack/react-virtual";
-import type { ChatMessage } from "./chat/model";
+import type { Attachment, ChatMessage } from "./chat/model";
+import { formatSize, type FileLoader } from "./chat/files";
+import { renderMarkdown } from "./chat/markdown";
 
 export type Message = ChatMessage;
 
@@ -13,7 +15,40 @@ export type MessageActions = {
   onDelete?: (id: string) => void;
   onReact?: (id: string, emoji: string, add: boolean) => void;
   onReply?: (m: Message) => void;
+  /** Loads attachments (they need the user's token). */
+  loadFile?: FileLoader;
 };
+
+/** An attachment: images and audio inline, other files as a download link. */
+function AttachmentView({ a, loadFile }: { a: Attachment; loadFile?: FileLoader }) {
+  const [url, setUrl] = useState<string | null>(null);
+  const [failed, setFailed] = useState(false);
+  const inline = a.isImage || a.isAudio;
+  useEffect(() => {
+    if (!inline || !loadFile) return;
+    let live = true;
+    loadFile(a.path).then((u) => live && setUrl(u), () => live && setFailed(true));
+    return () => {
+      live = false;
+    };
+  }, [a.path, inline, loadFile]);
+
+  const download = async () => {
+    if (!loadFile) return;
+    const link = document.createElement("a");
+    link.href = await loadFile(a.path);
+    link.download = a.name;
+    link.click();
+  };
+
+  if (a.isImage && url) return <img className="attachment-image" src={url} alt={a.name} data-testid="attachment-image" onClick={() => void download()} />;
+  if (a.isAudio && url) return <audio className="attachment-audio" src={url} controls data-testid="attachment-audio" />;
+  return (
+    <button className="attachment-file" data-testid="attachment-file" onClick={() => void download()} title="Download">
+      📄 {a.name} <span className="muted">{failed ? "(unavailable)" : formatSize(a.size)}</span>
+    </button>
+  );
+}
 
 const QUICK_REACTIONS = ["👍", "❤️", "😂"];
 
@@ -63,7 +98,14 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
           <input name="content" defaultValue={m.content} autoFocus onKeyDown={(e) => e.key === "Escape" && setEditing(false)} aria-label="Edit message" />
         </form>
       ) : (
-        <p>{m.content}</p>
+        m.content && <div className="content">{renderMarkdown(m.content)}</div>
+      )}
+      {m.attachments.length > 0 && (
+        <div className="attachments">
+          {m.attachments.map((a) => (
+            <AttachmentView key={a.id} a={a} loadFile={actions?.loadFile} />
+          ))}
+        </div>
       )}
       {m.reactions && m.reactions.length > 0 && (
         <div className="reactions">

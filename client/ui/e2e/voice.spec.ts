@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { ensureCommunity, logIn } from "./support";
+import type { Page } from "@playwright/test";
+import { ensureCommunity, expect, logIn, test } from "./support";
 
 /**
  * "Alice & Bob as code" (#23) for voice (#52): two browsers with fake microphones join the same

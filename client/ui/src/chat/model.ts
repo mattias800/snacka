@@ -1,4 +1,5 @@
 import type { Schemas } from "../api/client";
+import { attachmentPath } from "./files";
 
 /**
  * One message as the UI shows it, whether it came from a channel or a DM. Server DTOs differ
@@ -15,7 +16,10 @@ export type ChatMessage = {
   reactions: Reaction[] | null;
   /** The message this one replies to (channels only). */
   replyTo: { authorName: string; content: string } | null;
+  attachments: Attachment[];
 };
+
+export type Attachment = { id: string; name: string; path: string; size: number; isImage: boolean; isAudio: boolean };
 
 export type Reaction = { emoji: string; count: number; mine: boolean };
 
@@ -32,6 +36,7 @@ export const fromChannel = (m: ChannelMessage): ChatMessage => ({
   edited: m.isEdited,
   reactions: (m.reactions ?? []).map((r) => ({ emoji: r.emoji, count: r.count, mine: r.hasReacted })),
   replyTo: m.replyTo ? { authorName: m.replyTo.authorEffectiveDisplayName, content: m.replyTo.content } : null,
+  attachments: (m.attachments ?? []).map((a) => ({ id: a.id, name: a.fileName, path: attachmentPath(a.url), size: a.fileSize, isImage: a.isImage, isAudio: a.isAudio })),
 });
 
 export const fromDm = (m: DmMessage): ChatMessage => ({
@@ -43,6 +48,7 @@ export const fromDm = (m: DmMessage): ChatMessage => ({
   edited: m.updatedAt != null,
   reactions: null,
   replyTo: null,
+  attachments: [],
 });
 
 /** Adds or replaces a message by id, keeping the list in time order. */

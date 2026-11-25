@@ -32,6 +32,7 @@ function makeMessages(n: number, offset = 0): Message[] {
       edited: false,
       reactions: null,
       replyTo: null,
+      attachments: [],
     };
   });
 }

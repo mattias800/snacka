@@ -6,6 +6,7 @@ import { MessageList, type MessageActions } from "../MessageList";
 import { StreamTest, inNativeApp } from "../StreamTest";
 import { VoicePanel, useVoice } from "../VoicePanel";
 import { BrowseCommunities, InviteFriends } from "./Onboarding";
+import { createFileLoader, formatSize } from "./files";
 import { applyReaction, fromChannel, fromDm, upsert, type ChannelMessage, type ChatMessage, type DmMessage, type ReactionUpdated } from "./model";
 
 type Community = Schemas["CommunityResponse"];
@@ -44,6 +45,12 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   const [hubState, setHubState] = useState("connecting");
   const [showStreamTest, setShowStreamTest] = useState(false);
   const [replyingTo, setReplyingTo] = useState<ChatMessage | null>(null);
+  /** Files to send with the next message (channels only). */
+  const [pendingFiles, setPendingFiles] = useState<File[]>([]);
+  const [dragging, setDragging] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
+  const loadFile = useMemo(() => createFileLoader(serverUrl, () => tokenRef.current), [serverUrl, tokenRef]);
+  const [newChannel, setNewChannel] = useState<{ name: string; voice: boolean } | null>(null);
   /** The view whose realtime events we're receiving (joined its channel group while connected). */
   const [liveView, setLiveView] = useState<View>(null);
   /** Who is typing in the open channel/DM, and until when (ms) to show it. */
@@ -141,6 +148,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     hub.on("ConversationMessageDeleted", (e: { conversationId: string; messageId: string }) => setMessages((prev) => prev.filter((m) => m.id !== e.messageId)));
     hub.on("ConversationCreated", () => void loadConversations().catch(() => {}));
 
+    hub.on("ChannelCreated", (ch: Channel) => ch.communityId === communityRef.current?.id && setChannels((prev) => (prev.some((c) => c.id === ch.id) ? prev : [...prev, ch])));
+    hub.on("ChannelUpdated", (ch: Channel) => setChannels((prev) => prev.map((c) => (c.id === ch.id ? ch : c))));
+    hub.on("ChannelDeleted", (e: { channelId: string }) => {
+      setChannels((prev) => prev.filter((c) => c.id !== e.channelId));
+      const v = viewRef.current;
+      if (v?.kind === "channel" && v.channel.id === e.channelId) void openViewRef.current(null);
+    });
     hub.on("CommunityMemberAdded", (communityId: string) => {
       if (communityRef.current?.id !== communityId) return;
       void api.GET("/api/communities/{communityId}/members", { params: { path: { communityId } } }).then(ok).then(setMembers).catch(() => {});
@@ -196,6 +210,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       viewRef.current = next;
       setMessages([]);
       setReplyingTo(null);
+      setPendingFiles([]);
       setTyping({});
       setLiveView(null);
       if (!next) return;
@@ -272,17 +287,64 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     e.preventDefault();
     const content = draft.trim();
     const v = view;
-    if (!content || !v) return;
+    const files = v?.kind === "channel" ? pendingFiles : [];
+    if ((!content && files.length === 0) || !v) return;
     setDraft("");
+    setPendingFiles([]);
     const replyToId = replyingTo?.id ?? null;
     setReplyingTo(null);
     lastTypingSentRef.current = 0;
     void run(async () => {
       const m =
-        v.kind === "channel"
+        v.kind === "channel" && files.length > 0
+          ? fromChannel(await uploadMessage(v.channel.id, content, replyToId, files))
+          : v.kind === "channel"
           ? fromChannel(ok(await api.POST("/api/channels/{channelId}/messages", { params: { path: { channelId: v.channel.id } }, body: { content, replyToId } })))
           : fromDm(ok(await api.POST("/api/conversations/{conversationId}/messages", { params: { path: { conversationId: v.conversation.id } }, body: { content } })));
       if (viewRef.current === v) setMessages((prev) => upsert(prev, m));
+    });
+  };
+
+  /** Sends a message with attachments (multipart; not expressible in the generated client). */
+  const uploadMessage = async (channelId: string, content: string, replyToId: string | null, files: File[]): Promise<ChannelMessage> => {
+    const form = new FormData();
+    form.append("content", content);
+    if (replyToId) form.append("replyToId", replyToId);
+    for (const f of files) form.append("files", f, f.name);
+    const res = await fetch(`${serverUrl}/api/channels/${channelId}/messages/with-attachments`, {
+      method: "POST",
+      headers: { Authorization: `Bearer ${tokenRef.current ?? ""}` },
+      body: form,
+    });
+    if (!res.ok) {
+      const body = (await res.json().catch(() => null)) as { error?: string } | null;
+      throw new Error(body?.error ?? `Upload failed: ${res.status}`);
+    }
+    return (await res.json()) as ChannelMessage;
+  };
+
+  const addFiles = (files: Iterable<File>) => {
+    if (view?.kind !== "channel") return;
+    // Copy now: FileLists are live and get emptied when the input/drop event is reset.
+    const list = [...files];
+    setPendingFiles((prev) => [...prev, ...list].slice(0, 10));
+  };
+
+  const createChannel = (e: React.FormEvent) => {
+    e.preventDefault();
+    const c = community;
+    const draftChannel = newChannel;
+    if (!c || !draftChannel?.name.trim()) return;
+    setNewChannel(null);
+    void run(async () => {
+      const ch = ok(
+        await api.POST("/api/communities/{communityId}/Channels", {
+          params: { path: { communityId: c.id } },
+          body: { name: draftChannel.name.trim(), topic: null, type: draftChannel.voice ? ChannelKind.Voice : ChannelKind.Text },
+        }),
+      );
+      setChannels((prev) => (prev.some((x) => x.id === ch.id) ? prev : [...prev, ch]));
+      if (!draftChannel.voice) await openView({ kind: "channel", channel: ch });
     });
   };
 
@@ -315,6 +377,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       const path = (messageId: string) => ({ params: { path: { channelId: v.channel.id, messageId } } });
       return {
         myId,
+        loadFile,
         canModerate: me !== undefined && me.role !== Role.Member,
         onEdit: (id, content) =>
           void run(async () => {
@@ -357,7 +420,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
           setMessages((prev) => prev.filter((m) => m.id !== id));
         }),
     };
-  }, [view, myId, me, api, run]);
+  }, [view, myId, me, api, run, loadFile]);
 
   const title = !view ? (community ? community.name : "Direct messages") : view.kind === "channel" ? `# ${view.channel.name}` : `@ ${conversationName(view.conversation, myId)}`;
   const placeholder = view?.kind === "channel" ? `Message #${view.channel.name}` : view ? `Message ${conversationName(view.conversation, myId)}` : "";
@@ -378,7 +441,23 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
         <button className={panel === "browse" ? "active" : ""} title="Join or create a community" data-testid="browse" onClick={() => setPanel("browse")}>+</button>
       </nav>
       <aside className="channels">
-        <header>{community?.name ?? "Direct messages"}</header>
+        <header className="sidebar-header">
+          <span>{community?.name ?? "Direct messages"}</span>
+          {community && me !== undefined && me.role !== Role.Member && (
+            <button className="link" title="Create channel" data-testid="new-channel" onClick={() => setNewChannel(newChannel ? null : { name: "", voice: false })}>
+              ＋
+            </button>
+          )}
+        </header>
+        {newChannel && (
+          <form className="new-channel" onSubmit={createChannel}>
+            <input autoFocus placeholder="new-channel" aria-label="Channel name" value={newChannel.name} onChange={(e) => setNewChannel({ ...newChannel, name: e.target.value })} />
+            <label>
+              <input type="checkbox" checked={newChannel.voice} onChange={(e) => setNewChannel({ ...newChannel, voice: e.target.checked })} /> Voice
+            </label>
+            <button className="primary" type="submit">Create</button>
+          </form>
+        )}
         {community === null ? (
           conversations.length === 0 ? (
             <p className="muted hint">No conversations yet. Open a community and pick someone under Members.</p>
@@ -468,7 +547,22 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
         </main>
       ) : (
         // data-live: this view receives realtime events (tests wait for it before acting).
-        <main className="messages" data-live={view !== null && liveView === view}>
+        <main
+          className={`messages${dragging ? " dragging" : ""}`}
+          data-live={view !== null && liveView === view}
+          onDragOver={(e) => {
+            if (view?.kind !== "channel" || !e.dataTransfer.types.includes("Files")) return;
+            e.preventDefault();
+            setDragging(true);
+          }}
+          onDragLeave={() => setDragging(false)}
+          onDrop={(e) => {
+            if (view?.kind !== "channel") return;
+            e.preventDefault();
+            setDragging(false);
+            addFiles(e.dataTransfer.files);
+          }}
+        >
           <header>{title}</header>
           {error && <p className="error">{error}</p>}
           <MessageList messages={messages} actions={actions} />
@@ -480,7 +574,56 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
                   <button type="button" className="link" title="Cancel reply" onClick={() => setReplyingTo(null)}>✕</button>
                 </div>
               )}
-              <input value={draft} onChange={(e) => onDraftChange(e.target.value)} placeholder={placeholder} aria-label="Message" autoFocus />
+              {pendingFiles.length > 0 && (
+                <ul className="pending-files">
+                  {pendingFiles.map((f, i) => (
+                    <li key={`${f.name}-${i}`} data-testid="pending-file">
+                      📄 {f.name} <span className="muted">{formatSize(f.size)}</span>
+                      <button type="button" className="link" title={`Remove ${f.name}`} onClick={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}>✕</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="composer">
+                {view.kind === "channel" && (
+                  <>
+                    <button type="button" className="attach" title="Attach files" onClick={() => fileInputRef.current?.click()}>📎</button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      multiple
+                      hidden
+                      data-testid="file-input"
+                      onChange={(e) => {
+                        addFiles(e.target.files ?? []);
+                        e.target.value = "";
+                      }}
+                    />
+                  </>
+                )}
+                <textarea
+                  rows={Math.min(8, draft.split("\n").length)}
+                  value={draft}
+                  onChange={(e) => onDraftChange(e.target.value)}
+                  onKeyDown={(e) => {
+                    // Enter sends; Shift+Enter is a new line (and IME composition is left alone).
+                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
+                      e.preventDefault();
+                      e.currentTarget.form?.requestSubmit();
+                    }
+                  }}
+                  onPaste={(e) => {
+                    const files = [...e.clipboardData.files];
+                    if (files.length > 0 && view.kind === "channel") {
+                      e.preventDefault();
+                      addFiles(files);
+                    }
+                  }}
+                  placeholder={placeholder}
+                  aria-label="Message"
+                  autoFocus
+                />
+              </div>
               <div className="typing" data-testid="typing">
                 {typingNames.length === 1 && <><strong>{typingNames[0]}</strong> is typing…</>}
                 {typingNames.length > 1 && <><strong>{typingNames.join(", ")}</strong> are typing…</>}

@@ -1,4 +1,6 @@
-import { test, type Browser, type BrowserContext, type Page } from "@playwright/test";
+import { test as base, type Browser, type BrowserContext, type Page } from "@playwright/test";
+
+export { expect } from "@playwright/test";
 
 /** Shared setup for multi-user e2e tests: Alice and Bob against a running dev server. */
 
@@ -48,8 +50,19 @@ export async function newPage(browser: Browser): Promise<Page> {
   return context.newPage();
 }
 
-test.afterEach(async () => {
-  await Promise.all(openContexts.splice(0).map((c) => c.close()));
+/**
+ * Use this `test` in every spec: an automatic fixture closes the test's browsers afterwards.
+ * (A plain afterEach in this module would only attach to the first spec file importing it.)
+ */
+export const test = base.extend<{ closeBrowsers: void }>({
+  closeBrowsers: [
+    // eslint-disable-next-line no-empty-pattern -- Playwright fixtures must destructure
+    async ({}, use) => {
+      await use();
+      await Promise.all(openContexts.splice(0).map((c) => c.close()));
+    },
+    { auto: true },
+  ],
 });
 
 /** A fresh browser context logged in as `name`, with `community` open. */

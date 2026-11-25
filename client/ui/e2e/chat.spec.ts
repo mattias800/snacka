@@ -1,5 +1,5 @@
-import { expect, test, type Page } from "@playwright/test";
-import { ensureCommunity, logIn } from "./support";
+import type { Page } from "@playwright/test";
+import { ensureCommunity, expect, logIn, test } from "./support";
 
 /**
  * Alice & Bob chat in the new client (#23): each message shows up exactly once on both screens,

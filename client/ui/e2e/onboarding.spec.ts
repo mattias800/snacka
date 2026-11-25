@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { ensureCommunity, logIn, newPage } from "./support";
+import { ensureCommunity, expect, logIn, newPage, test } from "./support";
 
 /**
  * A new friend from invite to first message: Alice (server admin) creates an invite link, the

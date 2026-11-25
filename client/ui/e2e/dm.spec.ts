@@ -1,5 +1,4 @@
-import { expect, test } from "@playwright/test";
-import { ensureCommunity, logIn } from "./support";
+import { ensureCommunity, expect, logIn, test } from "./support";
 
 /**
  * Alice & Bob direct messages in the new client: start a DM from the member list, the other
