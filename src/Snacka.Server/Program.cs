@@ -220,7 +220,7 @@ builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IImageProcessingService, ImageProcessingService>();
 
 // Add controllers
-builder.Services.AddControllers();
+builder.Services.AddControllers(options => options.Filters.Add<Snacka.Server.Middleware.AccessDeniedExceptionFilter>());
 
 // Add OpenAPI/Swagger
 builder.Services.AddOpenApi();

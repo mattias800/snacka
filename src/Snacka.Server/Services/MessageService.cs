@@ -13,6 +13,9 @@ public sealed class MessageService : IMessageService
 
     public async Task<IEnumerable<MessageResponse>> GetMessagesAsync(Guid channelId, Guid currentUserId, int skip = 0, int take = 50, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureChannelMemberAsync(channelId, currentUserId, cancellationToken);
+        take = Math.Clamp(take, 1, 100); // one request must not be able to dump a whole channel
+        skip = Math.Max(0, skip);
         var messages = await _db.Messages
             .Include(m => m.Author)
             .Include(m => m.ReplyTo)
@@ -34,6 +37,7 @@ public sealed class MessageService : IMessageService
 
     public async Task<MessageResponse> SendMessageAsync(Guid channelId, Guid authorId, string content, Guid? replyToId = null, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureChannelMemberAsync(channelId, authorId, cancellationToken);
         // SECURITY: Validate message content length
         if (content.Length > MaxMessageLength)
             throw new InvalidOperationException($"Message cannot exceed {MaxMessageLength} characters.");
@@ -138,6 +142,7 @@ public sealed class MessageService : IMessageService
 
     public async Task<MessagePinnedEvent> PinMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureMessageMemberAsync(messageId, userId, cancellationToken);
         var message = await _db.Messages
             .Include(m => m.Channel)
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
@@ -177,6 +182,7 @@ public sealed class MessageService : IMessageService
 
     public async Task<MessagePinnedEvent> UnpinMessageAsync(Guid messageId, Guid userId, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureMessageMemberAsync(messageId, userId, cancellationToken);
         var message = await _db.Messages
             .Include(m => m.Channel)
             .FirstOrDefaultAsync(m => m.Id == messageId, cancellationToken)
@@ -219,6 +225,7 @@ public sealed class MessageService : IMessageService
 
     public async Task<IEnumerable<MessageResponse>> GetPinnedMessagesAsync(Guid channelId, Guid currentUserId, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureChannelMemberAsync(channelId, currentUserId, cancellationToken);
         var messages = await _db.Messages
             .Include(m => m.Author)
             .Include(m => m.ReplyTo)
@@ -236,6 +243,7 @@ public sealed class MessageService : IMessageService
 
     public async Task<ThreadResponse> GetThreadAsync(Guid parentMessageId, Guid currentUserId, int page = 1, int pageSize = 50, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureMessageMemberAsync(parentMessageId, currentUserId, cancellationToken);
         var parentMessage = await _db.Messages
             .Include(m => m.Author)
             .Include(m => m.ReplyTo)
@@ -276,6 +284,7 @@ public sealed class MessageService : IMessageService
 
     public async Task<MessageResponse> CreateThreadReplyAsync(Guid parentMessageId, Guid authorId, string content, Guid? replyToId = null, CancellationToken cancellationToken = default)
     {
+        await _db.EnsureMessageMemberAsync(parentMessageId, authorId, cancellationToken);
         var author = await _db.Users.FindAsync([authorId], cancellationToken)
             ?? throw new InvalidOperationException("User not found.");
 
