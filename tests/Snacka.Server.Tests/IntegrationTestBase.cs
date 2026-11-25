@@ -20,7 +20,7 @@ public class IntegrationTestBase : IDisposable
     public readonly HttpClient Client;
     private readonly string _dbName;
 
-    internal const string TestSecretKey = "ThisIsATestSecretKeyThatIsLongEnoughForHmacSha256Testing!";
+    internal const string TestSecretKey = "q7Vx2LmP9rTz4Kb8Nw1Hc6Jd3Fy5Gs0Ue-Integration";
     internal const string TestIssuer = "TestIssuer";
     internal const string TestAudience = "TestAudience";
 

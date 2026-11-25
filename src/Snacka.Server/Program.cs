@@ -26,14 +26,13 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
 
 // SECURITY: Get JWT secret from environment variable or config
 var jwtSecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
-    ?? builder.Configuration.GetSection(JwtSettings.SectionName)["SecretKey"]
-    ?? throw new InvalidOperationException(
-        "JWT secret key is not configured. Set the JWT_SECRET_KEY environment variable or copy .env.example to .env");
+    ?? builder.Configuration.GetSection(JwtSettings.SectionName)["SecretKey"];
 
-if (jwtSecretKey.Length < 32)
+if (SecretValidator.ValidateJwtSecret(jwtSecretKey) is { } secretError)
 {
-    throw new InvalidOperationException("JWT secret key must be at least 32 characters long.");
+    throw new InvalidOperationException(secretError);
 }
+ArgumentNullException.ThrowIfNull(jwtSecretKey);
 
 // Configure JWT settings with resolved secret key
 builder.Services.Configure<JwtSettings>(options =>
