@@ -14,6 +14,9 @@ type StreamStats = {
   decode_p50_ms: number | null;
   to_layer_p50_ms: number | null;
   to_layer_p99_ms: number | null;
+  /** Capture -> actually on screen (Linux: wp_presentation feedback); absent elsewhere. */
+  on_screen_p50_ms?: number | null;
+  on_screen_p99_ms?: number | null;
   dropped: number;
   bad: number;
 };
@@ -98,6 +101,11 @@ export function StreamTest({ autoStartPort }: { autoStartPort?: number }) {
         <p className="stream-stats">
           {stats.width}×{stats.height} · {stats.fps.toFixed(0)} fps · decode {fmt(stats.decode_p50_ms)} ms ·
           capture→layer p50 <strong>{fmt(stats.to_layer_p50_ms)} ms</strong> p99 {fmt(stats.to_layer_p99_ms)} ms ·
+          {stats.on_screen_p50_ms !== undefined && (
+            <>
+              on screen p50 <strong>{fmt(stats.on_screen_p50_ms)} ms</strong> p99 {fmt(stats.on_screen_p99_ms ?? null)} ms ·{" "}
+            </>
+          )}
           dropped {stats.dropped} · bad {stats.bad}
         </p>
       )}

@@ -20,6 +20,14 @@ snacka-core = { path = "../crates/snacka-core" }
 objc2 = "0.6"
 objc2-foundation = { version = "0.3", features = ["NSGeometry"] }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+# Same GTK 3 bindings Tauri/tao use (for the window's GdkWindow and webview widget).
+gtk = "0.18"
+# The window's Wayland connection is GTK's; wayland-client attaches to it (client_system).
+wayland-client = "0.31"
+wayland-backend = { version = "0.3", features = ["client_system"] }
+wayland-protocols = { version = "0.32", features = ["client", "unstable"] }
+
 [target.'cfg(windows)'.dependencies]
 windows = { version = "0.62", features = [
     "Win32_Foundation",
