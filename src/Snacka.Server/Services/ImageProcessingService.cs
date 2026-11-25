@@ -1,12 +1,11 @@
 using Microsoft.Extensions.Options;
-using SixLabors.ImageSharp;
-using SixLabors.ImageSharp.Formats.Png;
-using SixLabors.ImageSharp.Processing;
+using SkiaSharp;
 
 namespace Snacka.Server.Services;
 
 /// <summary>
-/// Image processing service using ImageSharp.
+/// Avatar processing with SkiaSharp (MIT, using Google Skia decoders). It replaced ImageSharp 4,
+/// whose Release builds require a commercial license key.
 /// </summary>
 public class ImageProcessingService : IImageProcessingService
 {
@@ -46,6 +45,9 @@ public class ImageProcessingService : IImageProcessingService
         return new AvatarValidationResult(true);
     }
 
+    /// <summary>Largest source image we decode (about 8K x 6K); bigger files are rejected before decoding.</summary>
+    private const long MaxSourcePixels = 50_000_000;
+
     public async Task<AvatarProcessResult> ProcessAvatarAsync(
         Stream sourceStream,
         CropRegion? cropRegion,
@@ -53,50 +55,57 @@ public class ImageProcessingService : IImageProcessingService
     {
         try
         {
-            using var image = await Image.LoadAsync(sourceStream, cancellationToken);
+            // Avatars are size-limited by ValidateAvatar, so buffering is fine (Skia needs a seekable source).
+            using var buffer = new MemoryStream();
+            await sourceStream.CopyToAsync(buffer, cancellationToken);
+            using var data = SKData.CreateCopy(buffer.GetBuffer().AsSpan(0, (int)buffer.Length));
+            using var codec = SKCodec.Create(data);
+            if (codec is null)
+            {
+                _logger.LogWarning("Failed to process avatar: unknown image format");
+                return new AvatarProcessResult(string.Empty, false, "Invalid image format");
+            }
+            if ((long)codec.Info.Width * codec.Info.Height > MaxSourcePixels)
+                return new AvatarProcessResult(string.Empty, false, "Image dimensions are too large");
 
-            // Apply crop if specified
+            using var source = SKBitmap.Decode(codec);
+            if (source is null)
+                return new AvatarProcessResult(string.Empty, false, "Invalid image format");
+
+            // Region of the source to use: the requested crop (relative coordinates), then the
+            // centered square inside it (a "cover" resize).
+            var region = new SKRectI(0, 0, source.Width, source.Height);
             if (cropRegion != null)
             {
-                var sourceWidth = image.Width;
-                var sourceHeight = image.Height;
-
-                // Convert relative coordinates to absolute pixels
-                var cropX = (int)(cropRegion.X * sourceWidth);
-                var cropY = (int)(cropRegion.Y * sourceHeight);
-                var cropWidth = (int)(cropRegion.Width * sourceWidth);
-                var cropHeight = (int)(cropRegion.Height * sourceHeight);
-
-                // Ensure crop region is valid
-                cropX = Math.Max(0, Math.Min(cropX, sourceWidth - 1));
-                cropY = Math.Max(0, Math.Min(cropY, sourceHeight - 1));
-                cropWidth = Math.Max(1, Math.Min(cropWidth, sourceWidth - cropX));
-                cropHeight = Math.Max(1, Math.Min(cropHeight, sourceHeight - cropY));
-
-                _logger.LogDebug(
-                    "Cropping avatar: source {SrcW}x{SrcH}, crop region ({X},{Y}) {W}x{H}",
-                    sourceWidth, sourceHeight, cropX, cropY, cropWidth, cropHeight);
-
-                image.Mutate(ctx => ctx.Crop(new Rectangle(cropX, cropY, cropWidth, cropHeight)));
+                var x = Math.Clamp((int)(cropRegion.X * source.Width), 0, source.Width - 1);
+                var y = Math.Clamp((int)(cropRegion.Y * source.Height), 0, source.Height - 1);
+                var w = Math.Clamp((int)(cropRegion.Width * source.Width), 1, source.Width - x);
+                var h = Math.Clamp((int)(cropRegion.Height * source.Height), 1, source.Height - y);
+                region = new SKRectI(x, y, x + w, y + h);
+                _logger.LogDebug("Cropping avatar: source {SrcW}x{SrcH}, crop {Region}", source.Width, source.Height, region);
             }
+            var side = Math.Min(region.Width, region.Height);
+            var square = SKRectI.Create(region.Left + (region.Width - side) / 2, region.Top + (region.Height - side) / 2, side, side);
 
-            // Resize to target avatar size (square)
             var targetSize = _settings.AvatarSize;
-            image.Mutate(ctx => ctx.Resize(new ResizeOptions
+            using var surface = SKSurface.Create(new SKImageInfo(targetSize, targetSize, SKColorType.Rgba8888, SKAlphaType.Premul))
+                ?? throw new InvalidOperationException("Could not allocate the avatar surface.");
+            using (var image = SKImage.FromBitmap(source))
             {
-                Size = new Size(targetSize, targetSize),
-                Mode = ResizeMode.Crop // Crop to fill the square, maintaining aspect ratio
-            }));
+                surface.Canvas.Clear(SKColors.Transparent);
+                surface.Canvas.DrawImage(image, SKRect.Create(square.Left, square.Top, square.Width, square.Height),
+                    SKRect.Create(0, 0, targetSize, targetSize), new SKSamplingOptions(SKCubicResampler.Mitchell));
+            }
 
             // Generate unique filename
             var storedFileName = $"{Guid.NewGuid()}.png";
             var filePath = Path.Combine(_avatarPath, storedFileName);
 
-            // Save as PNG (lossless, good quality for avatars)
-            await image.SaveAsync(filePath, new PngEncoder
-            {
-                CompressionLevel = PngCompressionLevel.BestCompression
-            }, cancellationToken);
+            // Save as PNG (lossless, good quality for avatars). Re-encoding also drops any metadata.
+            using var snapshot = surface.Snapshot();
+            using var png = snapshot.Encode(SKEncodedImageFormat.Png, 100);
+            await using (var file = File.Create(filePath))
+                await file.WriteAsync(png.ToArray(), cancellationToken);
 
             _logger.LogInformation(
                 "Processed and saved avatar as {FileName} ({Width}x{Height})",
@@ -104,12 +113,7 @@ public class ImageProcessingService : IImageProcessingService
 
             return new AvatarProcessResult(storedFileName, true);
         }
-        catch (UnknownImageFormatException ex)
-        {
-            _logger.LogWarning(ex, "Failed to process avatar: unknown image format");
-            return new AvatarProcessResult(string.Empty, false, "Invalid image format");
-        }
-        catch (Exception ex)
+        catch (Exception ex) when (ex is not OperationCanceledException)
         {
             _logger.LogError(ex, "Failed to process avatar");
             return new AvatarProcessResult(string.Empty, false, "Failed to process image");
