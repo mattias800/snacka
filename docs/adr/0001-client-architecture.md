@@ -74,7 +74,7 @@ Game-streaming loopback (synthetic GPU frames → hardware encode → UDP wire f
 
 | Machine | 1440p120 | 4K120 |
 |---|---|---|
-| Windows, RTX 4090 (NVENC, HEVC) | ~2–3 ms | **4.0 ms** |
+| Windows, RTX 4090 (NVENC, HEVC) | 3.9 ms | **4.0 ms** |
 | Linux, Radeon 8060S iGPU (VAAPI, HEVC) | 5.5–8 ms | 12–13.5 ms |
 | macOS, M4 Pro (VideoToolbox, HEVC) | 6–9 ms | not reachable (~17 ms encode per frame) |
 
