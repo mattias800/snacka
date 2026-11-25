@@ -186,9 +186,8 @@ public class ThreadViewModelTests : IDisposable
 
         // Act
         var loadTask = vm.LoadAsync();
-        await Task.Delay(50); // Allow time for IsLoading to be set
 
-        // Assert - should be loading
+        // Assert - IsLoading is set synchronously before the API call is awaited
         Assert.True(vm.IsLoading);
 
         // Complete the API call

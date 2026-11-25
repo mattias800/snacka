@@ -570,10 +570,7 @@ public class ScreenShareViewModelTests
         Assert.True(vm.IsScreenSharing);
 
         // Act
-        vm.OnAnnotationToolbarCloseRequested();
-
-        // Wait a bit for the async stop to complete
-        await Task.Delay(100);
+        await vm.OnAnnotationToolbarCloseRequested();
 
         // Assert
         Assert.False(vm.IsScreenSharing);
