@@ -40,14 +40,14 @@ Fix them only when needed to keep the old client working. Notes for them are in 
 
 ## Current Codebase (Nov 2026)
 
-- **Server** (`src/Snacka.Server`, .NET 9): REST controllers, one large SignalR hub (`Hubs/SnackaHub.cs`), EF Core with SQLite or PostgreSQL, setup wizard, tunnels (port forwarding), gaming stations.
+- **Server** (`src/Snacka.Server`, .NET 9): REST controllers, one large SignalR hub (`Hubs/SnackaHub.cs`), EF Core with PostgreSQL, setup wizard, tunnels (port forwarding), gaming stations.
 - **Shared models:** `src/Snacka.Shared/Models`.
 - **Tests:**
   - `tests/Snacka.Server.Tests` (MSTest; `IntegrationTestBase` uses `WebApplicationFactory`)
   - `tests/Snacka.Client.Tests` (xUnit + Avalonia headless)
   - `tests/Snacka.Client.UnitTests` (xUnit, pure unit tests; kept separate because Avalonia headless initialisation applies to the whole assembly)
 - **Spikes:** `spikes/stream-probe`, a Swift latency probe for the game-streaming pipeline (results in its README).
-- **CI:** `.github/workflows/test.yml` runs all tests on Linux, Windows and macOS. Builds and packaging are in `build-client.yml` and `build-server.yml`.
+- **CI:** `.github/workflows/test.yml` runs all .NET tests on Linux, Windows and macOS, and the new client's Playwright e2e tests (`client/ui/e2e`) against a real server and LiveKit. Builds and packaging are in `build-client.yml` and `build-server.yml`.
 
 ## Code Conventions
 
@@ -85,7 +85,7 @@ Fix them only when needed to keep the old client working. Notes for them are in 
 ## Database Conventions
 
 - Use Entity Framework Core migrations
-- Support SQLite (default for self-hosting) and PostgreSQL
+- PostgreSQL today. SQLite is planned for one-click hosting (#53), so avoid PostgreSQL-only features in new code
 - Use proper foreign key relationships
 - Index frequently queried columns
 - Use soft deletes where appropriate

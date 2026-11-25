@@ -57,6 +57,88 @@ jobs:
           path: TestResults
           if-no-files-found: ignore
 
+  # The new client (client/ui) against a real server, LiveKit and Chrome: the Alice & Bob
+  # Playwright tests (#23) that replace manual testing.
+  client-e2e:
+    name: Client e2e (Playwright)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: snacka
+          POSTGRES_PASSWORD: snacka
+          POSTGRES_DB: snacka
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U snacka -d snacka"
+          --health-interval 5s --health-timeout 5s --health-retries 10
+    defaults:
+      run:
+        working-directory: client/ui
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: ${{ env.DOTNET_VERSION }}
+
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: pnpm
+          cache-dependency-path: client/ui/pnpm-lock.yaml
+
+      - name: Install, typecheck, lint, build
+        run: |
+          pnpm install --frozen-lockfile
+          pnpm exec tsc -b
+          pnpm lint
+          pnpm build
+
+      - name: Start LiveKit
+        working-directory: .
+        run: >
+          docker run -d --name livekit --network host
+          -v "$PWD/livekit.dev.yaml:/livekit.yaml:ro"
+          livekit/livekit-server:v1.13 --dev --bind 0.0.0.0 --config /livekit.yaml
+
+      - name: Start server
+        working-directory: .
+        env:
+          ASPNETCORE_ENVIRONMENT: Development
+          ConnectionStrings__DefaultConnection: Host=localhost;Port=5432;Database=snacka;Username=snacka;Password=snacka
+        run: |
+          export JWT_SECRET_KEY="$(openssl rand -base64 48)"
+          dotnet build src/Snacka.Server -c Release -v q
+          nohup dotnet run --no-build -c Release --project src/Snacka.Server --urls http://0.0.0.0:5117 > server.log 2>&1 &
+          for i in $(seq 1 90); do curl -sf http://localhost:5117/api/health > /dev/null && exit 0; sleep 1; done
+          cat server.log; exit 1
+
+      # Uses the runner's preinstalled Google Chrome (playwright.config.ts: channel "chrome").
+      - name: Playwright
+        run: pnpm e2e
+
+      - name: Logs and traces on failure
+        if: failure()
+        working-directory: .
+        run: |
+          tail -n 200 server.log || true
+          docker logs livekit 2>&1 | grep -v DEBUG | tail -n 100 || true
+
+      - name: Upload Playwright results
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-results
+          path: client/ui/test-results
+          if-no-files-found: ignore
+
   vulnerable-packages:
     name: Vulnerable package check
     runs-on: ubuntu-latest
