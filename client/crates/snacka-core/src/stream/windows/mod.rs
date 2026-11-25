@@ -2,6 +2,7 @@
 //! D3D11 devices, a GPU synthetic frame source, NVENC encode and Media Foundation decode.
 
 pub mod d3d11;
+pub mod mf_decode;
 pub mod nvenc;
 pub mod source;
 

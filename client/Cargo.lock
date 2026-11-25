@@ -3063,6 +3063,7 @@ dependencies = [
  "snacka-core",
  "tauri",
  "tauri-build",
+ "windows",
 ]
 
 [[package]]
