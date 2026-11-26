@@ -213,7 +213,10 @@ builder.Services.AddScoped<INotificationService, NotificationService>();
 builder.Services.AddScoped<IGamingStationService, GamingStationService>();
 
 // Add link preview service with HttpClient
-builder.Services.AddHttpClient<ILinkPreviewService, LinkPreviewService>();
+// Link previews fetch user-supplied URLs: public addresses only, checked on every connection (#18).
+builder.Services.AddMemoryCache(o => o.SizeLimit = 10_000);
+builder.Services.AddHttpClient<ILinkPreviewService, LinkPreviewService>()
+    .ConfigurePrimaryHttpMessageHandler(() => SsrfGuard.CreateHandler());
 
 // Add GIF service (Tenor or Klipy based on configuration)
 builder.Services.Configure<GifSettings>(builder.Configuration.GetSection("Gif"));
