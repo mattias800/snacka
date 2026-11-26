@@ -41,6 +41,7 @@ type VoiceParticipant = Schemas["VoiceParticipantResponse"];
 /** Mirrors Snacka.Shared ChannelType and UserRole (serialized as numbers). */
 const ChannelKind = { Text: 0, Voice: 1 } as const;
 const Role = { Owner: 0, Admin: 1, Moderator: 2, Member: 3 } as const;
+const ROLE_NAMES: Record<number, string> = { [Role.Owner]: "Owner", [Role.Admin]: "Admin", [Role.Moderator]: "Mod", [Role.Member]: "Member" };
 
 /** What the message pane shows: a text channel of the open community, or a DM conversation. */
 type View = { kind: "channel"; channel: Channel } | { kind: "dm"; conversation: Conversation } | null;
@@ -261,6 +262,8 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
         return rest;
       });
     });
+    // Roles change what people may do (and see): pin, delete others' messages, manage channels.
+    hub.on("MemberRoleUpdated", (m: Member) => setMembers((prev) => prev.map((x) => (x.userId === m.userId ? { ...x, role: m.role } : x))));
     hub.on("CommunityMemberAdded", (communityId: string) => {
       if (communityRef.current?.id !== communityId) return;
       void api.GET("/api/communities/{communityId}/members", { params: { path: { communityId } } }).then(ok).then(setMembers).catch(() => {});
@@ -515,6 +518,16 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     });
   };
 
+  /** Owners only: admins manage channels, moderators manage messages (the server checks this too). */
+  const setRole = (userId: string, role: number) => {
+    const c = community;
+    if (!c) return;
+    void run(async () => {
+      const updated = ok(await api.PUT("/api/communities/{communityId}/members/{memberId}/role", { params: { path: { communityId: c.id, memberId: userId } }, body: { role } }));
+      setMembers((prev) => prev.map((m) => (m.userId === updated.userId ? { ...m, role: updated.role } : m)));
+    });
+  };
+
   const renameChannel = (e: React.FormEvent) => {
     e.preventDefault();
     const name = renaming?.trim();
@@ -745,6 +758,25 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
                     <span className={`dot ${m.isOnline ? "connected" : ""}`} />
                   </span>
                   <span className="name">{m.effectiveDisplayName}</span>
+                  {me?.role === Role.Owner && m.role !== Role.Owner ? (
+                    <select
+                      className="member-role"
+                      data-testid="member-role"
+                      aria-label={`Role of ${m.effectiveDisplayName}`}
+                      value={m.role}
+                      onChange={(e) => setRole(m.userId, Number(e.target.value))}
+                    >
+                      <option value={Role.Admin}>Admin</option>
+                      <option value={Role.Moderator}>Moderator</option>
+                      <option value={Role.Member}>Member</option>
+                    </select>
+                  ) : (
+                    m.role !== Role.Member && (
+                      <span className="role-tag" data-testid="role-tag">
+                        {ROLE_NAMES[m.role]}
+                      </span>
+                    )
+                  )}
                   {m.userId !== myId && (
                     <button className="link" title={`Message ${m.effectiveDisplayName}`} onClick={() => void messageUser(m.userId)}>
                       Message

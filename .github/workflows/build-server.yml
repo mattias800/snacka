@@ -119,13 +119,14 @@ jobs:
         if: matrix.rid == 'linux-x64'
         run: |
           cd "$RUNNER_TEMP/bundle/snacka-server-linux-x64"
+          trap 'cat server.log' EXIT
           ./start.sh > server.log 2>&1 &
-          for i in $(seq 1 60); do curl -sf http://localhost:5117/api/health > /dev/null && break; sleep 1; done
-          curl -sf http://localhost:5117/ | grep -q '<div id="root">'
-          for i in $(seq 1 20); do grep -q "Bundled LiveKit running" server.log && break; sleep 1; done
-          curl -s -o /dev/null -w "%{http_code}" http://localhost:5117/livekit/rtc/validate | grep -q 401
-          grep -q "Invite code\|invite code" server.log
-          cat server.log
+          retry() { for i in $(seq 1 60); do "$@" && return 0; sleep 1; done; echo "Failed: $*"; return 1; }
+          retry curl -sf -o /dev/null http://localhost:5117/api/health
+          echo "web client:" && curl -sf http://localhost:5117/ | grep '<div id="root">'
+          # LiveKit answers through the server's proxy (401: no token), once it's listening.
+          retry sh -c '[ "$(curl -s -o /dev/null -w "%{http_code}" http://localhost:5117/livekit/rtc/validate)" = 401 ]'
+          grep -i "invite code" server.log
 
       - uses: actions/upload-artifact@v4
         with:

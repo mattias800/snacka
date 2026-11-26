@@ -186,3 +186,5 @@ label.button { display: inline-block; cursor: pointer; }
 .rename-channel { display: flex; gap: 6px; align-items: center; }
 .rename-channel input { max-width: 280px; padding: 4px 8px; }
 .rename-channel button { white-space: nowrap; }
+.member-role { width: auto; padding: 2px 4px; font-size: 12px; background: var(--panel-2); border: 1px solid #444; border-radius: 4px; color: var(--text); }
+.role-tag { font-size: 11px; color: var(--muted); border: 1px solid #444; border-radius: 4px; padding: 0 4px; }
