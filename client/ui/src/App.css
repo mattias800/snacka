@@ -201,3 +201,5 @@ label.button { display: inline-block; cursor: pointer; }
 .emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
 .emoji-grid button { font-size: 20px; padding: 4px; border-radius: 4px; }
 .emoji-grid button:hover { background: var(--panel-2); }
+.settings label.device { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); max-width: 420px; }
+.settings label.device select { padding: 6px 8px; background: var(--bg); color: var(--text); border: 1px solid #444; border-radius: 6px; }

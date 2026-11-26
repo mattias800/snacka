@@ -1,9 +1,10 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { ok, type Api, type Schemas } from "../api/client";
 import type { Session } from "../api/session";
 import { Avatar } from "./Avatar";
 import type { FileLoader } from "./files";
 import { notificationsMuted, notifier, setNotificationsMuted, type NotifyPermission } from "../notifier";
+import { canChooseSpeakers, listDevices, loadDevicePrefs, type DeviceKind } from "../devices";
 
 export type Profile = Schemas["UserProfileResponse"];
 
@@ -11,6 +12,8 @@ export type Profile = Schemas["UserProfileResponse"];
 export function Settings(props: {
   api: Api;
   session: Session;
+  /** Switches the device in an ongoing call too (and remembers it). */
+  chooseDevice: (kind: DeviceKind, deviceId: string) => Promise<void>;
   loadFile: FileLoader;
   profile: Profile;
   onChange: (p: Profile) => void;
@@ -117,6 +120,7 @@ export function Settings(props: {
         Username <strong>{profile.username}</strong> · {profile.email}
       </p>
       <Notifications />
+      <Devices choose={props.chooseDevice} />
       <h2>Password</h2>
       <form className="column" onSubmit={changePassword}>
         <input type="password" autoComplete="current-password" value={passwords.current} onChange={(e) => setPasswords({ ...passwords, current: e.target.value })} placeholder="Current password" aria-label="Current password" />
@@ -160,6 +164,70 @@ function Notifications() {
           </button>
         )}
       </div>
+    </>
+  );
+}
+
+/** Microphone and speakers for voice. */
+function Devices({ choose }: { choose: (kind: DeviceKind, deviceId: string) => Promise<void> }) {
+  const [devices, setDevices] = useState<Record<DeviceKind, MediaDeviceInfo[]>>({ audioinput: [], audiooutput: [] });
+  const [prefs, setPrefs] = useState(loadDevicePrefs);
+  const [needsPermission, setNeedsPermission] = useState(false);
+
+  const refresh = async () => {
+    const [inputs, outputs] = await Promise.all([listDevices("audioinput"), listDevices("audiooutput")]);
+    setDevices({ audioinput: inputs, audiooutput: outputs });
+    setNeedsPermission(inputs.length > 0 && inputs.every((d) => !d.label));
+  };
+  useEffect(() => {
+    void refresh();
+    navigator.mediaDevices?.addEventListener("devicechange", refresh);
+    return () => navigator.mediaDevices?.removeEventListener("devicechange", refresh);
+  }, []);
+
+  // Device names are hidden until the page has had microphone access once.
+  const allow = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    stream.getTracks().forEach((t) => t.stop());
+    await refresh();
+  };
+
+  const select = (kind: DeviceKind, label: string) => (
+    <label className="device">
+      {label}
+      <select
+        aria-label={label}
+        value={prefs[kind] ?? "default"}
+        onChange={(e) => {
+          setPrefs({ ...prefs, [kind]: e.target.value });
+          void choose(kind, e.target.value);
+        }}
+      >
+        {devices[kind].map((d, i) => (
+          <option key={d.deviceId || i} value={d.deviceId}>
+            {d.label || `${label} ${i + 1}`}
+          </option>
+        ))}
+      </select>
+    </label>
+  );
+
+  return (
+    <>
+      <h2>Voice</h2>
+      {devices.audioinput.length === 0 ? (
+        <p className="muted">No microphone found.</p>
+      ) : (
+        <div className="column" data-testid="device-settings">
+          {select("audioinput", "Microphone")}
+          {canChooseSpeakers && devices.audiooutput.length > 0 && select("audiooutput", "Speakers")}
+          {needsPermission && (
+            <button className="link" onClick={() => void allow()}>
+              Show device names (asks for microphone access)
+            </button>
+          )}
+        </div>
+      )}
     </>
   );
 }

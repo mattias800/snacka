@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Room, RoomEvent, Track, type Participant, type RemoteTrack } from "livekit-client";
 import { ok, type Api } from "./api/client";
+import { loadDevicePrefs, saveDevicePref, type DeviceKind } from "./devices";
 
 /**
  * Voice channel via LiveKit (#52), using the LiveKit JS SDK. The browser client always uses
@@ -46,10 +47,12 @@ export function useVoice(api: Api) {
       setChannelId(id);
       try {
         const { url, token } = ok(await api.POST("/api/voice/channels/{channelId}/token", { params: { path: { channelId: id } } }));
+        const prefs = loadDevicePrefs();
         const room = new Room({
           adaptiveStream: true,
           dynacast: true,
-          audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true },
+          audioCaptureDefaults: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, deviceId: prefs.audioinput },
+          audioOutput: prefs.audiooutput ? { deviceId: prefs.audiooutput } : undefined,
         });
         roomRef.current = room;
         // Dev/e2e diagnostics only (stripped from production builds).
@@ -89,9 +92,15 @@ export function useVoice(api: Api) {
     setMembers(snapshot(room));
   }, []);
 
+  /** Remembers the choice and, in a call, switches to it right away. */
+  const chooseDevice = useCallback(async (kind: DeviceKind, deviceId: string) => {
+    saveDevicePref(kind, deviceId);
+    await roomRef.current?.switchActiveDevice(kind, deviceId);
+  }, []);
+
   useEffect(() => () => void roomRef.current?.disconnect(), []);
 
-  return { channelId, members, status, error, join, leave, toggleMute, audioRef };
+  return { channelId, members, status, error, join, leave, toggleMute, chooseDevice, audioRef };
 }
 
 export type Voice = ReturnType<typeof useVoice>;

@@ -831,7 +831,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
           ) : panel === "invite" ? (
             <InviteFriends api={api} serverUrl={serverUrl} />
           ) : profile ? (
-            <Settings api={api} session={session} loadFile={loadFile} profile={profile} onChange={setProfile} />
+            <Settings api={api} session={session} chooseDevice={voice.chooseDevice} loadFile={loadFile} profile={profile} onChange={setProfile} />
           ) : (
             <p className="muted panel">Loading…</p>
           )}
