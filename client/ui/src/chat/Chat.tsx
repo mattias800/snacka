@@ -13,6 +13,7 @@ import { Settings, type Profile } from "./Settings";
 import { channelActions } from "./channelActions";
 import { createPreviewLoader } from "./previews";
 import { EmojiPicker } from "./EmojiPicker";
+import { NewGroup } from "./NewGroup";
 import { channelAlert, dmAlert, type Alert } from "./alerts";
 import { notifier, notificationsMuted } from "../notifier";
 import { PinnedPane, ThreadPane } from "./SidePane";
@@ -87,7 +88,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const [typing, setTyping] = useState<Record<string, { name: string; until: number }>>({});
   const lastTypingSentRef = useRef(0);
   /** Replaces the message pane: joining/creating communities, or inviting friends. */
-  const [panel, setPanel] = useState<"browse" | "invite" | "settings" | null>(null);
+  const [panel, setPanel] = useState<"browse" | "invite" | "settings" | "new-group" | null>(null);
   /** Right-hand pane next to a channel: a message's thread, or the pinned messages. */
   const [side, setSide] = useState<{ kind: "thread"; parent: ChatMessage } | { kind: "pins" } | null>(null);
   /** The signed-in user's own profile (name, picture), kept current by UserProfileUpdated. */
@@ -651,6 +652,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const placeholder = openChannel ? `Message #${openChannel.name}` : openConversation ? `Message ${conversationName(openConversation, myId)}` : "";
   const showSide = side !== null && !panel && !showStreamTest && view?.kind === "channel";
   const unreadTotal = conversations.reduce((n, c) => n + c.unreadCount, 0);
+  const communityIds = useMemo(() => communities.map((c) => c.id), [communities]);
   const mentionTotal = Object.values(mentions).reduce((n, m) => n + m.count, 0);
   // Unread DMs and mentions in the tab title, for when the tab is in the background.
   useEffect(() => {
@@ -693,6 +695,11 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
       <aside className="channels">
         <header className="sidebar-header">
           <span>{community?.name ?? "Direct messages"}</span>
+          {community === null && (
+            <button className="link" title="New group" data-testid="new-group" onClick={() => setPanel(panel === "new-group" ? null : "new-group")}>
+              ＋
+            </button>
+          )}
           {community && canManage && (
             <button className="link" title="Create channel" data-testid="new-channel" onClick={() => setNewChannel(newChannel ? null : { name: "", voice: false })}>
               ＋
@@ -826,7 +833,19 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
       </aside>
       {panel ? (
         <main className="messages">
-          {panel === "browse" ? (
+          {panel === "new-group" ? (
+            <NewGroup
+              api={api}
+              communityIds={communityIds}
+              myId={myId}
+              loadFile={loadFile}
+              onCreated={(conversation) => {
+                setPanel(null);
+                setConversations((prev) => (prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev]));
+                void openView({ kind: "dm", conversation });
+              }}
+            />
+          ) : panel === "browse" ? (
             <BrowseCommunities api={api} onOpen={(c) => void enterCommunity(c)} />
           ) : panel === "invite" ? (
             <InviteFriends api={api} serverUrl={serverUrl} />
