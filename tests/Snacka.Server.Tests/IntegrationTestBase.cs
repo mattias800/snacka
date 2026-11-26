@@ -5,6 +5,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Http.Connections;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.SignalR.Client;
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -20,7 +21,11 @@ public class IntegrationTestBase : IDisposable
 {
     public readonly WebApplicationFactory<Program> Factory;
     public readonly HttpClient Client;
-    private readonly string _dbName;
+    /// <summary>
+    /// The test's own SQLite file, as a self-hosted server uses (requests and the hub hit it
+    /// concurrently, so it can't be one shared in-memory connection).
+    /// </summary>
+    private readonly string _dbPath = Path.Combine(Path.GetTempPath(), "snacka-server-tests", $"{Guid.NewGuid():N}.db");
 
     internal const string TestSecretKey = "q7Vx2LmP9rTz4Kb8Nw1Hc6Jd3Fy5Gs0Ue-Integration";
     internal const string TestIssuer = "TestIssuer";
@@ -29,11 +34,10 @@ public class IntegrationTestBase : IDisposable
     /// <param name="extraConfig">Additional configuration values (override the defaults below).</param>
     public IntegrationTestBase(IDictionary<string, string?>? extraConfig = null)
     {
-        _dbName = Guid.NewGuid().ToString();
-
-        // Set environment variable for JWT secret BEFORE factory creation
-        // Program.cs validates this early, before ConfigureAppConfiguration runs
+        // Program.cs reads these early, before ConfigureAppConfiguration runs, so they're
+        // environment variables (the same for every test, which may run in parallel).
         Environment.SetEnvironmentVariable("JWT_SECRET_KEY", TestSecretKey);
+        Environment.SetEnvironmentVariable("SNACKA_DATA", Path.Combine(Path.GetTempPath(), "snacka-server-tests"));
 
         var testConfig = new Dictionary<string, string?>
         {
@@ -58,28 +62,14 @@ public class IntegrationTestBase : IDisposable
 
                 builder.ConfigureServices(services =>
                 {
-                    // Remove all database-related registrations (may be multiple)
+                    // Swap the server's default database for this test's own file: real SQL, and
+                    // the real (SQLite) migrations.
                     var descriptorsToRemove = services
-                        .Where(d => d.ServiceType == typeof(DbContextOptions<SnackaDbContext>) ||
-                                    d.ServiceType == typeof(DbContextOptions<DataProtectionDbContext>) ||
-                                    d.ServiceType == typeof(DbContextOptions) ||
-                                    d.ServiceType == typeof(SnackaDbContext) ||
-                                    d.ServiceType == typeof(DataProtectionDbContext) ||
-                                    d.ServiceType.FullName?.Contains("EntityFrameworkCore") == true)
+                        .Where(d => d.ServiceType == typeof(SnackaDbContext) || d.ServiceType.FullName?.Contains("EntityFrameworkCore") == true)
                         .ToList();
                     foreach (var descriptor in descriptorsToRemove)
                         services.Remove(descriptor);
-
-                    // Add in-memory databases
-                    services.AddDbContext<SnackaDbContext>(options =>
-                    {
-                        options.UseInMemoryDatabase(_dbName);
-                    });
-
-                    services.AddDbContext<DataProtectionDbContext>(options =>
-                    {
-                        options.UseInMemoryDatabase(_dbName + "_dataprotection");
-                    });
+                    services.AddDbContext<SnackaDbContext, SqliteSnackaDbContext>(options => options.UseSqlite($"Data Source={_dbPath}"));
 
                     // Reconfigure JWT Bearer authentication with test settings
                     services.Configure<JwtBearerOptions>(JwtBearerDefaults.AuthenticationScheme, options =>
@@ -159,5 +149,8 @@ public class IntegrationTestBase : IDisposable
     {
         Client.Dispose();
         Factory.Dispose();
+        SqliteConnection.ClearAllPools();
+        foreach (var file in new[] { _dbPath, $"{_dbPath}-wal", $"{_dbPath}-shm" })
+            File.Delete(file);
     }
 }

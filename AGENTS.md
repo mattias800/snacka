@@ -40,7 +40,7 @@ Fix them only when needed to keep the old client working. Notes for them are in 
 
 ## Current Codebase (Nov 2026)
 
-- **Server** (`src/Snacka.Server`, .NET 9): REST controllers, one large SignalR hub (`Hubs/SnackaHub.cs`), EF Core with PostgreSQL, setup wizard, tunnels (port forwarding), gaming stations.
+- **Server** (`src/Snacka.Server`, .NET 9): REST controllers, one large SignalR hub (`Hubs/SnackaHub.cs`), EF Core with SQLite (default, zero-config) or PostgreSQL (Docker), setup wizard, tunnels (port forwarding), gaming stations.
 - **Shared models:** `src/Snacka.Shared/Models`.
 - **Tests:**
   - `tests/Snacka.Server.Tests` (MSTest; `IntegrationTestBase` uses `WebApplicationFactory`)
@@ -85,7 +85,7 @@ Fix them only when needed to keep the old client working. Notes for them are in 
 ## Database Conventions
 
 - Use Entity Framework Core migrations
-- PostgreSQL today. SQLite is planned for one-click hosting (#53), so avoid PostgreSQL-only features in new code
+- SQLite (default, self-hosting) and PostgreSQL (Docker) are both supported: avoid provider-specific features, and add every migration for both contexts (`SnackaDbContext` → `Migrations/`, `SqliteSnackaDbContext` → `Migrations/Sqlite/`; see DEVELOPMENT.md). Server tests run on SQLite; the CI e2e job runs on PostgreSQL
 - Use proper foreign key relationships
 - Index frequently queried columns
 - Use soft deletes where appropriate

@@ -32,9 +32,18 @@ builder.Services.Configure<ForwardedHeadersOptions>(options =>
     }
 });
 
-// SECURITY: Get JWT secret from environment variable or config
-var jwtSecretKey = Environment.GetEnvironmentVariable("JWT_SECRET_KEY")
-    ?? builder.Configuration.GetSection(JwtSettings.SectionName)["SecretKey"];
+// Where a self-hosted server keeps its database, uploads and generated secrets (#53).
+var dataDirectory = Path.GetFullPath(
+    Environment.GetEnvironmentVariable("SNACKA_DATA")
+    ?? builder.Configuration["DataDirectory"]
+    ?? Path.Combine(builder.Environment.ContentRootPath, "snacka-data"));
+Directory.CreateDirectory(dataDirectory);
+
+// SECURITY: Get JWT secret from environment variable or config; a self-hosted server without one
+// generates its own on first run.
+var jwtSecretKey = new[] { Environment.GetEnvironmentVariable("JWT_SECRET_KEY"), builder.Configuration.GetSection(JwtSettings.SectionName)["SecretKey"] }
+    .FirstOrDefault(s => !string.IsNullOrWhiteSpace(s))
+    ?? GeneratedSecrets.JwtSecret(dataDirectory);
 
 if (SecretValidator.ValidateJwtSecret(jwtSecretKey) is { } secretError)
 {
@@ -117,22 +126,7 @@ builder.Services.AddRateLimiter(options =>
     };
 });
 
-// Add database context - PostgreSQL for all environments
-var connectionString = builder.Configuration.GetConnectionString("DefaultConnection")
-    ?? throw new InvalidOperationException("DefaultConnection is not configured. See appsettings.json or use docker-compose.dev.yml for development.");
-builder.Services.AddDbContext<SnackaDbContext>(options =>
-    options.UseNpgsql(connectionString));
-
-// Add separate DbContext for DataProtection keys (ensures auth tokens survive container restarts)
-builder.Services.AddDbContext<DataProtectionDbContext>(options =>
-    options.UseNpgsql(connectionString));
-
-// Configure DataProtection to persist keys to the database
-// This prevents the "Storing keys in a directory that may not be persisted" warning
-// and ensures users stay logged in across container restarts
-builder.Services.AddDataProtection()
-    .PersistKeysToDbContext<DataProtectionDbContext>()
-    .SetApplicationName("Snacka");
+builder.Services.AddSnackaDatabase(builder.Configuration.GetConnectionString("DefaultConnection"), dataDirectory);
 
 // Add authentication
 builder.Services.AddAuthentication(options =>
@@ -233,8 +227,12 @@ builder.Services.Configure<TurnSettings>(builder.Configuration.GetSection(TurnSe
 builder.Services.AddSingleton<ITurnService, TurnService>();
 
 // Add file storage service
-builder.Services.Configure<FileStorageSettings>(
-    builder.Configuration.GetSection(FileStorageSettings.SectionName));
+builder.Services.Configure<FileStorageSettings>(options =>
+{
+    builder.Configuration.GetSection(FileStorageSettings.SectionName).Bind(options);
+    if (string.IsNullOrWhiteSpace(options.BasePath))
+        options.BasePath = Path.Combine(dataDirectory, "uploads");
+});
 builder.Services.AddScoped<IFileStorageService, FileStorageService>();
 builder.Services.AddScoped<IImageProcessingService, ImageProcessingService>();
 
@@ -292,30 +290,8 @@ var app = builder.Build();
 // Apply pending migrations and ensure database is created
 using (var scope = app.Services.CreateScope())
 {
+    scope.ServiceProvider.MigrateSnackaDatabase();
     var db = scope.ServiceProvider.GetRequiredService<SnackaDbContext>();
-
-    // Use EnsureCreated for in-memory databases (tests), Migrate for real databases
-    var isInMemory = db.Database.ProviderName?.Contains("InMemory") == true;
-    if (isInMemory)
-    {
-        db.Database.EnsureCreated();
-    }
-    else
-    {
-        db.Database.Migrate();
-    }
-
-    // Migrate DataProtection keys table (ensures keys persist across container restarts)
-    var dataProtectionDb = scope.ServiceProvider.GetRequiredService<DataProtectionDbContext>();
-    var isDataProtectionInMemory = dataProtectionDb.Database.ProviderName?.Contains("InMemory") == true;
-    if (isDataProtectionInMemory)
-    {
-        dataProtectionDb.Database.EnsureCreated();
-    }
-    else
-    {
-        dataProtectionDb.Database.Migrate();
-    }
 
     // In development, ensure there are unlimited bootstrap invites for easy testing
     if (app.Environment.IsDevelopment())

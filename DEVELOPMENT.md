@@ -9,7 +9,7 @@ This guide covers setting up a development environment for Snacka.
 - **Desktop Client**: Avalonia UI 11.3 (cross-platform XAML framework)
 - **Real-time Communication**: WebRTC with SipSorcery
 - **Signaling**: SignalR for WebSocket-based signaling
-- **Database**: Entity Framework Core with PostgreSQL
+- **Database**: Entity Framework Core with SQLite (default) or PostgreSQL
 - **Audio**: SDL2 for audio capture and playback
 - **Video**: LibVLC for media playback
 - **Updates**: Velopack for automatic updates (Windows)
@@ -47,7 +47,7 @@ snacka/
 
 - **.NET 9 SDK** or later
 - **Git**
-- **Docker** (for PostgreSQL database)
+- **Docker** (only to develop against PostgreSQL; the default SQLite needs nothing)
 
 ### Platform-Specific Dependencies
 
@@ -74,15 +74,11 @@ git clone https://github.com/mattias800/snacka.git
 cd snacka
 ```
 
-### 2. Start the Development Database
+### 2. Run the Application
 
-```bash
-docker compose -f docker-compose.dev.yml up -d
-```
-
-This starts a PostgreSQL instance for development.
-
-### 3. Run the Application
+The server needs no setup: with no connection string it keeps its SQLite database, uploads
+and a generated JWT secret in `src/Snacka.Server/snacka-data/` (or `$SNACKA_DATA`). Delete that
+folder for a fresh start.
 
 The easiest way is using the dev script which starts the server and two test clients:
 
@@ -102,18 +98,12 @@ cd src/Snacka.Client
 dotnet run -- --server http://localhost:5117
 ```
 
-### 4. Development Login
+### 3. Development Login
 
 For development, you can auto-login with test credentials:
 
 ```bash
 dotnet run -- --server http://localhost:5117 --email alice@test.com --password test123
-```
-
-### 5. Stop the Database
-
-```bash
-docker compose -f docker-compose.dev.yml down
 ```
 
 ## Running Tests
@@ -128,27 +118,27 @@ dotnet test tests/Snacka.Server.Tests
 
 ## Database
 
-PostgreSQL is used for both development and production.
+SQLite is the default (a file in the data directory); it's plenty for a group of friends and
+needs no database server. PostgreSQL is used when `ConnectionStrings:DefaultConnection` is a
+PostgreSQL connection string (`Host=...`), as in the Docker setup and the CI e2e job. The server
+tests run on SQLite with the real migrations.
 
-### Development Setup
-Start the development database with Docker:
+To develop against PostgreSQL:
 ```bash
-docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml up -d   # PostgreSQL on port 5435
+ConnectionStrings__DefaultConnection="Host=localhost;Port=5435;Database=snacka;Username=snacka;Password=snacka" dotnet run --project src/Snacka.Server
 ```
-This starts PostgreSQL on port **5435** (to avoid conflicts with other PostgreSQL instances).
 
 ### Entity Framework Migrations
 
+Each provider has its own migrations (column types differ), so add every migration twice.
+Migrations are applied automatically on startup.
+
 ```bash
-# Make sure dev database is running first
-docker compose -f docker-compose.dev.yml up -d
-
-# Create a new migration
-cd src/Snacka.Server
-dotnet ef migrations add MigrationName
-
-# Apply migrations (happens automatically on startup)
-dotnet ef database update
+# PostgreSQL (Migrations/)
+dotnet ef migrations add MigrationName --project src/Snacka.Server --context SnackaDbContext
+# SQLite (Migrations/Sqlite/)
+dotnet ef migrations add MigrationName --project src/Snacka.Server --context SqliteSnackaDbContext --output-dir Migrations/Sqlite
 ```
 
 ### Database Schema
@@ -170,10 +160,11 @@ Key settings in `appsettings.json` or environment variables:
 
 | Setting | Environment Variable | Description |
 |---------|---------------------|-------------|
-| `Jwt:SecretKey` | `Jwt__SecretKey` | JWT signing key (min 32 characters) |
+| `Jwt:SecretKey` | `JWT_SECRET_KEY` | JWT signing key (min 32 characters); generated into the data directory if unset |
+| `DataDirectory` | `SNACKA_DATA` | Database (SQLite), uploads, generated secrets. Default `snacka-data` next to the server |
 | `ServerInfo:Name` | `ServerInfo__Name` | Server display name |
 | `ServerInfo:AllowRegistration` | `ServerInfo__AllowRegistration` | Enable/disable registration |
-| `ConnectionStrings:DefaultConnection` | `ConnectionStrings__DefaultConnection` | PostgreSQL connection |
+| `ConnectionStrings:DefaultConnection` | `ConnectionStrings__DefaultConnection` | Unset: SQLite in the data directory. `Host=...`: PostgreSQL. `Data Source=...`: another SQLite file |
 | `Tenor:ApiKey` | `Tenor__ApiKey` | Optional Tenor API key for GIF picker |
 
 ### Client Configuration

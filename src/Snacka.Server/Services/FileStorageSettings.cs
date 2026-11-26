@@ -8,9 +8,10 @@ public class FileStorageSettings
     public const string SectionName = "FileStorage";
 
     /// <summary>
-    /// Base path for file storage (relative or absolute).
+    /// Base path for file storage (relative or absolute). Empty means "uploads" in the server's
+    /// data directory.
     /// </summary>
-    public string BasePath { get; set; } = "./uploads";
+    public string BasePath { get; set; } = "";
 
     /// <summary>
     /// Maximum file size in bytes (default: 25MB).

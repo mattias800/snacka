@@ -180,6 +180,11 @@ For TURNS (TURN over TLS), uncomment the certificate lines in `turnserver.conf` 
 
 The docker-compose.yml includes PostgreSQL. Data is persisted in the `postgres-data` volume.
 
+Without Docker the server needs no database server: with no `ConnectionStrings__DefaultConnection`
+it uses SQLite, and keeps the database, uploads and a generated JWT secret in its data directory
+(`SNACKA_DATA`, default `snacka-data` next to the server). Back up that folder to back up the server.
+A one-download setup for non-experts is tracked in #53.
+
 ## Updating
 
 ```bash

@@ -78,3 +78,4 @@ src/Snacka.Server/uploads/
 
 # Environment files (contains secrets)
 .env
+src/Snacka.Server/snacka-data/

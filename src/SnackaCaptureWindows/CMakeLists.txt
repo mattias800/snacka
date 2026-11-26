@@ -9,7 +9,8 @@ add_definitions(-D_WIN32_WINNT=0x0A00 -DWINVER=0x0A00 -DUNICODE -D_UNICODE)
 
 # Enable WinRT/C++ support
 if(MSVC)
-    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /await /EHsc /permissive-")
+    # No /await: C++20 coroutines replace the experimental ones, which newer MSVC refuses (STL1011).
+    set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} /EHsc /permissive-")
     # C++/WinRT requires these
     add_compile_options(/Zc:twoPhase-)
 endif()

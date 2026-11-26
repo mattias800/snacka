@@ -33,3 +33,16 @@ public class DataProtectionDesignTimeDbContextFactory : IDesignTimeDbContextFact
         return new DataProtectionDbContext(optionsBuilder.Options);
     }
 }
+
+/// <summary>
+/// Factory for SQLite migrations: <c>dotnet ef migrations add Name --context SqliteSnackaDbContext --output-dir Migrations/Sqlite</c>.
+/// </summary>
+public class SqliteDesignTimeDbContextFactory : IDesignTimeDbContextFactory<SqliteSnackaDbContext>
+{
+    public SqliteSnackaDbContext CreateDbContext(string[] args)
+    {
+        var optionsBuilder = new DbContextOptionsBuilder<SqliteSnackaDbContext>();
+        optionsBuilder.UseSqlite("Data Source=design-time.db");
+        return new SqliteSnackaDbContext(optionsBuilder.Options);
+    }
+}

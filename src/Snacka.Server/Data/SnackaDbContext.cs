@@ -3,9 +3,16 @@ using Snacka.Shared.Models;
 
 namespace Snacka.Server.Data;
 
-public sealed class SnackaDbContext : DbContext
+/// <summary>
+/// The server's database. PostgreSQL uses this type and the migrations in Migrations/; SQLite uses
+/// <see cref="SqliteSnackaDbContext"/>, whose migrations (Migrations/Sqlite) are kept separately
+/// because column types differ. Add a migration to both when the model changes.
+/// </summary>
+public class SnackaDbContext : DbContext
 {
     public SnackaDbContext(DbContextOptions<SnackaDbContext> options) : base(options) { }
+
+    protected SnackaDbContext(DbContextOptions options) : base(options) { }
 
     public DbSet<User> Users => Set<User>();
     public DbSet<Community> Communities => Set<Community>();

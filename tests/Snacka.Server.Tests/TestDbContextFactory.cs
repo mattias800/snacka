@@ -1,18 +1,20 @@
+using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
 using Snacka.Server.Data;
 
 namespace Snacka.Server.Tests;
 
+/// <summary>Databases for service-level tests: SQLite in memory, so queries run as real SQL.</summary>
 public static class TestDbContextFactory
 {
-    public static SnackaDbContext Create(string? dbName = null)
+    /// <summary>A fresh, migrated database, private to the returned context.</summary>
+    public static SnackaDbContext Create()
     {
-        var options = new DbContextOptionsBuilder<SnackaDbContext>()
-            .UseInMemoryDatabase(dbName ?? Guid.NewGuid().ToString())
-            .Options;
-
-        var context = new SnackaDbContext(options);
-        context.Database.EnsureCreated();
+        var connection = new SqliteConnection("Data Source=:memory:");
+        connection.Open();
+        var options = new DbContextOptionsBuilder<SqliteSnackaDbContext>().UseSqlite(connection).Options;
+        var context = new SqliteSnackaDbContext(options);
+        context.Database.Migrate();
         return context;
     }
 }
