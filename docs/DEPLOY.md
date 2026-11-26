@@ -4,6 +4,16 @@ This guide covers how to deploy Snacka server for production use.
 
 For development setup, see [DEVELOPMENT.md](../DEVELOPMENT.md).
 
+## Without Docker: the server bundle
+
+Each build of master produces a zip per platform (`snacka-server-<platform>`, under the
+"Build Server" workflow's artifacts): the server as one executable, LiveKit for voice, the web
+client, and a start script. Unzip, run `start.sh` / `start.command` / `start.cmd`, open
+http://localhost:5117 and create the admin account with the invite code the server prints.
+Forward TCP 5117, TCP 7881 and UDP 7882 for friends outside your network. The included
+`README.txt` walks a non-expert host through it. Build one yourself with
+`packaging/server/package.sh <rid> <livekit-target> <out-dir>` after `pnpm build` in `client/ui`.
+
 ## Quick Start with Docker
 
 The easiest way to deploy Snacka is using Docker Compose.

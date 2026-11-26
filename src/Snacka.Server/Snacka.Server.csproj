@@ -27,11 +27,18 @@
     <PackageReference Include="SkiaSharp" Version="4.157.0" />
     <PackageReference Include="SkiaSharp.NativeAssets.Linux.NoDependencies" Version="4.157.0" />
     <PackageReference Include="Swashbuckle.AspNetCore" Version="6.5.0" />
+    <PackageReference Include="Yarp.ReverseProxy" Version="2.3.0" />
   </ItemGroup>
 
   <ItemGroup>
     <ProjectReference Include="..\Snacka.Shared\Snacka.Shared.csproj" />
     <ProjectReference Include="..\Snacka.WebRTC\Snacka.WebRTC.csproj" />
+  </ItemGroup>
+
+  <!-- The setup wizard's sources aren't content; its build output lands in wwwroot/setup. -->
+  <ItemGroup>
+    <Content Remove="SetupWizard\**" />
+    <None Remove="SetupWizard\**" />
   </ItemGroup>
 
   <!-- Build setup wizard on publish -->

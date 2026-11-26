@@ -1,3 +1,4 @@
+using Yarp.ReverseProxy.Transforms;
 using System.Text;
 using System.Threading.RateLimiting;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
@@ -184,6 +185,19 @@ builder.Services.AddScoped<IRefreshTokenService, RefreshTokenService>();
 builder.Services.AddScoped<IChannelActivityService, ChannelActivityService>();
 builder.Services.AddScoped<IRealtimeMembership, RealtimeMembership>();
 builder.Services.Configure<LiveKitSettings>(builder.Configuration.GetSection(LiveKitSettings.SectionName));
+var bundledLiveKit = BundledLiveKitOptions.Resolve(builder.Configuration, dataDirectory, builder.Environment.IsDevelopment());
+if (bundledLiveKit is not null)
+{
+    builder.Services.AddSingleton(bundledLiveKit);
+    builder.Services.AddHostedService<BundledLiveKitService>();
+    builder.Services.AddHttpForwarder();
+    builder.Services.PostConfigure<LiveKitSettings>(s =>
+    {
+        s.ApiKey = bundledLiveKit.ApiKey;
+        s.ApiSecret = bundledLiveKit.ApiSecret;
+        s.ViaServer = true;
+    });
+}
 builder.Services.AddSingleton<ILiveKitTokenService, LiveKitTokenService>();
 builder.Services.AddScoped<IServerInviteService, ServerInviteService>();
 builder.Services.AddScoped<IDirectMessageService, DirectMessageService>();
@@ -343,25 +357,28 @@ using (var scope = app.Services.CreateScope())
         var inviteService = scope.ServiceProvider.GetRequiredService<IServerInviteService>();
         var inviteCode = inviteService.GetOrCreateBootstrapInviteAsync(CancellationToken.None).GetAwaiter().GetResult();
 
-        Console.WriteLine("");
-        Console.WriteLine("╔══════════════════════════════════════════════════════════════╗");
-        Console.WriteLine("║                    FIRST TIME SETUP                          ║");
-        Console.WriteLine("╠══════════════════════════════════════════════════════════════╣");
-        Console.WriteLine("║  No users found. Please complete the setup wizard to         ║");
-        Console.WriteLine("║  create the first administrator account.                     ║");
-        Console.WriteLine("║                                                              ║");
-        Console.WriteLine("║  Open your browser and navigate to:                          ║");
-        Console.WriteLine("║                                                              ║");
-        Console.WriteLine("║    http://<your-server-address>:5117/setup                   ║");
-        Console.WriteLine("║                                                              ║");
-        Console.WriteLine("║  If using a reverse proxy with SSL:                          ║");
-        Console.WriteLine("║                                                              ║");
-        Console.WriteLine("║    https://<your-domain>/setup                               ║");
-        Console.WriteLine("║                                                              ║");
-        Console.WriteLine($"║  Invite Code: {inviteCode,-46} ║");
-        Console.WriteLine("║                                                              ║");
-        Console.WriteLine("╚══════════════════════════════════════════════════════════════╝");
-        Console.WriteLine("");
+        // The bundled web client creates the account itself; otherwise the setup wizard does.
+        var where = File.Exists(Path.Combine(app.Environment.WebRootPath ?? "", "index.html")) ? "" : "/setup";
+        string[] lines =
+        [
+            "FIRST TIME SETUP",
+            "",
+            "No accounts yet. Create the administrator account: open",
+            "",
+            $"  http://localhost:{{port}}{where}",
+            "",
+            "in a browser on this computer (or use the server's address),",
+            "and enter this invite code:",
+            "",
+            $"  {inviteCode}",
+        ];
+        var port = app.Configuration["urls"]?.Split(';')[0].Split(':').LastOrDefault()?.TrimEnd('/') ?? "5117";
+        Console.WriteLine();
+        Console.WriteLine($"╔{new string('═', 64)}╗");
+        foreach (var line in lines)
+            Console.WriteLine($"║  {line.Replace("{port}", port),-62}║");
+        Console.WriteLine($"╚{new string('═', 64)}╝");
+        Console.WriteLine();
     }
 }
 
@@ -399,7 +416,9 @@ if (app.Environment.IsDevelopment())
 app.UseCors("AllowConfigured");
 app.UseRateLimiter();
 
-// Serve static files (setup wizard, etc.)
+// Serve static files: the setup wizard, and the web client when it's bundled (wwwroot/index.html, #53).
+var webClientBundled = File.Exists(Path.Combine(app.Environment.WebRootPath ?? "", "index.html"));
+app.UseDefaultFiles();
 app.UseStaticFiles();
 
 // SPA fallback for setup wizard - only for routes without file extensions
@@ -429,6 +448,7 @@ app.Use(async (context, next) =>
     if (path.StartsWith("/api") ||
         path.StartsWith("/setup") ||
         path.StartsWith("/hubs") ||
+        path.StartsWith(BundledLiveKitOptions.ProxyPath) ||
         path.Contains('.'))
     {
         await next();
@@ -440,7 +460,8 @@ app.Use(async (context, next) =>
     var db = scope.ServiceProvider.GetRequiredService<SnackaDbContext>();
     var hasUsers = await db.Users.AnyAsync();
 
-    if (!hasUsers && path == "/")
+    // The web client handles a new server itself (the first account becomes admin).
+    if (!hasUsers && path == "/" && !webClientBundled)
     {
         // Redirect to setup wizard
         context.Response.Redirect("/setup/");
@@ -461,6 +482,10 @@ app.UseAuthorization();
 
 app.MapControllers();
 app.MapHub<SnackaHub>("/hubs/snacka");
+// A bundled LiveKit's signaling (WebSocket and /rtc/validate), on this server's port.
+if (bundledLiveKit is not null)
+    app.MapForwarder($"{BundledLiveKitOptions.ProxyPath}/{{**rest}}", bundledLiveKit.Upstream,
+        transforms => transforms.AddPathRemovePrefix(BundledLiveKitOptions.ProxyPath));
 
 if (app.Environment.IsDevelopment())
 {

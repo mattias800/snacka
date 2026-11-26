@@ -16,13 +16,21 @@ public sealed class LiveKitSettings
     public string? ApiSecret { get; set; }
     public int TokenLifetimeMinutes { get; set; } = 360;
 
-    public bool IsConfigured => !string.IsNullOrWhiteSpace(Url) && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(ApiSecret);
+    /// <summary>
+    /// Clients reach LiveKit through this server (<see cref="BundledLiveKitOptions.ProxyPath"/>) rather
+    /// than at <see cref="Url"/>: set when the server runs a bundled LiveKit.
+    /// </summary>
+    public bool ViaServer { get; set; }
+
+    public bool IsConfigured => (ViaServer || !string.IsNullOrWhiteSpace(Url)) && !string.IsNullOrWhiteSpace(ApiKey) && !string.IsNullOrWhiteSpace(ApiSecret);
 }
 
 public interface ILiveKitTokenService
 {
     bool IsConfigured { get; }
-    string Url { get; }
+
+    /// <summary>The URL a client that reached this server with <paramref name="request"/> should connect to.</summary>
+    string UrlFor(HttpRequest request);
 
     /// <summary>Creates a token that lets <paramref name="userId"/> join <paramref name="room"/>.</summary>
     string CreateJoinToken(Guid userId, string displayName, string room, bool canPublish);
@@ -44,7 +52,10 @@ public sealed class LiveKitTokenService(IOptions<LiveKitSettings> options) : ILi
     private readonly LiveKitSettings _settings = options.Value;
 
     public bool IsConfigured => _settings.IsConfigured;
-    public string Url => _settings.Url ?? "";
+    public string UrlFor(HttpRequest request) =>
+        _settings.ViaServer
+            ? $"{(request.IsHttps ? "wss" : "ws")}://{request.Host}{request.PathBase}{BundledLiveKitOptions.ProxyPath}"
+            : _settings.Url ?? "";
 
     public string CreateJoinToken(Guid userId, string displayName, string room, bool canPublish)
     {

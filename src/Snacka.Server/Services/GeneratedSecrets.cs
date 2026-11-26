@@ -8,9 +8,12 @@ namespace Snacka.Server.Services;
 /// </summary>
 public static class GeneratedSecrets
 {
-    public static string JwtSecret(string dataDirectory)
+    public static string JwtSecret(string dataDirectory) => Get(dataDirectory, "jwt-secret");
+
+    /// <summary>The secret stored as <paramref name="name"/>, created (48 random bytes, base64) if missing.</summary>
+    public static string Get(string dataDirectory, string name)
     {
-        var path = Path.Combine(dataDirectory, "jwt-secret");
+        var path = Path.Combine(dataDirectory, name);
         if (File.Exists(path))
             return File.ReadAllText(path).Trim();
 

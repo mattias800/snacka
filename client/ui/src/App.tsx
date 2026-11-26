@@ -27,6 +27,12 @@ function save(key: string, value: unknown): void {
   }
 }
 
+/** Served by a Snacka server (it hosts the web client): that server. Otherwise a local one. */
+function defaultServer(): string {
+  const servedByServer = !import.meta.env.DEV && !inNativeApp && window.location.protocol.startsWith("http");
+  return servedByServer ? window.location.origin : "http://localhost:5117";
+}
+
 /** `#stream-test-<port>` opens the native video surface test directly (used by automated runs). */
 function useStreamTestHash(): number | null {
   const parse = () => {
@@ -46,7 +52,7 @@ export default function App() {
   const streamTestPort = useStreamTestHash();
   // Invite links look like ?server=<url>&invite=<code> (see InviteFriends in chat/Chat.tsx).
   const linkParams = useMemo(() => new URLSearchParams(window.location.search), []);
-  const [serverUrl, setServerUrl] = useState<string>(linkParams.get("server") ?? load<string>(SERVER_KEY) ?? "http://localhost:5117");
+  const [serverUrl, setServerUrl] = useState<string>(linkParams.get("server") ?? load<string>(SERVER_KEY) ?? defaultServer());
   const [auth, setAuth] = useState<Auth | null>(load<Auth>(AUTH_KEY));
   const session = useMemo(
     () => new Session(serverUrl, { load: () => load<Auth>(AUTH_KEY), save: (a) => save(AUTH_KEY, a) }, setAuth),

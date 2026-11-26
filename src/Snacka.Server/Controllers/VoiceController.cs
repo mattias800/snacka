@@ -40,7 +40,7 @@ public class VoiceController(SnackaDbContext db, ILiveKitTokenService liveKit, I
         var user = await db.Users.AsNoTracking().FirstAsync(u => u.Id == userId, cancellationToken);
         var room = $"{RoomPrefix}{channelId}";
         var token = liveKit.CreateJoinToken(userId, user.EffectiveDisplayName, room, canPublish: true);
-        return Ok(new VoiceTokenResponse(liveKit.Url, token, room));
+        return Ok(new VoiceTokenResponse(liveKit.UrlFor(Request), token, room));
     }
 
     /// <summary>Everyone currently in a voice channel of the community, for the channel list.</summary>

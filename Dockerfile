@@ -43,6 +43,8 @@ ENV ASPNETCORE_URLS=http://+:8080
 ENV ASPNETCORE_ENVIRONMENT=Production
 # Generated secrets (when none are configured), and SQLite if used instead of PostgreSQL.
 ENV SNACKA_DATA=/app/data
+# docker-compose.yml mounts uploads here (and points the server at its PostgreSQL).
+ENV FileStorage__BasePath=/app/uploads
 
 HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
     CMD curl -f http://localhost:8080/api/health || exit 1

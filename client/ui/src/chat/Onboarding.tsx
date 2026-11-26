@@ -104,6 +104,12 @@ export function InviteFriends(props: { api: Api; serverUrl: string }) {
         <dl className="invite">
           <dt>Server</dt>
           <dd>{serverUrl}</dd>
+          {/^https?:\/\/(localhost|127\.|\[::1\])/.test(serverUrl) && (
+            <dd className="muted" data-testid="invite-localhost-hint">
+              That's this computer's own address. Friends need the address they can reach it at, such as your public IP (with the ports
+              forwarded) or your LAN address: open Snacka at that address and create the invite there.
+            </dd>
+          )}
           <dt>Invite code</dt>
           <dd data-testid="invite-code">{invite.code}</dd>
           {link && (
