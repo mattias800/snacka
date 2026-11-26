@@ -19,6 +19,11 @@ export type ChatMessage = {
   /** The message this one replies to (channels only). */
   replyTo: { authorName: string; content: string } | null;
   attachments: Attachment[];
+  /** Thread replies under this message (channels only). */
+  replyCount: number;
+  pinned: boolean;
+  /** Set on thread replies: the message whose thread this is. */
+  threadParentId: string | null;
 };
 
 export type Attachment = { id: string; name: string; path: string; size: number; isImage: boolean; isAudio: boolean };
@@ -28,6 +33,10 @@ export type Reaction = { emoji: string; count: number; mine: boolean };
 export type ChannelMessage = Schemas["MessageResponse"];
 export type DmMessage = NonNullable<Schemas["ConversationMessageResponse"]>;
 export type ReactionUpdated = Schemas["ReactionUpdatedEvent"];
+export type MessagePinned = Schemas["MessagePinnedEvent"];
+/** Hub events "ReceiveThreadReply" and "ThreadMetadataUpdated" (anonymous objects on the server). */
+export type ThreadReplyEvent = { channelId: string; parentMessageId: string; reply: ChannelMessage };
+export type ThreadMetadataEvent = { channelId: string; messageId: string; replyCount: number; lastReplyAt: string | null };
 
 export const fromChannel = (m: ChannelMessage): ChatMessage => ({
   id: m.id,
@@ -40,6 +49,9 @@ export const fromChannel = (m: ChannelMessage): ChatMessage => ({
   reactions: (m.reactions ?? []).map((r) => ({ emoji: r.emoji, count: r.count, mine: r.hasReacted })),
   replyTo: m.replyTo ? { authorName: m.replyTo.authorEffectiveDisplayName, content: m.replyTo.content } : null,
   attachments: (m.attachments ?? []).map((a) => ({ id: a.id, name: a.fileName, path: attachmentPath(a.url), size: a.fileSize, isImage: a.isImage, isAudio: a.isAudio })),
+  replyCount: m.replyCount ?? 0,
+  pinned: m.isPinned ?? false,
+  threadParentId: m.threadParentMessageId ?? null,
 });
 
 export const fromDm = (m: DmMessage): ChatMessage => ({
@@ -53,6 +65,9 @@ export const fromDm = (m: DmMessage): ChatMessage => ({
   reactions: null,
   replyTo: null,
   attachments: [],
+  replyCount: 0,
+  pinned: false,
+  threadParentId: null,
 });
 
 /** Adds or replaces a message by id, keeping the list in time order. */
@@ -64,6 +79,12 @@ export function upsert(list: ChatMessage[], m: ChatMessage): ChatMessage[] {
     ? next.sort((a, b) => a.createdAt.localeCompare(b.createdAt))
     : next;
 }
+
+/** Replaces a message that's in the list; never adds (an edit of something not shown here). */
+export const replace = (list: ChatMessage[], m: ChatMessage): ChatMessage[] => (list.some((x) => x.id === m.id) ? list.map((x) => (x.id === m.id ? m : x)) : list);
+
+export const applyPin = (list: ChatMessage[], e: MessagePinned): ChatMessage[] =>
+  list.some((m) => m.id === e.messageId) ? list.map((m) => (m.id === e.messageId ? { ...m, pinned: e.isPinned } : m)) : list;
 
 /** Applies a ReactionUpdated event: the server sends the new count; `mine` follows who reacted. */
 export function applyReaction(list: ChatMessage[], e: ReactionUpdated, myId: string): ChatMessage[] {

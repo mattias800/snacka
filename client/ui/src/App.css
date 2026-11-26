@@ -160,3 +160,18 @@ ul.voice-presence { padding: 0 8px 4px 32px; }
 label.button { display: inline-block; cursor: pointer; }
 .settings .row input { max-width: 320px; }
 .settings button { white-space: nowrap; }
+
+/* Threads and pins */
+.chat.with-side { grid-template-columns: 72px 240px minmax(0, 1fr) 360px; }
+.side-pane { display: flex; flex-direction: column; min-height: 0; background: var(--panel); border-left: 1px solid #1e1f22; }
+.side-pane > header { display: flex; align-items: center; gap: 8px; padding: 12px 16px; border-bottom: 1px solid #1e1f22; font-weight: 600; }
+.side-pane > header .muted { font-weight: 400; font-size: 13px; flex: 1; }
+.side-pane > header > span:first-child:last-of-type { flex: 1; }
+.side-pane form { padding: 8px 12px 12px; }
+.side-pane .message-scroller { padding: 0 12px; }
+.messages > header { display: flex; align-items: center; gap: 8px; }
+.messages > header .grow { flex: 1; }
+.messages > header .link.active { opacity: 1; }
+.pinned-mark { margin-left: 6px; font-size: 12px; }
+.thread-link { display: inline-block; margin-top: 4px; background: none; border: 0; padding: 2px 0; color: #00a8fc; font-size: 13px; cursor: pointer; }
+.thread-link:hover { text-decoration: underline; }

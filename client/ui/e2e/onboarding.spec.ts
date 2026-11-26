@@ -34,7 +34,7 @@ test("A friend joins with an invite link and says hi", async ({ browser }) => {
   // Browse communities and join Alice's.
   await dave.getByTestId("browse").click();
   await dave.locator(`[data-testid="discover-community"][data-name="${COMMUNITY}"]`).getByRole("button", { name: "Join" }).click();
-  await expect(dave.locator("main header")).toHaveText("# general", { timeout: 10_000 });
+  await expect(dave.getByTestId("view-title")).toHaveText("# general", { timeout: 10_000 });
   await expect(dave.locator("main[data-live=true]")).toBeVisible({ timeout: 15_000 });
 
   // Alice sees the newcomer in the member list, live, and their first message.

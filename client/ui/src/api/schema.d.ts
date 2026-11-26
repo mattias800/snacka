@@ -3927,57 +3927,6 @@ export interface components {
              */
             lastReplyAt: string | null;
         };
-        MessageResponse2: {
-            /** Format: uuid */
-            id: string;
-            content: string;
-            /** Format: uuid */
-            authorId: string;
-            authorUsername: string;
-            authorEffectiveDisplayName: string;
-            authorAvatar: string | null;
-            /** Format: uuid */
-            channelId: string;
-            /** Format: date-time */
-            createdAt: string;
-            /** Format: date-time */
-            updatedAt: string;
-            isEdited: boolean;
-            /**
-             * Format: uuid
-             * @default null
-             */
-            replyToId: string | null;
-            replyTo?: components["schemas"];
-            reactions?: components["schemas"];
-            /** @default false */
-            isPinned: boolean;
-            /**
-             * Format: date-time
-             * @default null
-             */
-            pinnedAt: string | null;
-            /** @default null */
-            pinnedByUsername: string | null;
-            /** @default null */
-            pinnedByEffectiveDisplayName: string | null;
-            attachments?: components["schemas"];
-            /**
-             * Format: uuid
-             * @default null
-             */
-            threadParentMessageId: string | null;
-            /**
-             * Format: int32
-             * @default 0
-             */
-            replyCount: number;
-            /**
-             * Format: date-time
-             * @default null
-             */
-            lastReplyAt: string | null;
-        };
         MessageSearchResponse: {
             results: components["schemas"]["MessageSearchResult"][];
             /** Format: int32 */
@@ -4172,7 +4121,7 @@ export interface components {
         StationStatus: number;
         ThreadResponse: {
             parentMessage: components["schemas"]["MessageResponse"];
-            replies: components["schemas"]["MessageResponse2"][];
+            replies: components["schemas"]["MessageResponse"][];
             /** Format: int32 */
             totalReplyCount: number;
             /** Format: int32 */

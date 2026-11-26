@@ -9,7 +9,24 @@ import { BrowseCommunities, InviteFriends } from "./Onboarding";
 import { Avatar } from "./Avatar";
 import { createFileLoader, formatSize } from "./files";
 import { Settings, type Profile } from "./Settings";
-import { applyProfile, applyReaction, fromChannel, fromDm, upsert, type ChannelMessage, type ChatMessage, type DmMessage, type ProfileUpdated, type ReactionUpdated } from "./model";
+import { channelActions } from "./channelActions";
+import { PinnedPane, ThreadPane } from "./SidePane";
+import {
+  applyPin,
+  applyProfile,
+  applyReaction,
+  fromChannel,
+  fromDm,
+  replace,
+  upsert,
+  type ChannelMessage,
+  type ChatMessage,
+  type DmMessage,
+  type MessagePinned,
+  type ProfileUpdated,
+  type ReactionUpdated,
+  type ThreadMetadataEvent,
+} from "./model";
 
 type Community = Schemas["CommunityResponse"];
 type Channel = Schemas["ChannelResponse"];
@@ -60,6 +77,8 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   const lastTypingSentRef = useRef(0);
   /** Replaces the message pane: joining/creating communities, or inviting friends. */
   const [panel, setPanel] = useState<"browse" | "invite" | "settings" | null>(null);
+  /** Right-hand pane next to a channel: a message's thread, or the pinned messages. */
+  const [side, setSide] = useState<{ kind: "thread"; parent: ChatMessage } | { kind: "pins" } | null>(null);
   /** The signed-in user's own profile (name, picture), kept current by UserProfileUpdated. */
   const [profile, setProfile] = useState<Profile | null>(null);
   const voice = useVoice(api);
@@ -120,12 +139,17 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     hub.on("UserOnline", setOnline(true));
     hub.on("UserOffline", setOnline(false));
 
+    // Thread replies belong to the thread pane (SidePane), not the channel's list.
     hub.on("ReceiveChannelMessage", (m: ChannelMessage) => {
-      if (!isOpen("channel", m.channelId)) return;
+      if (!isOpen("channel", m.channelId) || m.threadParentMessageId) return;
       stopTyping(m.authorId);
       setMessages((prev) => upsert(prev, fromChannel(m)));
     });
-    hub.on("ChannelMessageEdited", (m: ChannelMessage) => isOpen("channel", m.channelId) && setMessages((prev) => upsert(prev, fromChannel(m))));
+    hub.on("ChannelMessageEdited", (m: ChannelMessage) => isOpen("channel", m.channelId) && setMessages((prev) => replace(prev, fromChannel(m))));
+    hub.on("ThreadMetadataUpdated", (e: ThreadMetadataEvent) =>
+      setMessages((prev) => prev.map((m) => (m.id === e.messageId ? { ...m, replyCount: e.replyCount } : m))),
+    );
+    hub.on("MessagePinned", (e: MessagePinned) => setMessages((prev) => applyPin(prev, e)));
     hub.on("ChannelMessageDeleted", (e: { channelId: string; messageId: string }) => setMessages((prev) => prev.filter((m) => m.id !== e.messageId)));
     // Someone's name or picture changed: update it wherever it's on screen. A community nickname wins over the global name.
     hub.on("UserProfileUpdated", (e: ProfileUpdated) => {
@@ -226,6 +250,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   const openView = (next: View) =>
     run(async () => {
       const previous = viewRef.current;
+      if (previous !== next) setSide(null); // reopening the same view (reconnect) keeps the pane
       setView(next);
       viewRef.current = next;
       setMessages([]);
@@ -390,40 +415,30 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   }, [typingNames.length]);
 
   const me = members.find((m) => m.userId === myId);
+  const canModerate = me !== undefined && me.role !== Role.Member;
+  const openChannelId = view?.kind === "channel" ? view.channel.id : null;
+  const closeSide = useCallback(() => setSide(null), []);
+  /** Message actions in the open channel, for the channel's list (with replies and threads) or a side pane's. */
+  const makeChannelActions = useCallback(
+    (setList: React.Dispatch<React.SetStateAction<ChatMessage[]>>, main = false): MessageActions =>
+      channelActions({
+        api,
+        channelId: openChannelId ?? "",
+        myId,
+        canModerate,
+        loadFile,
+        run,
+        setList,
+        onReply: main ? (m) => setReplyingTo(m) : undefined,
+        onOpenThread: main ? (m) => setSide({ kind: "thread", parent: m }) : undefined,
+      }),
+    [api, openChannelId, myId, canModerate, loadFile, run],
+  );
+  const makeSideActions = useCallback((setList: React.Dispatch<React.SetStateAction<ChatMessage[]>>) => makeChannelActions(setList), [makeChannelActions]);
   const actions = useMemo<MessageActions | undefined>(() => {
     const v = view;
     if (!v) return undefined;
-    if (v.kind === "channel") {
-      const path = (messageId: string) => ({ params: { path: { channelId: v.channel.id, messageId } } });
-      return {
-        myId,
-        loadFile,
-        canModerate: me !== undefined && me.role !== Role.Member,
-        onEdit: (id, content) =>
-          void run(async () => {
-            const m = ok(await api.PUT("/api/channels/{channelId}/messages/{messageId}", { ...path(id), body: { content } }));
-            setMessages((prev) => upsert(prev, fromChannel(m)));
-          }),
-        onDelete: (id) =>
-          void run(async () => {
-            const res = await api.DELETE("/api/channels/{channelId}/messages/{messageId}", path(id));
-            if (!res.response.ok) throw new Error(`Delete failed: ${res.response.status}`);
-            setMessages((prev) => prev.filter((m) => m.id !== id));
-          }),
-        onReply: (m) => setReplyingTo(m),
-        onReact: (id, emoji, add) =>
-          void run(async () => {
-            if (add) {
-              const e = ok(await api.POST("/api/channels/{channelId}/messages/{messageId}/reactions", { ...path(id), body: { emoji } }));
-              setMessages((prev) => applyReaction(prev, e, myId));
-            } else {
-              // 204: the new count arrives as a ReactionUpdated event.
-              const res = await api.DELETE("/api/channels/{channelId}/messages/{messageId}/reactions/{emoji}", { params: { path: { channelId: v.channel.id, messageId: id, emoji } } });
-              if (!res.response.ok) throw new Error(`Removing reaction failed: ${res.response.status}`);
-            }
-          }),
-      };
-    }
+    if (v.kind === "channel") return makeChannelActions(setMessages, true);
     const path = (messageId: string) => ({ params: { path: { conversationId: v.conversation.id, messageId } } });
     return {
       myId,
@@ -441,16 +456,17 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
           setMessages((prev) => prev.filter((m) => m.id !== id));
         }),
     };
-  }, [view, myId, me, api, run, loadFile]);
+  }, [view, myId, api, run, loadFile, makeChannelActions]);
 
   // The conversation as currently known (names in it change live), not the copy taken when it was opened.
   const openConversation = view?.kind === "dm" ? (conversations.find((c) => c.id === view.conversation.id) ?? view.conversation) : null;
   const title = !view ? (community ? community.name : "Direct messages") : view.kind === "channel" ? `# ${view.channel.name}` : `@ ${conversationName(openConversation ?? view.conversation, myId)}`;
   const placeholder = view?.kind === "channel" ? `Message #${view.channel.name}` : openConversation ? `Message ${conversationName(openConversation, myId)}` : "";
+  const showSide = side !== null && !panel && !showStreamTest && view?.kind === "channel";
   const unreadTotal = conversations.reduce((n, c) => n + c.unreadCount, 0);
 
   return (
-    <div className="chat">
+    <div className={`chat${showSide ? " with-side" : ""}`}>
       <nav className="communities">
         <button className={community === null ? "active" : ""} title="Direct messages" data-testid="home" onClick={() => void openHome()}>
           💬{unreadTotal > 0 && <span className="badge" data-testid="unread-total">{unreadTotal}</span>}
@@ -600,7 +616,14 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
             addFiles(e.dataTransfer.files);
           }}
         >
-          <header>{title}</header>
+          <header>
+            <span className="grow" data-testid="view-title">{title}</span>
+            {view?.kind === "channel" && (
+              <button className={`link${side?.kind === "pins" ? " active" : ""}`} title="Pinned messages" data-testid="open-pins" onClick={() => setSide(side?.kind === "pins" ? null : { kind: "pins" })}>
+                📌
+              </button>
+            )}
+          </header>
           {error && <p className="error">{error}</p>}
           <MessageList messages={messages} actions={actions} />
           {view && (
@@ -668,6 +691,12 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
             </form>
           )}
         </main>
+      )}
+      {showSide && view?.kind === "channel" && side?.kind === "thread" && (
+        <ThreadPane key={side.parent.id} api={api} hubRef={hubRef} parent={side.parent} myId={myId} makeActions={makeSideActions} onClose={closeSide} />
+      )}
+      {showSide && view?.kind === "channel" && side?.kind === "pins" && (
+        <PinnedPane key={view.channel.id} api={api} hubRef={hubRef} channelId={view.channel.id} makeActions={makeSideActions} onClose={closeSide} />
       )}
     </div>
   );

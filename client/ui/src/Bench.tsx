@@ -33,6 +33,9 @@ function makeMessages(n: number, offset = 0): Message[] {
       edited: false,
       reactions: null,
       replyTo: null,
+      replyCount: 0,
+      pinned: false,
+      threadParentId: null,
       attachments: [],
     };
   });

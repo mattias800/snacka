@@ -19,7 +19,7 @@ test("Alice DMs Bob: unread badge, delivery and reply", async ({ browser }) => {
   const bobRow = alice.locator('[data-testid="member"][data-name="bob"]');
   await bobRow.hover();
   await bobRow.getByRole("button", { name: /Message/ }).click();
-  await expect(alice.locator("main header")).toHaveText(/@ bob/);
+  await expect(alice.getByTestId("view-title")).toHaveText(/@ bob/);
   const hello = `psst bob ${run}`;
   await alice.getByLabel("Message", { exact: true }).fill(hello);
   await alice.getByLabel("Message", { exact: true }).press("Enter");

@@ -16,6 +16,10 @@ export type MessageActions = {
   onDelete?: (id: string) => void;
   onReact?: (id: string, emoji: string, add: boolean) => void;
   onReply?: (m: Message) => void;
+  /** Pin or unpin (authors, and moderators for anyone's message). */
+  onPin?: (id: string, pin: boolean) => void;
+  /** Opens the message's thread (absent inside a thread: no nested threads). */
+  onOpenThread?: (m: Message) => void;
   /** Loads attachments (they need the user's token). */
   loadFile?: FileLoader;
 };
@@ -71,6 +75,11 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
       <strong data-testid="author">{m.authorName}</strong>
       <time>{timeFormat.format(new Date(m.createdAt))}</time>
       {m.edited && <span className="muted edited"> (edited)</span>}
+      {m.pinned && (
+        <span className="pinned-mark" title="Pinned" data-testid="pinned-mark">
+          📌
+        </span>
+      )}
       {actions && !editing && (
         <span className="message-actions">
           {actions.onReact && m.reactions !== null &&
@@ -80,6 +89,12 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
               </button>
             ))}
           {actions.onReply && <button title="Reply" onClick={() => actions.onReply?.(m)}>↩️</button>}
+          {actions.onOpenThread && <button title="Reply in thread" onClick={() => actions.onOpenThread?.(m)}>🧵</button>}
+          {actions.onPin && (mine || actions.canModerate) && (
+            <button title={m.pinned ? "Unpin" : "Pin"} onClick={() => actions.onPin?.(m.id, !m.pinned)}>
+              📌
+            </button>
+          )}
           {mine && actions.onEdit && <button title="Edit" onClick={() => setEditing(true)}>✏️</button>}
           {canDelete && (
             <button title="Delete" onClick={() => confirm("Delete this message?") && actions.onDelete?.(m.id)}>
@@ -125,6 +140,11 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
             </button>
           ))}
         </div>
+      )}
+      {m.replyCount > 0 && actions?.onOpenThread && (
+        <button className="thread-link" data-testid="thread-link" onClick={() => actions.onOpenThread?.(m)}>
+          💬 {m.replyCount} {m.replyCount === 1 ? "reply" : "replies"}
+        </button>
       )}
       </div>
     </>

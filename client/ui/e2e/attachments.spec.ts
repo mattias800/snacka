@@ -31,7 +31,7 @@ test("New channel, formatting, image and file attachments", async ({ browser }) 
   await alice.getByTestId("new-channel").click();
   await alice.getByLabel("Channel name").fill(name);
   await alice.getByRole("button", { name: "Create" }).click();
-  await expect(alice.locator("main header")).toHaveText(`# ${name}`);
+  await expect(alice.getByTestId("view-title")).toHaveText(`# ${name}`);
   await expect(bob.getByRole("button", { name: `# ${name}` })).toBeVisible({ timeout: 10_000 });
   channelId = await alice.evaluate(async ([server, cid, n]) => {
     const token = JSON.parse(localStorage.getItem("snacka.auth") ?? "{}").accessToken as string;

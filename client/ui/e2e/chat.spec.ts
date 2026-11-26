@@ -115,7 +115,7 @@ test("Typing indicator, replies and online status", async ({ browser }) => {
 
   // Bob replies to that message: Alice sees the quote.
   await messages(bob, question).hover();
-  await messages(bob, question).getByTitle("Reply").click();
+  await messages(bob, question).getByTitle("Reply", { exact: true }).click();
   await expect(bob.getByTestId("replying")).toContainText("alice");
   const answer = `me! ${run}`;
   await send(bob, answer);
