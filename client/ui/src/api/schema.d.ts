@@ -575,7 +575,13 @@ export interface paths {
                 path?: never;
                 cookie?: never;
             };
-            requestBody?: never;
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["DeleteAccountRequest"];
+                    "text/json": components["schemas"]["DeleteAccountRequest"];
+                    "application/*+json": components["schemas"]["DeleteAccountRequest"];
+                };
+            };
             responses: {
                 /** @description OK */
                 200: {
@@ -3868,6 +3874,9 @@ export interface components {
              * @default null
              */
             expiresAt: string | null;
+        };
+        DeleteAccountRequest: {
+            password: string;
         };
         GamingStationResponse: {
             /** Format: uuid */

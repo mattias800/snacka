@@ -11,5 +11,6 @@ public interface IAuthService
     Task<UserProfileResponse> UpdateProfileAsync(Guid userId, UpdateProfileRequest request, CancellationToken cancellationToken = default);
     Task<UserProfileResponse> UpdateAvatarAsync(Guid userId, string? avatarFileName, CancellationToken cancellationToken = default);
     Task ChangePasswordAsync(Guid userId, ChangePasswordRequest request, CancellationToken cancellationToken = default);
-    Task DeleteAccountAsync(Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>Throws InvalidOperationException for a wrong password, owned communities, or the last admin.</summary>
+    Task DeleteAccountAsync(Guid userId, string password, CancellationToken cancellationToken = default);
 }

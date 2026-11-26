@@ -276,7 +276,10 @@ public class AuthApiTests
         test.SetAuthToken(auth.AccessToken);
 
         // Act
-        var response = await test.Client.DeleteAsync("/api/users/me");
+        var response = await test.Client.SendAsync(new HttpRequestMessage(HttpMethod.Delete, "/api/users/me")
+        {
+            Content = JsonContent.Create(new DeleteAccountRequest("Password123!"))
+        });
 
         // Assert
         Assert.AreEqual(HttpStatusCode.NoContent, response.StatusCode);

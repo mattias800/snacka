@@ -61,6 +61,9 @@ public record UserProfileUpdatedEvent(
     string? Avatar
 );
 
+/// <summary>Deleting the account needs the password, so a stolen session can't do it.</summary>
+public record DeleteAccountRequest([Required] string Password);
+
 public record ChangePasswordRequest(
     [Required] string CurrentPassword,
     [Required, StringLength(100, MinimumLength = 8)] string NewPassword

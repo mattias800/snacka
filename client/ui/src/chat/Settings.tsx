@@ -121,6 +121,7 @@ export function Settings(props: {
       </p>
       <Notifications />
       <Devices choose={props.chooseDevice} />
+      <DeleteAccount api={api} session={session} />
       <h2>Password</h2>
       <form className="column" onSubmit={changePassword}>
         <input type="password" autoComplete="current-password" value={passwords.current} onChange={(e) => setPasswords({ ...passwords, current: e.target.value })} placeholder="Current password" aria-label="Current password" />
@@ -227,6 +228,41 @@ function Devices({ choose }: { choose: (kind: DeviceKind, deviceId: string) => P
             </button>
           )}
         </div>
+      )}
+    </>
+  );
+}
+
+/** Deleting the account: needs the password; the server refuses while others depend on it (owned communities, last admin). */
+function DeleteAccount({ api, session }: { api: Api; session: Session }) {
+  const [open, setOpen] = useState(false);
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState<string | null>(null);
+  const remove = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!confirm("Delete your account and all your messages? This can't be undone.")) return;
+    setError(null);
+    const res = await api.DELETE("/api/Users/me", { body: { password } });
+    if (!res.response.ok) {
+      setError((res.error as { error?: string } | undefined)?.error ?? `Couldn't delete the account: ${res.response.status}`);
+      return;
+    }
+    session.set(null);
+  };
+  return (
+    <>
+      <h2>Delete account</h2>
+      {!open ? (
+        <button className="link danger" data-testid="delete-account" onClick={() => setOpen(true)}>
+          Delete my account…
+        </button>
+      ) : (
+        <form className="column" onSubmit={(e) => void remove(e)}>
+          <p className="muted">Your messages are deleted too. Communities you own with other members must be handed over first.</p>
+          <input type="password" autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" aria-label="Password to delete account" />
+          {error && <p className="error" data-testid="delete-account-error">{error}</p>}
+          <button className="danger" type="submit" disabled={!password}>Delete account</button>
+        </form>
       )}
     </>
   );

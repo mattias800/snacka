@@ -219,11 +219,26 @@ public sealed partial class AuthService : IAuthService
         await _refreshTokens.RevokeAllAsync(userId, cancellationToken);
     }
 
-    public async Task DeleteAccountAsync(Guid userId, CancellationToken cancellationToken = default)
+    public async Task DeleteAccountAsync(Guid userId, string password, CancellationToken cancellationToken = default)
     {
-        var user = await _db.Users.FindAsync([userId], cancellationToken);
-        if (user is null)
-            throw new InvalidOperationException("User not found.");
+        var user = await _db.Users.FindAsync([userId], cancellationToken)
+            ?? throw new InvalidOperationException("User not found.");
+        if (!BCrypt.Net.BCrypt.Verify(password, user.PasswordHash))
+            throw new InvalidOperationException("Password is incorrect.");
+
+        // Communities belong to their owner in the database: deleting the owner deletes them, with
+        // every channel and message. Fine for a community of one, not for one others are in.
+        var owned = await _db.Communities
+            .Where(c => c.OwnerId == userId && _db.UserCommunities.Any(uc => uc.CommunityId == c.Id && uc.UserId != userId))
+            .Select(c => c.Name)
+            .ToListAsync(cancellationToken);
+        if (owned.Count > 0)
+            throw new InvalidOperationException($"You own {string.Join(", ", owned)}. Transfer ownership to someone else, or delete it, first.");
+
+        if (user.IsServerAdmin
+            && !await _db.Users.AnyAsync(u => u.IsServerAdmin && u.Id != userId, cancellationToken)
+            && await _db.Users.AnyAsync(u => u.Id != userId, cancellationToken))
+            throw new InvalidOperationException("You're the server's only admin. Make someone else an admin first.");
 
         _db.Users.Remove(user);
         await _db.SaveChangesAsync(cancellationToken);

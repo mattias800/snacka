@@ -235,7 +235,7 @@ public class UsersController : ControllerBase
     }
 
     [HttpDelete("me")]
-    public async Task<ActionResult> DeleteAccount(CancellationToken cancellationToken)
+    public async Task<ActionResult> DeleteAccount([FromBody] DeleteAccountRequest request, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
         if (userId is null)
@@ -243,12 +243,12 @@ public class UsersController : ControllerBase
 
         try
         {
-            await _authService.DeleteAccountAsync(userId.Value, cancellationToken);
+            await _authService.DeleteAccountAsync(userId.Value, request.Password, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
         {
-            return NotFound(new { error = ex.Message });
+            return BadRequest(new { error = ex.Message });
         }
     }
 
