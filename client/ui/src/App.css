@@ -195,3 +195,9 @@ label.button { display: inline-block; cursor: pointer; }
 .link-preview .description { font-size: 13px; color: var(--muted); margin: 0; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .link-preview img.thumb { width: 80px; height: 80px; object-fit: cover; border-radius: 4px; flex-shrink: 0; }
 .link-preview img.full { max-width: 100%; max-height: 300px; border-radius: 4px; }
+.emoji-button { padding: 0 4px; }
+.emoji-picker { position: fixed; z-index: 50; width: 300px; height: 280px; overflow-y: auto; background: var(--panel); border: 1px solid #444; border-radius: 8px; padding: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, 0.4); }
+.emoji-picker h4 { margin: 6px 2px 4px; font-size: 11px; text-transform: uppercase; color: var(--muted); }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px; }
+.emoji-grid button { font-size: 20px; padding: 4px; border-radius: 4px; }
+.emoji-grid button:hover { background: var(--panel-2); }

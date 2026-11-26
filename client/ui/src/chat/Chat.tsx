@@ -12,6 +12,7 @@ import { createFileLoader, formatSize } from "./files";
 import { Settings, type Profile } from "./Settings";
 import { channelActions } from "./channelActions";
 import { createPreviewLoader } from "./previews";
+import { EmojiPicker } from "./EmojiPicker";
 import { channelAlert, dmAlert, type Alert } from "./alerts";
 import { notifier, notificationsMuted } from "../notifier";
 import { PinnedPane, ThreadPane } from "./SidePane";
@@ -74,6 +75,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const composerRef = useRef<HTMLTextAreaElement>(null);
   const loadFile = useMemo(() => createFileLoader(serverUrl, session.fetch), [serverUrl, session]);
   const loadPreview = useMemo(() => createPreviewLoader(api), [api]);
   const [newChannel, setNewChannel] = useState<{ name: string; voice: boolean } | null>(null);
@@ -559,6 +561,18 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     });
   };
 
+  /** Puts an emoji where the cursor is in the composer, and the cursor after it. */
+  const insertEmoji = (emoji: string) => {
+    const el = composerRef.current;
+    const start = el?.selectionStart ?? draft.length;
+    const end = el?.selectionEnd ?? draft.length;
+    onDraftChange(draft.slice(0, start) + emoji + draft.slice(end));
+    requestAnimationFrame(() => {
+      el?.focus();
+      el?.setSelectionRange(start + emoji.length, start + emoji.length);
+    });
+  };
+
   /** Tells the others we're typing, at most every 3 s while the draft changes. */
   const onDraftChange = (value: string) => {
     setDraft(value);
@@ -908,7 +922,9 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
                     />
                   </>
                 )}
+                <EmojiPicker icon="😀" label="Insert emoji" testId="composer-emoji" onPick={insertEmoji} />
                 <textarea
+                  ref={composerRef}
                   rows={Math.min(8, draft.split("\n").length)}
                   value={draft}
                   onChange={(e) => onDraftChange(e.target.value)}

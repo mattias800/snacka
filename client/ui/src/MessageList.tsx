@@ -7,6 +7,7 @@ import { mentionsUser } from "./chat/mentions";
 import { LinkPreviewCard } from "./chat/LinkPreview";
 import { firstLink, type PreviewLoader } from "./chat/previews";
 import { Avatar } from "./chat/Avatar";
+import { EmojiPicker } from "./chat/EmojiPicker";
 
 export type Message = ChatMessage;
 
@@ -95,6 +96,14 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
                 {emoji}
               </button>
             ))}
+          {actions.onReact && m.reactions !== null && (
+            <EmojiPicker
+              icon="➕"
+              label="Add reaction"
+              testId="add-reaction"
+              onPick={(emoji) => actions.onReact?.(m.id, emoji, !m.reactions?.some((r) => r.emoji === emoji && r.mine))}
+            />
+          )}
           {actions.onReply && <button title="Reply" onClick={() => actions.onReply?.(m)}>↩️</button>}
           {actions.onOpenThread && <button title="Reply in thread" onClick={() => actions.onOpenThread?.(m)}>🧵</button>}
           {actions.onPin && (mine || actions.canModerate) && (
