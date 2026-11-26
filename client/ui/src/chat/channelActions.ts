@@ -2,6 +2,7 @@ import type { Dispatch, SetStateAction } from "react";
 import { ok, type Api } from "../api/client";
 import type { MessageActions } from "../MessageList";
 import type { FileLoader } from "./files";
+import type { PreviewLoader } from "./previews";
 import { applyPin, applyReaction, fromChannel, replace, type ChatMessage } from "./model";
 
 /**
@@ -15,6 +16,7 @@ export function channelActions(o: {
   myUsername: string;
   canModerate: boolean;
   loadFile: FileLoader;
+  loadPreview?: PreviewLoader;
   run: (f: () => Promise<void>) => Promise<void>;
   setList: Dispatch<SetStateAction<ChatMessage[]>>;
   onReply?: (m: ChatMessage) => void;
@@ -26,6 +28,7 @@ export function channelActions(o: {
     myId,
     myUsername: o.myUsername,
     loadFile: o.loadFile,
+    loadPreview: o.loadPreview,
     canModerate: o.canModerate,
     onReply: o.onReply,
     onOpenThread: o.onOpenThread,

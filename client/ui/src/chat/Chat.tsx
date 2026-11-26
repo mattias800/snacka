@@ -11,6 +11,7 @@ import { Avatar } from "./Avatar";
 import { createFileLoader, formatSize } from "./files";
 import { Settings, type Profile } from "./Settings";
 import { channelActions } from "./channelActions";
+import { createPreviewLoader } from "./previews";
 import { channelAlert, dmAlert, type Alert } from "./alerts";
 import { notifier, notificationsMuted } from "../notifier";
 import { PinnedPane, ThreadPane } from "./SidePane";
@@ -74,6 +75,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadFile = useMemo(() => createFileLoader(serverUrl, session.fetch), [serverUrl, session]);
+  const loadPreview = useMemo(() => createPreviewLoader(api), [api]);
   const [newChannel, setNewChannel] = useState<{ name: string; voice: boolean } | null>(null);
   /** Renaming the open channel: the name being typed. */
   const [renaming, setRenaming] = useState<string | null>(null);
@@ -594,12 +596,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
         myUsername: auth.username,
         canModerate,
         loadFile,
+        loadPreview,
         run,
         setList,
         onReply: main ? (m) => setReplyingTo(m) : undefined,
         onOpenThread: main ? (m) => setSide({ kind: "thread", parent: m }) : undefined,
       }),
-    [api, openChannelId, myId, auth.username, canModerate, loadFile, run],
+    [api, openChannelId, myId, auth.username, canModerate, loadFile, loadPreview, run],
   );
   const makeSideActions = useCallback((setList: React.Dispatch<React.SetStateAction<ChatMessage[]>>) => makeChannelActions(setList), [makeChannelActions]);
   const actions = useMemo<MessageActions | undefined>(() => {
@@ -610,6 +613,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     return {
       myId,
       loadFile,
+      loadPreview,
       canModerate: false,
       onEdit: (id, content) =>
         void run(async () => {
@@ -623,7 +627,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
           setMessages((prev) => prev.filter((m) => m.id !== id));
         }),
     };
-  }, [view, myId, api, run, loadFile, makeChannelActions]);
+  }, [view, myId, api, run, loadFile, loadPreview, makeChannelActions]);
 
   // The conversation as currently known (names in it change live), not the copy taken when it was opened.
   const openConversation = view?.kind === "dm" ? (conversations.find((c) => c.id === view.conversation.id) ?? view.conversation) : null;

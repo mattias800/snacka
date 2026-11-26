@@ -4,6 +4,8 @@ import type { Attachment, ChatMessage } from "./chat/model";
 import { formatSize, type FileLoader } from "./chat/files";
 import { renderMarkdown } from "./chat/markdown";
 import { mentionsUser } from "./chat/mentions";
+import { LinkPreviewCard } from "./chat/LinkPreview";
+import { firstLink, type PreviewLoader } from "./chat/previews";
 import { Avatar } from "./chat/Avatar";
 
 export type Message = ChatMessage;
@@ -25,6 +27,8 @@ export type MessageActions = {
   onOpenThread?: (m: Message) => void;
   /** Loads attachments (they need the user's token). */
   loadFile?: FileLoader;
+  /** Previews of links in messages (absent: none shown). */
+  loadPreview?: PreviewLoader;
 };
 
 /** An attachment: images and audio inline, other files as a download link. */
@@ -121,6 +125,7 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
       ) : (
         m.content && <div className="content">{renderMarkdown(m.content, actions?.myUsername)}</div>
       )}
+      {actions?.loadPreview && !editing && firstLink(m.content) && <LinkPreviewCard url={firstLink(m.content)!} load={actions.loadPreview} />}
       {m.attachments.length > 0 && (
         <div className="attachments">
           {m.attachments.map((a) => (
