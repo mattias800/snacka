@@ -9,6 +9,8 @@ export type ChatMessage = {
   id: string;
   authorId: string;
   authorName: string;
+  /** Avatar file name (see Avatar), null when the author has none. */
+  authorAvatar: string | null;
   content: string;
   createdAt: string;
   edited: boolean;
@@ -31,6 +33,7 @@ export const fromChannel = (m: ChannelMessage): ChatMessage => ({
   id: m.id,
   authorId: m.authorId,
   authorName: m.authorEffectiveDisplayName,
+  authorAvatar: m.authorAvatar ?? null,
   content: m.content,
   createdAt: m.createdAt,
   edited: m.isEdited,
@@ -43,6 +46,7 @@ export const fromDm = (m: DmMessage): ChatMessage => ({
   id: m.id,
   authorId: m.senderId,
   authorName: m.senderEffectiveDisplayName,
+  authorAvatar: m.senderAvatar ?? null,
   content: m.content,
   createdAt: m.createdAt,
   edited: m.updatedAt != null,
@@ -75,3 +79,12 @@ export function applyReaction(list: ChatMessage[], e: ReactionUpdated, myId: str
     return { ...m, reactions };
   });
 }
+
+/** Hub event "UserProfileUpdated" (server UserProfileUpdatedEvent): someone's name or picture changed. */
+export type ProfileUpdated = { userId: string; username: string; effectiveDisplayName: string; avatar: string | null };
+
+/** Shows a changed name and picture on that user's messages already on screen. */
+export const applyProfile = (list: ChatMessage[], e: ProfileUpdated): ChatMessage[] =>
+  list.some((m) => m.authorId === e.userId)
+    ? list.map((m) => (m.authorId === e.userId ? { ...m, authorName: e.effectiveDisplayName, authorAvatar: e.avatar } : m))
+    : list;

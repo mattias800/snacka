@@ -172,18 +172,23 @@ public sealed partial class AuthService : IAuthService
         if (user is null)
             throw new InvalidOperationException("User not found.");
 
+        // null leaves a field alone; for the optional fields, blank clears it (an empty display name
+        // would otherwise show as no name at all, since EffectiveDisplayName only falls back on null).
         if (request.Username is not null)
         {
-            if (await _db.Users.AnyAsync(u => u.Username == request.Username && u.Id != userId, cancellationToken))
+            var username = request.Username.Trim();
+            if (username.Length < 3)
+                throw new InvalidOperationException("Username must be at least 3 characters.");
+            if (await _db.Users.AnyAsync(u => u.Username == username && u.Id != userId, cancellationToken))
                 throw new InvalidOperationException("Username is already taken.");
-            user.Username = request.Username;
+            user.Username = username;
         }
 
         if (request.DisplayName is not null)
-            user.DisplayName = request.DisplayName;
+            user.DisplayName = string.IsNullOrWhiteSpace(request.DisplayName) ? null : request.DisplayName.Trim();
 
         if (request.Status is not null)
-            user.Status = request.Status;
+            user.Status = string.IsNullOrWhiteSpace(request.Status) ? null : request.Status.Trim();
 
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);

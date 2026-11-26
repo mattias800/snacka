@@ -1,6 +1,7 @@
 using System.Net;
 using System.Net.Http.Json;
 using Microsoft.AspNetCore.SignalR.Client;
+using SkiaSharp;
 using Snacka.Server.DTOs;
 using Snacka.Shared.Models;
 
@@ -376,5 +377,79 @@ public class ChatScenarioTests
         var reply = await Ok<MessageResponse>(await w.Bob.Http.PostAsync($"/api/channels/{w.General}/messages/with-attachments", Upload("here", question.Id, "setup.txt")));
 
         Assert.AreEqual("photo of the setup?", reply.ReplyTo?.Content);
+    }
+
+    // ---- Profiles ----
+
+    [TestMethod]
+    public async Task ProfileChange_ReachesPeopleWhoShareACommunity_AndNobodyElse()
+    {
+        await using var w = await CreateWorldAsync();
+
+        var profile = await Ok<UserProfileResponse>(await w.Alice.Http.PutAsJsonAsync("/api/users/me", new UpdateProfileRequest(null, "  Alice 🎮 ", null)));
+        Assert.AreEqual("Alice 🎮", profile.EffectiveDisplayName);
+
+        var seen = await w.Bob.WaitForAsync<UserProfileUpdatedEvent>("UserProfileUpdated", e => e.UserId == w.Alice.Id);
+        Assert.AreEqual("Alice 🎮", seen.EffectiveDisplayName);
+        await w.Alice.WaitForAsync<UserProfileUpdatedEvent>("UserProfileUpdated", e => e.UserId == w.Alice.Id); // her other sessions
+        await w.Carol.SettleAsync();
+        Assert.AreEqual(0, w.Carol.Received<UserProfileUpdatedEvent>("UserProfileUpdated").Count, "Carol shares nothing with Alice");
+
+        // New messages carry the new name.
+        var m = await SendAsync(w.Alice, w.General, "new name");
+        Assert.AreEqual("Alice 🎮", m.AuthorEffectiveDisplayName);
+    }
+
+    [TestMethod]
+    public async Task ProfileChange_ReachesDmPartners()
+    {
+        await using var w = await CreateWorldAsync();
+        await Ok<ConversationResponse>(await w.Carol.Http.PostAsJsonAsync("/api/conversations", new CreateConversationRequest([w.Alice.Id], null)));
+
+        await Ok<UserProfileResponse>(await w.Alice.Http.PutAsJsonAsync("/api/users/me", new UpdateProfileRequest(null, "Ali", null)));
+
+        await w.Carol.WaitForAsync<UserProfileUpdatedEvent>("UserProfileUpdated", e => e.UserId == w.Alice.Id && e.EffectiveDisplayName == "Ali");
+    }
+
+    [TestMethod]
+    public async Task BlankDisplayName_FallsBackToUsername()
+    {
+        await using var w = await CreateWorldAsync();
+        await Ok<UserProfileResponse>(await w.Alice.Http.PutAsJsonAsync("/api/users/me", new UpdateProfileRequest(null, "Temp", null)));
+
+        var cleared = await Ok<UserProfileResponse>(await w.Alice.Http.PutAsJsonAsync("/api/users/me", new UpdateProfileRequest(null, "   ", null)));
+
+        Assert.IsNull(cleared.DisplayName);
+        Assert.AreEqual("alice", cleared.EffectiveDisplayName);
+    }
+
+    [TestMethod]
+    public async Task Avatar_UploadReplaceAndRemove_AreSeenByOthers()
+    {
+        await using var w = await CreateWorldAsync();
+
+        var first = await Ok<AvatarUploadResponse>(await w.Alice.Http.PutAsync("/api/users/me/avatar", AvatarForm(SKColors.Red)));
+        await w.Bob.WaitForAsync<UserProfileUpdatedEvent>("UserProfileUpdated", e => e.UserId == w.Alice.Id && e.Avatar == first.Avatar);
+        var png = await w.Bob.Http.GetByteArrayAsync($"/api/users/{w.Alice.Id}/avatar");
+        using (var image = SKBitmap.Decode(png))
+            Assert.AreEqual(SKColors.Red, image.GetPixel(image.Width / 2, image.Height / 2));
+
+        var second = await Ok<AvatarUploadResponse>(await w.Alice.Http.PutAsync("/api/users/me/avatar", AvatarForm(SKColors.Blue)));
+        Assert.AreNotEqual(first.Avatar, second.Avatar, "a new file name lets clients drop their cached image");
+        await w.Bob.WaitForAsync<UserProfileUpdatedEvent>("UserProfileUpdated", e => e.UserId == w.Alice.Id && e.Avatar == second.Avatar);
+
+        (await w.Alice.Http.DeleteAsync("/api/users/me/avatar")).EnsureSuccessStatusCode();
+        await w.Bob.WaitForAsync<UserProfileUpdatedEvent>("UserProfileUpdated", e => e.UserId == w.Alice.Id && e.Avatar == null);
+        Assert.AreEqual(HttpStatusCode.NotFound, (await w.Bob.Http.GetAsync($"/api/users/{w.Alice.Id}/avatar")).StatusCode);
+    }
+
+    private static MultipartFormDataContent AvatarForm(SKColor color)
+    {
+        using var bitmap = new SKBitmap(64, 48);
+        bitmap.Erase(color);
+        using var data = bitmap.Encode(SKEncodedImageFormat.Png, 100);
+        var file = new ByteArrayContent(data.ToArray());
+        file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
+        return new MultipartFormDataContent { { file, "file", "me.png" } };
     }
 }

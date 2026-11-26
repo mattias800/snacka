@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Attachment, ChatMessage } from "./chat/model";
 import { formatSize, type FileLoader } from "./chat/files";
 import { renderMarkdown } from "./chat/markdown";
+import { Avatar } from "./chat/Avatar";
 
 export type Message = ChatMessage;
 
@@ -60,12 +61,14 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
   const canDelete = actions?.onDelete && (mine || actions.canModerate);
   return (
     <>
+      <Avatar userId={m.authorId} name={m.authorName} avatar={m.authorAvatar} loadFile={actions?.loadFile} size={36} />
+      <div className="message-main">
       {m.replyTo && (
         <div className="reply-quote" data-testid="reply-quote">
           ↪ <strong>{m.replyTo.authorName}</strong> <span>{m.replyTo.content}</span>
         </div>
       )}
-      <strong>{m.authorName}</strong>
+      <strong data-testid="author">{m.authorName}</strong>
       <time>{timeFormat.format(new Date(m.createdAt))}</time>
       {m.edited && <span className="muted edited"> (edited)</span>}
       {actions && !editing && (
@@ -123,6 +126,7 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
           ))}
         </div>
       )}
+      </div>
     </>
   );
 });

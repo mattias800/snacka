@@ -6,8 +6,10 @@ import { MessageList, type MessageActions } from "../MessageList";
 import { StreamTest, inNativeApp } from "../StreamTest";
 import { VoicePanel, useVoice } from "../VoicePanel";
 import { BrowseCommunities, InviteFriends } from "./Onboarding";
+import { Avatar } from "./Avatar";
 import { createFileLoader, formatSize } from "./files";
-import { applyReaction, fromChannel, fromDm, upsert, type ChannelMessage, type ChatMessage, type DmMessage, type ReactionUpdated } from "./model";
+import { Settings, type Profile } from "./Settings";
+import { applyProfile, applyReaction, fromChannel, fromDm, upsert, type ChannelMessage, type ChatMessage, type DmMessage, type ProfileUpdated, type ReactionUpdated } from "./model";
 
 type Community = Schemas["CommunityResponse"];
 type Channel = Schemas["ChannelResponse"];
@@ -57,7 +59,9 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   const [typing, setTyping] = useState<Record<string, { name: string; until: number }>>({});
   const lastTypingSentRef = useRef(0);
   /** Replaces the message pane: joining/creating communities, or inviting friends. */
-  const [panel, setPanel] = useState<"browse" | "invite" | null>(null);
+  const [panel, setPanel] = useState<"browse" | "invite" | "settings" | null>(null);
+  /** The signed-in user's own profile (name, picture), kept current by UserProfileUpdated. */
+  const [profile, setProfile] = useState<Profile | null>(null);
   const voice = useVoice(api);
   // Who is in which voice channel of the open community (LiveKit webhooks -> server -> hub).
   const [presence, setPresence] = useState<VoiceParticipant[]>([]);
@@ -123,6 +127,21 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     });
     hub.on("ChannelMessageEdited", (m: ChannelMessage) => isOpen("channel", m.channelId) && setMessages((prev) => upsert(prev, fromChannel(m))));
     hub.on("ChannelMessageDeleted", (e: { channelId: string; messageId: string }) => setMessages((prev) => prev.filter((m) => m.id !== e.messageId)));
+    // Someone's name or picture changed: update it wherever it's on screen. A community nickname wins over the global name.
+    hub.on("UserProfileUpdated", (e: ProfileUpdated) => {
+      setMessages((prev) => applyProfile(prev, e));
+      setMembers((prev) =>
+        prev.map((m) => (m.userId === e.userId ? { ...m, username: e.username, avatar: e.avatar, effectiveDisplayName: m.displayNameOverride ?? e.effectiveDisplayName } : m)),
+      );
+      setConversations((prev) =>
+        prev.map((c) =>
+          c.participants.some((p) => p.userId === e.userId)
+            ? { ...c, participants: c.participants.map((p) => (p.userId === e.userId ? { ...p, username: e.username, effectiveDisplayName: e.effectiveDisplayName, avatar: e.avatar } : p)) }
+            : c,
+        ),
+      );
+      if (e.userId === myId) void api.GET("/api/Users/me").then(ok).then(setProfile, () => {});
+    });
     hub.on("ReactionUpdated", (e: ReactionUpdated) => isOpen("channel", e.channelId) && setMessages((prev) => applyReaction(prev, e, myId)));
 
     hub.on("ConversationMessageReceived", (m: DmMessage) => {
@@ -195,12 +214,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       void hub.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one connection per server/session
-  }, [serverUrl, tokenRef, myId]);
+  }, [serverUrl, tokenRef, myId, api]);
 
   useEffect(() => {
     void loadCommunities();
     void loadConversations().catch(() => {});
-  }, [loadCommunities, loadConversations]);
+    void api.GET("/api/Users/me").then(ok).then(setProfile, () => {});
+  }, [api, loadCommunities, loadConversations]);
 
   /** Shows a channel or DM: joins its realtime group (channels) and loads its history. */
   const openView = (next: View) =>
@@ -407,6 +427,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     const path = (messageId: string) => ({ params: { path: { conversationId: v.conversation.id, messageId } } });
     return {
       myId,
+      loadFile,
       canModerate: false,
       onEdit: (id, content) =>
         void run(async () => {
@@ -422,8 +443,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     };
   }, [view, myId, me, api, run, loadFile]);
 
-  const title = !view ? (community ? community.name : "Direct messages") : view.kind === "channel" ? `# ${view.channel.name}` : `@ ${conversationName(view.conversation, myId)}`;
-  const placeholder = view?.kind === "channel" ? `Message #${view.channel.name}` : view ? `Message ${conversationName(view.conversation, myId)}` : "";
+  // The conversation as currently known (names in it change live), not the copy taken when it was opened.
+  const openConversation = view?.kind === "dm" ? (conversations.find((c) => c.id === view.conversation.id) ?? view.conversation) : null;
+  const title = !view ? (community ? community.name : "Direct messages") : view.kind === "channel" ? `# ${view.channel.name}` : `@ ${conversationName(openConversation ?? view.conversation, myId)}`;
+  const placeholder = view?.kind === "channel" ? `Message #${view.channel.name}` : openConversation ? `Message ${conversationName(openConversation, myId)}` : "";
   const unreadTotal = conversations.reduce((n, c) => n + c.unreadCount, 0);
 
   return (
@@ -508,7 +531,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
             <ul className="members">
               {members.map((m) => (
                 <li key={m.userId} data-testid="member" data-name={m.username}>
-                  <span className={`dot ${m.isOnline ? "connected" : ""}`} />
+                  <span className="member-avatar">
+                    <Avatar userId={m.userId} name={m.effectiveDisplayName} avatar={m.avatar} loadFile={loadFile} size={28} />
+                    <span className={`dot ${m.isOnline ? "connected" : ""}`} />
+                  </span>
                   <span className="name">{m.effectiveDisplayName}</span>
                   {m.userId !== myId && (
                     <button className="link" title={`Message ${m.effectiveDisplayName}`} onClick={() => void messageUser(m.userId)}>
@@ -521,7 +547,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
           </>
         )}
         <footer>
-          <span>{auth.username}</span>
+          <button className={`me${panel === "settings" ? " active" : ""}`} title="Profile and settings" data-testid="open-settings" onClick={() => setPanel(panel === "settings" ? null : "settings")}>
+            <Avatar userId={myId} name={profile?.effectiveDisplayName ?? auth.username} avatar={profile?.avatar} loadFile={loadFile} size={28} />
+            <span className="name">{profile?.effectiveDisplayName ?? auth.username}</span>
+          </button>
           {auth.isServerAdmin && (
             <button className="link" title="Invite a friend to this server" onClick={() => setPanel("invite")}>
               Invite
@@ -538,7 +567,15 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       </aside>
       {panel ? (
         <main className="messages">
-          {panel === "browse" ? <BrowseCommunities api={api} onOpen={(c) => void enterCommunity(c)} /> : <InviteFriends api={api} serverUrl={serverUrl} />}
+          {panel === "browse" ? (
+            <BrowseCommunities api={api} onOpen={(c) => void enterCommunity(c)} />
+          ) : panel === "invite" ? (
+            <InviteFriends api={api} serverUrl={serverUrl} />
+          ) : profile ? (
+            <Settings api={api} serverUrl={serverUrl} getToken={() => tokenRef.current} loadFile={loadFile} profile={profile} onChange={setProfile} />
+          ) : (
+            <p className="muted panel">Loading…</p>
+          )}
         </main>
       ) : showStreamTest ? (
         <main className="messages">

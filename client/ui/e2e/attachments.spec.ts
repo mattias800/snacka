@@ -1,4 +1,4 @@
-import { api, ensureCommunity, ensureUser, expect, logIn, test } from "./support";
+import { api, ensureCommunity, ensureUser, expect, logIn, solidPng, test } from "./support";
 
 /**
  * Alice creates a channel (Bob sees it appear), then shares formatted text, an image and a file
@@ -18,8 +18,7 @@ test.afterAll(async () => {
   if (channelId) await api(`/api/communities/${communityId}/Channels/${channelId}`, { method: "DELETE", token: await ensureUser("alice") }).catch(() => {});
 });
 
-/** A 2x2 red PNG. */
-const PNG = Buffer.from("iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAEklEQVR4nGP4z8AARAwMDAwMAEPtA/0ksgq+AAAAAElFTkSuQmCC", "base64");
+const PNG = solidPng(2, 2, [255, 0, 0]);
 
 test("New channel, formatting, image and file attachments", async ({ browser }) => {
   const alice = await logIn(browser, "alice", COMMUNITY);

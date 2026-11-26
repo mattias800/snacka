@@ -132,15 +132,37 @@ public class UsersController : ControllerBase
     private readonly IAuthService _authService;
     private readonly IImageProcessingService _imageService;
     private readonly SnackaDbContext _db;
+    private readonly IHubContext<SnackaHub> _hubContext;
 
     public UsersController(
         IAuthService authService,
         IImageProcessingService imageService,
-        SnackaDbContext db)
+        SnackaDbContext db,
+        IHubContext<SnackaHub> hubContext)
     {
         _authService = authService;
         _imageService = imageService;
         _db = db;
+        _hubContext = hubContext;
+    }
+
+    /// <summary>
+    /// Tells everyone who can see this user (shared community or conversation) and the user's own
+    /// other sessions that their name or avatar changed.
+    /// </summary>
+    private async Task BroadcastProfileAsync(UserProfileResponse profile, CancellationToken cancellationToken)
+    {
+        var communityIds = _db.UserCommunities.Where(uc => uc.UserId == profile.Id).Select(uc => uc.CommunityId);
+        var conversationIds = _db.ConversationParticipants.Where(p => p.UserId == profile.Id).Select(p => p.ConversationId);
+        var audience = await _db.UserCommunities.Where(uc => communityIds.Contains(uc.CommunityId)).Select(uc => uc.UserId)
+            .Union(_db.ConversationParticipants.Where(p => conversationIds.Contains(p.ConversationId)).Select(p => p.UserId))
+            .ToListAsync(cancellationToken);
+        audience.Add(profile.Id);
+
+        await _hubContext.Clients.Users(audience.Distinct().Select(id => id.ToString()).ToList()).SendAsync(
+            "UserProfileUpdated",
+            new UserProfileUpdatedEvent(profile.Id, profile.Username, profile.EffectiveDisplayName, profile.Avatar),
+            cancellationToken);
     }
 
     [HttpGet("me")]
@@ -173,6 +195,7 @@ public class UsersController : ControllerBase
         try
         {
             var profile = await _authService.UpdateProfileAsync(userId.Value, request, cancellationToken);
+            await BroadcastProfileAsync(profile, cancellationToken);
             return Ok(profile);
         }
         catch (InvalidOperationException ex)
@@ -253,8 +276,12 @@ public class UsersController : ControllerBase
 
         try
         {
-            // Update the user's avatar in the database
+            // Update the user's avatar in the database, then remove the one it replaced
+            var oldAvatar = (await _authService.GetProfileAsync(userId.Value, cancellationToken)).Avatar;
             var profile = await _authService.UpdateAvatarAsync(userId.Value, result.FileName, cancellationToken);
+            if (!string.IsNullOrEmpty(oldAvatar))
+                await _imageService.DeleteAvatarAsync(oldAvatar, cancellationToken);
+            await BroadcastProfileAsync(profile, cancellationToken);
             return Ok(new AvatarUploadResponse(profile.Avatar, true));
         }
         catch (InvalidOperationException ex)
@@ -279,7 +306,8 @@ public class UsersController : ControllerBase
             var oldAvatar = profile.Avatar;
 
             // Clear avatar in database
-            await _authService.UpdateAvatarAsync(userId.Value, null, cancellationToken);
+            var updated = await _authService.UpdateAvatarAsync(userId.Value, null, cancellationToken);
+            await BroadcastProfileAsync(updated, cancellationToken);
 
             // Delete the file
             if (!string.IsNullOrEmpty(oldAvatar))

@@ -28,6 +28,7 @@ function makeMessages(n: number, offset = 0): Message[] {
       content: rand() < 0.05 ? `${content}\n${content}` : content,
       authorId: author,
       authorName: author,
+      authorAvatar: null,
       createdAt: new Date(Date.UTC(2026, 10, 25, 12, 0, 0) + (offset + i) * 7000).toISOString(),
       edited: false,
       reactions: null,

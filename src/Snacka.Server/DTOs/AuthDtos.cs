@@ -46,8 +46,19 @@ public record AvatarUploadResponse(
 
 public record UpdateProfileRequest(
     [StringLength(50, MinimumLength = 3)] string? Username,
-    [StringLength(32)] string? DisplayName,  // Custom display name, UTF-8 with emojis
-    string? Status
+    [StringLength(32)] string? DisplayName,  // Custom display name, UTF-8 with emojis; "" clears it
+    [StringLength(128)] string? Status        // "" clears it
+);
+
+/// <summary>
+/// Hub event "UserProfileUpdated": sent to everyone who shares a community or conversation with the user
+/// (and the user's other sessions) when their name or avatar changes. No email: that stays private.
+/// </summary>
+public record UserProfileUpdatedEvent(
+    Guid UserId,
+    string Username,
+    string EffectiveDisplayName,
+    string? Avatar
 );
 
 public record ChangePasswordRequest(
