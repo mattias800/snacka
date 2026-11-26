@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createApi, ok, type Auth, type Schemas } from "./api/client";
+import { Session } from "./api/session";
 import { StreamTest, inNativeApp } from "./StreamTest";
 import { Bench } from "./Bench";
 import { Chat } from "./chat/Chat";
@@ -47,14 +48,22 @@ export default function App() {
   const linkParams = useMemo(() => new URLSearchParams(window.location.search), []);
   const [serverUrl, setServerUrl] = useState<string>(linkParams.get("server") ?? load<string>(SERVER_KEY) ?? "http://localhost:5117");
   const [auth, setAuth] = useState<Auth | null>(load<Auth>(AUTH_KEY));
-  const tokenRef = useRef<string | null>(auth?.accessToken ?? null);
-  tokenRef.current = auth?.accessToken ?? null;
-  const api = useMemo(() => createApi(serverUrl, () => tokenRef.current), [serverUrl]);
+  const session = useMemo(
+    () => new Session(serverUrl, { load: () => load<Auth>(AUTH_KEY), save: (a) => save(AUTH_KEY, a) }, setAuth),
+    [serverUrl],
+  );
+  const api = useMemo(() => createApi(serverUrl, session.fetch), [serverUrl, session]);
 
-  const onAuth = (a: Auth | null) => {
-    setAuth(a);
-    save(AUTH_KEY, a);
+  // Another tab signed in, out, or renewed the session.
+  useEffect(() => {
+    const onStorage = (e: StorageEvent) => e.key === AUTH_KEY && session.adopt(load<Auth>(AUTH_KEY));
+    window.addEventListener("storage", onStorage);
+    return () => window.removeEventListener("storage", onStorage);
+  }, [session]);
+
+  const onAuth = (a: Auth) => {
     save(SERVER_KEY, serverUrl);
+    session.set(a);
   };
 
   if (window.location.hash === "#bench") return <Bench />;
@@ -68,7 +77,7 @@ export default function App() {
   }
 
   return auth ? (
-    <Chat serverUrl={serverUrl} api={api} auth={auth} tokenRef={tokenRef} onLogout={() => onAuth(null)} />
+    <Chat serverUrl={serverUrl} api={api} auth={auth} session={session} />
   ) : (
     <Login serverUrl={serverUrl} setServerUrl={setServerUrl} api={api} onAuth={onAuth} inviteCode={linkParams.get("invite")} />
   );

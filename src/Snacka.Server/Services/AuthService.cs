@@ -19,6 +19,7 @@ public sealed partial class AuthService : IAuthService
     private readonly IServerInviteService _inviteService;
     private readonly ICommunityService _communityService;
     private readonly INotificationService _notificationService;
+    private readonly IRefreshTokenService _refreshTokens;
 
     // SECURITY: Password complexity regex - requires uppercase, lowercase, digit, and special character
     [GeneratedRegex(@"^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)(?=.*[!@#$%^&*()_+\-=\[\]{}|;':"",./<>?\\`~]).{8,}$")]
@@ -29,13 +30,15 @@ public sealed partial class AuthService : IAuthService
         IOptions<JwtSettings> jwtSettings,
         IServerInviteService inviteService,
         ICommunityService communityService,
-        INotificationService notificationService)
+        INotificationService notificationService,
+        IRefreshTokenService refreshTokens)
     {
         _db = db;
         _jwtSettings = jwtSettings.Value;
         _inviteService = inviteService;
         _communityService = communityService;
         _notificationService = notificationService;
+        _refreshTokens = refreshTokens;
     }
 
     /// <summary>
@@ -118,7 +121,7 @@ public sealed partial class AuthService : IAuthService
         // Mark invite as used
         await _inviteService.UseInviteAsync(request.InviteCode, cancellationToken);
 
-        return GenerateTokens(user);
+        return CreateAuthResponse(user, await _refreshTokens.IssueAsync(user.Id, cancellationToken));
     }
 
     public async Task<AuthResponse> LoginAsync(LoginRequest request, CancellationToken cancellationToken = default)
@@ -133,28 +136,15 @@ public sealed partial class AuthService : IAuthService
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
 
-        return GenerateTokens(user);
+        return CreateAuthResponse(user, await _refreshTokens.IssueAsync(user.Id, cancellationToken));
     }
 
     public async Task<AuthResponse> RefreshTokenAsync(string refreshToken, CancellationToken cancellationToken = default)
     {
-        // SECURITY (#15): only unexpired tokens of type "refresh", issued for the user's current
-        // password, may mint new tokens. Previously any token ever issued (expired, or an access
-        // token) worked forever, and changing the password revoked nothing.
-        var principal = ValidateRefreshToken(refreshToken);
-        var userIdClaim = principal.FindFirst(ClaimTypes.NameIdentifier)?.Value;
-
-        if (userIdClaim is null || !Guid.TryParse(userIdClaim, out var userId))
-            throw new SecurityTokenException("Invalid refresh token.");
-
-        var user = await _db.Users.FindAsync([userId], cancellationToken);
-        if (user is null)
-            throw new SecurityTokenException("User not found.");
-
-        if (principal.FindFirst(PasswordVersionClaim)?.Value != PasswordVersion(user))
-            throw new SecurityTokenException("Refresh token was revoked by a password change.");
-
-        return GenerateTokens(user);
+        var (userId, next) = await _refreshTokens.RotateAsync(refreshToken, cancellationToken);
+        var user = await _db.Users.FindAsync([userId], cancellationToken)
+            ?? throw new SecurityTokenException("User not found.");
+        return CreateAuthResponse(user, next);
     }
 
     public async Task<UserProfileResponse> GetProfileAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -224,6 +214,9 @@ public sealed partial class AuthService : IAuthService
         user.PasswordHash = BCrypt.Net.BCrypt.HashPassword(request.NewPassword);
         user.UpdatedAt = DateTime.UtcNow;
         await _db.SaveChangesAsync(cancellationToken);
+
+        // Sign out every other device. Their access tokens still work until they expire.
+        await _refreshTokens.RevokeAllAsync(userId, cancellationToken);
     }
 
     public async Task DeleteAccountAsync(Guid userId, CancellationToken cancellationToken = default)
@@ -236,18 +229,15 @@ public sealed partial class AuthService : IAuthService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
-    private AuthResponse GenerateTokens(User user)
+    private AuthResponse CreateAuthResponse(User user, string refreshToken)
     {
         var expiresAt = DateTime.UtcNow.AddMinutes(_jwtSettings.AccessTokenExpirationMinutes);
-        var accessToken = GenerateAccessToken(user, expiresAt);
-        var refreshToken = GenerateRefreshToken(user);
-
         return new AuthResponse(
             user.Id,
             user.Username,
             user.Email,
             user.IsServerAdmin,
-            accessToken,
+            GenerateAccessToken(user, expiresAt),
             refreshToken,
             expiresAt
         );
@@ -277,75 +267,12 @@ public sealed partial class AuthService : IAuthService
         return new JwtSecurityTokenHandler().WriteToken(token);
     }
 
-    private string GenerateRefreshToken(User user)
-    {
-        var expiresAt = DateTime.UtcNow.AddDays(_jwtSettings.RefreshTokenExpirationDays);
-        var securityKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey));
-        var credentials = new SigningCredentials(securityKey, SecurityAlgorithms.HmacSha256);
-
-        var claims = new[]
-        {
-            new Claim(ClaimTypes.NameIdentifier, user.Id.ToString()),
-            new Claim(TokenTypeClaim, RefreshTokenType),
-            new Claim(PasswordVersionClaim, PasswordVersion(user))
-        };
-
-        var token = new JwtSecurityToken(
-            issuer: _jwtSettings.Issuer,
-            audience: _jwtSettings.Audience,
-            claims: claims,
-            expires: expiresAt,
-            signingCredentials: credentials
-        );
-
-        return new JwtSecurityTokenHandler().WriteToken(token);
-    }
-
+    /// <summary>
+    /// Refresh tokens used to be JWTs carrying this claim. They are opaque now, but the old ones stay
+    /// valid signatures until they expire, so the bearer handler still rejects them (#15).
+    /// </summary>
     public const string TokenTypeClaim = "token_type";
     public const string RefreshTokenType = "refresh";
-    private const string PasswordVersionClaim = "pwv";
-
-    /// <summary>
-    /// Fingerprint of the current password hash. BCrypt hashes are salted, so it changes on every
-    /// password change, which revokes all refresh tokens issued before it without server-side storage.
-    /// </summary>
-    private static string PasswordVersion(User user) =>
-        Convert.ToHexString(System.Security.Cryptography.SHA256.HashData(Encoding.UTF8.GetBytes(user.PasswordHash)))[..16];
-
-    private ClaimsPrincipal ValidateRefreshToken(string token)
-    {
-        var tokenValidationParameters = new TokenValidationParameters
-        {
-            ValidateAudience = true,
-            ValidateIssuer = true,
-            ValidateIssuerSigningKey = true,
-            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(_jwtSettings.SecretKey)),
-            ValidateLifetime = true,
-            ClockSkew = TimeSpan.Zero,
-            ValidIssuer = _jwtSettings.Issuer,
-            ValidAudience = _jwtSettings.Audience
-        };
-
-        ClaimsPrincipal principal;
-        SecurityToken securityToken;
-        try
-        {
-            principal = new JwtSecurityTokenHandler().ValidateToken(token, tokenValidationParameters, out securityToken);
-        }
-        catch (Exception ex) when (ex is SecurityTokenException or ArgumentException)
-        {
-            throw new SecurityTokenException("Invalid or expired refresh token.");
-        }
-
-        if (securityToken is not JwtSecurityToken jwtSecurityToken ||
-            !jwtSecurityToken.Header.Alg.Equals(SecurityAlgorithms.HmacSha256, StringComparison.InvariantCultureIgnoreCase))
-            throw new SecurityTokenException("Invalid token.");
-
-        if (principal.FindFirst(TokenTypeClaim)?.Value != RefreshTokenType)
-            throw new SecurityTokenException("Not a refresh token.");
-
-        return principal;
-    }
 
     private static UserProfileResponse CreateUserProfileResponse(User user)
     {

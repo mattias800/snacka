@@ -122,6 +122,21 @@ public class AuthController : ControllerBase
             return Unauthorized(new { error = ex.Message });
         }
     }
+
+    /// <summary>
+    /// Signs this device out: its refresh token (and every token rotated from the same sign-in) stops
+    /// working. Needs no access token, since it may already have expired.
+    /// </summary>
+    [HttpPost("logout")]
+    [EnableRateLimiting("refresh")]
+    public async Task<IActionResult> Logout(
+        [FromBody] RefreshTokenRequest request,
+        [FromServices] IRefreshTokenService refreshTokens,
+        CancellationToken cancellationToken)
+    {
+        await refreshTokens.RevokeFamilyAsync(request.RefreshToken, cancellationToken);
+        return NoContent();
+    }
 }
 
 [ApiController]

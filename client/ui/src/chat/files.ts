@@ -1,15 +1,17 @@
+import type { AuthedFetch } from "../api/session";
+
 /**
  * Attachments are served only to signed-in members (bearer token), which <img src> can't send.
  * Files are fetched with the token and shown from object URLs, cached per path.
  */
 export type FileLoader = (path: string) => Promise<string>;
 
-export function createFileLoader(serverUrl: string, getToken: () => string | null): FileLoader {
+export function createFileLoader(serverUrl: string, authedFetch: AuthedFetch): FileLoader {
   const cache = new Map<string, Promise<string>>();
   return (path) => {
     let url = cache.get(path);
     if (!url) {
-      url = fetch(`${serverUrl}${path}`, { headers: { Authorization: `Bearer ${getToken() ?? ""}` } }).then(async (res) => {
+      url = authedFetch(`${serverUrl}${path}`).then(async (res) => {
         if (!res.ok) throw new Error(`${res.status} ${res.statusText}`);
         return URL.createObjectURL(await res.blob());
       });

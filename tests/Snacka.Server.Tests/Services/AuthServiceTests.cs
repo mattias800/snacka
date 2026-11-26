@@ -1,3 +1,4 @@
+using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Snacka.Server.DTOs;
 using Snacka.Server.Services;
@@ -16,12 +17,16 @@ public class AuthServiceTests
         RefreshTokenExpirationDays = 7
     });
 
+    private static AuthService CreateAuthService(Data.SnackaDbContext db, IServerInviteService invites, ICommunityService communities, INotificationService notifications) =>
+        new(db, CreateJwtSettings(), invites, communities, notifications,
+            new RefreshTokenService(db, CreateJwtSettings(), NullLogger<RefreshTokenService>.Instance));
+
     private static async Task<(AuthService service, string inviteCode)> CreateServiceWithInviteAsync(Data.SnackaDbContext db)
     {
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
         var notificationService = new NullNotificationService();
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
+        var service = CreateAuthService(db, inviteService, communityService, notificationService);
 
         // Create a test invite code
         var invite = await inviteService.CreateInviteAsync(null, maxUses: 0);
@@ -71,7 +76,7 @@ public class AuthServiceTests
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
         var notificationService = new NullNotificationService();
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
+        var service = CreateAuthService(db, inviteService, communityService, notificationService);
 
         var invite1 = await inviteService.CreateInviteAsync(null, maxUses: 0);
         var invite2 = await inviteService.CreateInviteAsync(null, maxUses: 0);
@@ -108,7 +113,7 @@ public class AuthServiceTests
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
         var notificationService = new NullNotificationService();
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
+        var service = CreateAuthService(db, inviteService, communityService, notificationService);
         var invite1 = await inviteService.CreateInviteAsync(null);
         var invite2 = await inviteService.CreateInviteAsync(null);
         await service.RegisterAsync(new RegisterRequest("user1", "duplicate@example.com", "Password123!", invite1.Code));
@@ -127,7 +132,7 @@ public class AuthServiceTests
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
         var notificationService = new NullNotificationService();
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
+        var service = CreateAuthService(db, inviteService, communityService, notificationService);
         var invite1 = await inviteService.CreateInviteAsync(null);
         var invite2 = await inviteService.CreateInviteAsync(null);
         await service.RegisterAsync(new RegisterRequest("duplicateuser", "user1@example.com", "Password123!", invite1.Code));
@@ -241,7 +246,7 @@ public class AuthServiceTests
         var inviteService = new ServerInviteService(db);
         var communityService = new CommunityService(db);
         var notificationService = new NullNotificationService();
-        var service = new AuthService(db, CreateJwtSettings(), inviteService, communityService, notificationService);
+        var service = CreateAuthService(db, inviteService, communityService, notificationService);
         var invite1 = await inviteService.CreateInviteAsync(null);
         var invite2 = await inviteService.CreateInviteAsync(null);
         await service.RegisterAsync(new RegisterRequest("existinguser", "existing@example.com", "Password123!", invite1.Code));

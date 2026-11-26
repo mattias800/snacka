@@ -27,6 +27,7 @@ public sealed class SnackaDbContext : DbContext
     public DbSet<Conversation> Conversations => Set<Conversation>();
     public DbSet<ConversationParticipant> ConversationParticipants => Set<ConversationParticipant>();
     public DbSet<ConversationReadState> ConversationReadStates => Set<ConversationReadState>();
+    public DbSet<RefreshToken> RefreshTokens => Set<RefreshToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -390,5 +391,21 @@ public sealed class SnackaDbContext : DbContext
         modelBuilder.Entity<ConversationReadState>()
             .HasIndex(crs => new { crs.ConversationId, crs.UserId })
             .IsUnique();
+
+        modelBuilder.Entity<RefreshToken>()
+            .HasOne(t => t.User)
+            .WithMany()
+            .HasForeignKey(t => t.UserId)
+            .OnDelete(DeleteBehavior.Cascade);
+        modelBuilder.Entity<RefreshToken>()
+            .Property(t => t.TokenHash)
+            .HasMaxLength(64);
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(t => t.TokenHash)
+            .IsUnique();
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(t => t.FamilyId);
+        modelBuilder.Entity<RefreshToken>()
+            .HasIndex(t => t.UserId);
     }
 }

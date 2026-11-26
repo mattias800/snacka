@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ok, type Api, type Schemas } from "../api/client";
+import type { Session } from "../api/session";
 import { Avatar } from "./Avatar";
 import type { FileLoader } from "./files";
 
@@ -8,13 +9,12 @@ export type Profile = Schemas["UserProfileResponse"];
 /** The user's own profile: picture, display name and password. Changes reach others live (UserProfileUpdated). */
 export function Settings(props: {
   api: Api;
-  serverUrl: string;
-  getToken: () => string | null;
+  session: Session;
   loadFile: FileLoader;
   profile: Profile;
   onChange: (p: Profile) => void;
 }) {
-  const { api, serverUrl, getToken, loadFile, profile, onChange } = props;
+  const { api, session, loadFile, profile, onChange } = props;
   const [displayName, setDisplayName] = useState(profile.displayName ?? "");
   const [passwords, setPasswords] = useState({ current: "", next: "" });
   const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null);
@@ -38,7 +38,7 @@ export function Settings(props: {
     act(async () => {
       const form = new FormData();
       form.append("file", file, file.name);
-      const res = await fetch(`${serverUrl}/api/users/me/avatar`, { method: "PUT", headers: { Authorization: `Bearer ${getToken() ?? ""}` }, body: form });
+      const res = await session.fetch(`${session.serverUrl}/api/Users/me/avatar`, { method: "PUT", body: form });
       if (!res.ok) {
         const body = (await res.json().catch(() => null)) as { error?: string } | null;
         throw new Error(body?.error ?? `Upload failed: ${res.status}`);
@@ -69,8 +69,11 @@ export function Settings(props: {
     void act(async () => {
       const res = await api.PUT("/api/Users/me/password", { body: { currentPassword: passwords.current, newPassword: passwords.next } });
       if (!res.response.ok) throw new Error((res.error as { error?: string } | undefined)?.error ?? `Couldn't change the password: ${res.response.status}`);
+      // The change signs out every device, this one included: sign this one straight back in.
+      const email = session.current?.email;
+      if (email) session.set(ok(await api.POST("/api/Auth/login", { body: { email, password: passwords.next } })));
       setPasswords({ current: "", next: "" });
-      return "Password changed.";
+      return "Password changed. Other devices were signed out.";
     });
   };
 

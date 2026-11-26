@@ -1,21 +1,15 @@
-import createClient, { type Middleware } from "openapi-fetch";
+import createClient from "openapi-fetch";
 import type { components, paths } from "./schema";
 
 export type Schemas = components["schemas"];
 export type Auth = Schemas["AuthResponse"];
 
-/** Typed REST client for one Snacka server. Regenerate types with `pnpm gen:api`. */
-export function createApi(serverUrl: string, getToken: () => string | null) {
-  const api = createClient<paths>({ baseUrl: serverUrl });
-  const auth: Middleware = {
-    onRequest({ request }) {
-      const token = getToken();
-      if (token) request.headers.set("Authorization", `Bearer ${token}`);
-      return request;
-    },
-  };
-  api.use(auth);
-  return api;
+/**
+ * Typed REST client for one Snacka server. Regenerate types with `pnpm gen:api`. Pass the
+ * session's fetch to send requests signed in (see Session).
+ */
+export function createApi(serverUrl: string, fetchFn: (input: Request) => Promise<Response> = (r) => fetch(r)) {
+  return createClient<paths>({ baseUrl: serverUrl, fetch: fetchFn });
 }
 
 export type Api = ReturnType<typeof createApi>;

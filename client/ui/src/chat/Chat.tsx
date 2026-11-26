@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { HubConnection } from "@microsoft/signalr";
 import { ok, type Api, type Auth, type Schemas } from "../api/client";
-import { createHub } from "../api/hub";
+import type { Session } from "../api/session";
+import { createHub, startHub } from "../api/hub";
 import { MessageList, type MessageActions } from "../MessageList";
 import { StreamTest, inNativeApp } from "../StreamTest";
 import { VoicePanel, useVoice } from "../VoicePanel";
@@ -49,8 +50,8 @@ function conversationName(c: Conversation, myId: string): string {
   return others.join(", ") || "Just you";
 }
 
-export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef: React.RefObject<string | null>; onLogout: () => void }) {
-  const { api, serverUrl, tokenRef, auth } = props;
+export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: Session }) {
+  const { api, serverUrl, session, auth } = props;
   const myId = auth.userId;
   const [communities, setCommunities] = useState<Community[]>([]);
   /** null = Home (direct messages). */
@@ -69,7 +70,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const loadFile = useMemo(() => createFileLoader(serverUrl, () => tokenRef.current), [serverUrl, tokenRef]);
+  const loadFile = useMemo(() => createFileLoader(serverUrl, session.fetch), [serverUrl, session]);
   const [newChannel, setNewChannel] = useState<{ name: string; voice: boolean } | null>(null);
   /** The view whose realtime events we're receiving (joined its channel group while connected). */
   const [liveView, setLiveView] = useState<View>(null);
@@ -131,7 +132,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
   // One hub connection per session. Events for the open channel/DM update the message list;
   // DM events also keep the conversation list (last message, unread count) current.
   useEffect(() => {
-    const hub = createHub(serverUrl, () => tokenRef.current);
+    const hub = createHub(session);
     hubRef.current = hub;
     const stopTyping = (userId: string) =>
       setTyping((prev) => {
@@ -245,8 +246,8 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       if (v) void openViewRef.current(v);
     });
     hub.onclose(() => setHubState("disconnected"));
-    hub
-      .start()
+    const stop = new AbortController();
+    startHub(hub, stop.signal, () => setHubState("reconnecting"))
       .then(() => {
         setHubState("connected");
         // A channel opened before the connection was up never joined its realtime group
@@ -256,12 +257,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
         const c = communityRef.current;
         if (c) void hub.invoke("JoinServer", c.id).catch(() => {});
       })
-      .catch((e: Error) => setHubState(`failed: ${e.message}`));
+      .catch(() => {});
     return () => {
+      stop.abort();
       void hub.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one connection per server/session
-  }, [serverUrl, tokenRef, myId, api, markChannelRead]);
+  }, [serverUrl, session, myId, api, markChannelRead]);
 
   // Back to a tab with the open channel unread: it's been seen now.
   useEffect(() => {
@@ -391,11 +393,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     form.append("content", content);
     if (replyToId) form.append("replyToId", replyToId);
     for (const f of files) form.append("files", f, f.name);
-    const res = await fetch(`${serverUrl}/api/channels/${channelId}/messages/with-attachments`, {
-      method: "POST",
-      headers: { Authorization: `Bearer ${tokenRef.current ?? ""}` },
-      body: form,
-    });
+    const res = await session.fetch(`${serverUrl}/api/channels/${channelId}/messages/with-attachments`, { method: "POST", body: form });
     if (!res.ok) {
       const body = (await res.json().catch(() => null)) as { error?: string } | null;
       throw new Error(body?.error ?? `Upload failed: ${res.status}`);
@@ -620,7 +618,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
               📺
             </button>
           )}
-          <button className="link" onClick={props.onLogout}>Log out</button>
+          <button className="link" onClick={() => void session.logout()}>Log out</button>
         </footer>
       </aside>
       {panel ? (
@@ -630,7 +628,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
           ) : panel === "invite" ? (
             <InviteFriends api={api} serverUrl={serverUrl} />
           ) : profile ? (
-            <Settings api={api} serverUrl={serverUrl} getToken={() => tokenRef.current} loadFile={loadFile} profile={profile} onChange={setProfile} />
+            <Settings api={api} session={session} loadFile={loadFile} profile={profile} onChange={setProfile} />
           ) : (
             <p className="muted panel">Loading…</p>
           )}
