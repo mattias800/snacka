@@ -171,6 +171,7 @@ public class AttachmentsController : ControllerBase
         // Broadcast via SignalR
         await _hubContext.Clients.Group($"channel:{channelId}")
             .SendAsync("ReceiveChannelMessage", response, ct);
+        await ChannelActivity.NotifyAsync(_hubContext, _db, channelId, response.Id, response.AuthorId, ct);
 
         return Ok(response);
     }

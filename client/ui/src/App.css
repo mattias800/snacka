@@ -175,3 +175,4 @@ label.button { display: inline-block; cursor: pointer; }
 .pinned-mark { margin-left: 6px; font-size: 12px; }
 .thread-link { display: inline-block; margin-top: 4px; background: none; border: 0; padding: 2px 0; color: #00a8fc; font-size: 13px; cursor: pointer; }
 .thread-link:hover { text-decoration: underline; }
+.channels > button.unread, .channels > div > button.unread { color: var(--text); font-weight: 600; }

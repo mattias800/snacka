@@ -36,6 +36,8 @@ export type ReactionUpdated = Schemas["ReactionUpdatedEvent"];
 export type MessagePinned = Schemas["MessagePinnedEvent"];
 /** Hub events "ReceiveThreadReply" and "ThreadMetadataUpdated" (anonymous objects on the server). */
 export type ThreadReplyEvent = { channelId: string; parentMessageId: string; reply: ChannelMessage };
+/** Hub event "ChannelActivity" (server ChannelActivityEvent): a new message somewhere in the community. */
+export type ChannelActivityEvent = { communityId: string; channelId: string; messageId: string; authorId: string };
 export type ThreadMetadataEvent = { channelId: string; messageId: string; replyCount: number; lastReplyAt: string | null };
 
 export const fromChannel = (m: ChannelMessage): ChatMessage => ({

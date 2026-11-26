@@ -12,6 +12,7 @@ public interface IChannelService
     Task<ChannelResponse> UpdateChannelAsync(Guid channelId, Guid userId, UpdateChannelRequest request, CancellationToken cancellationToken = default);
     Task DeleteChannelAsync(Guid channelId, Guid userId, CancellationToken cancellationToken = default);
     Task<IEnumerable<ChannelResponse>> ReorderChannelsAsync(Guid communityId, Guid userId, List<Guid> channelIds, CancellationToken cancellationToken = default);
-    Task MarkChannelAsReadAsync(Guid channelId, Guid userId, CancellationToken cancellationToken = default);
+    /// <summary>Marks the channel read for the user. Throws InvalidOperationException if it isn't a channel of <paramref name="communityId"/>.</summary>
+    Task MarkChannelAsReadAsync(Guid communityId, Guid channelId, Guid userId, CancellationToken cancellationToken = default);
     Task<int> GetUnreadCountAsync(Guid channelId, Guid userId, CancellationToken cancellationToken = default);
 }

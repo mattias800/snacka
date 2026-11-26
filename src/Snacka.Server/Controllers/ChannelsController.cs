@@ -2,6 +2,7 @@ using System.Security.Claims;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.AspNetCore.SignalR;
+using Snacka.Server.Data;
 using Snacka.Server.DTOs;
 using Snacka.Server.Hubs;
 using Snacka.Server.Middleware;
@@ -189,7 +190,7 @@ public class ChannelsController : ControllerBase
 
         try
         {
-            await _channelService.MarkChannelAsReadAsync(channelId, userId.Value, cancellationToken);
+            await _channelService.MarkChannelAsReadAsync(communityId, channelId, userId.Value, cancellationToken);
             return NoContent();
         }
         catch (InvalidOperationException ex)
@@ -237,12 +238,14 @@ public class MessagesController : ControllerBase
     private readonly IMessageService _messageService;
     private readonly IReactionService _reactionService;
     private readonly IHubContext<SnackaHub> _hubContext;
+    private readonly SnackaDbContext _db;
 
-    public MessagesController(IMessageService messageService, IReactionService reactionService, IHubContext<SnackaHub> hubContext)
+    public MessagesController(IMessageService messageService, IReactionService reactionService, IHubContext<SnackaHub> hubContext, SnackaDbContext db)
     {
         _messageService = messageService;
         _reactionService = reactionService;
         _hubContext = hubContext;
+        _db = db;
     }
 
     [HttpGet]
@@ -280,6 +283,7 @@ public class MessagesController : ControllerBase
             var message = await _messageService.SendMessageAsync(channelId, userId.Value, request.Content, request.ReplyToId, cancellationToken);
             await _hubContext.Clients.Group($"channel:{channelId}")
                 .SendAsync("ReceiveChannelMessage", message, cancellationToken);
+            await ChannelActivity.NotifyAsync(_hubContext, _db, channelId, message.Id, userId.Value, cancellationToken);
             return Ok(message);
         }
         catch (InvalidOperationException ex)

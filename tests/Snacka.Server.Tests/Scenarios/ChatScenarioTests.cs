@@ -452,4 +452,57 @@ public class ChatScenarioTests
         file.Headers.ContentType = new System.Net.Http.Headers.MediaTypeHeaderValue("image/png");
         return new MultipartFormDataContent { { file, "file", "me.png" } };
     }
+
+    // ---- Unread counts ----
+
+    private async Task<int> UnreadAsync(SimulatedUser user, Guid communityId, Guid channelId) =>
+        (await user.Http.GetFromJsonAsync<List<ChannelResponse>>($"/api/communities/{communityId}/channels"))!.Single(c => c.Id == channelId).UnreadCount;
+
+    [TestMethod]
+    public async Task UnreadCount_CountsOthersMessagesInTheChannelList_UntilRead()
+    {
+        await using var w = await CreateWorldAsync();
+        var first = await SendAsync(w.Alice, w.Random, "one");
+        await SendAsync(w.Alice, w.Random, "two");
+        await SendAsync(w.Bob, w.Random, "bob's own");
+        await Ok<MessageResponse>(await w.Alice.Http.PostAsJsonAsync($"/api/messages/{first.Id}/replies", new SendMessageRequest("in a thread")));
+
+        Assert.AreEqual(2, await UnreadAsync(w.Bob, w.CommunityId, w.Random), "own messages and thread replies don't count");
+        Assert.AreEqual(1, await UnreadAsync(w.Alice, w.CommunityId, w.Random), "Bob's message is unread for Alice");
+
+        (await w.Bob.Http.PostAsync($"/api/communities/{w.CommunityId}/channels/{w.Random}/read", null)).EnsureSuccessStatusCode();
+        Assert.AreEqual(0, await UnreadAsync(w.Bob, w.CommunityId, w.Random));
+
+        await SendAsync(w.Alice, w.Random, "three");
+        Assert.AreEqual(1, await UnreadAsync(w.Bob, w.CommunityId, w.Random));
+    }
+
+    [TestMethod]
+    public async Task ChannelActivity_ReachesCommunityMembersWithoutTheChannelOpen()
+    {
+        await using var w = await CreateWorldAsync();
+        // Bob has the community open (as the client does: JoinServer) but no channel: he gets the
+        // community-wide activity event, not the message.
+        await w.Bob.Hub().InvokeAsync("JoinServer", w.CommunityId);
+        var m = await SendAsync(w.Alice, w.Random, "anyone?");
+
+        var e = await w.Bob.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.MessageId == m.Id);
+        Assert.AreEqual(w.Random, e.ChannelId);
+        Assert.AreEqual(w.Alice.Id, e.AuthorId);
+        await w.Carol.SettleAsync();
+        Assert.AreEqual(0, w.Carol.Received<ChannelActivityEvent>("ChannelActivity").Count, "Carol isn't a member");
+        Assert.AreEqual(0, w.Bob.Received<MessageResponse>("ReceiveChannelMessage").Count);
+    }
+
+    [TestMethod]
+    public async Task MarkRead_ChannelOfAnotherCommunity_IsNotFound()
+    {
+        await using var w = await CreateWorldAsync();
+        var own = await Ok<CommunityResponse>(await w.Carol.Http.PostAsJsonAsync("/api/communities", new CreateCommunityRequest("Carol's", null)));
+        var carols = (await w.Carol.Http.GetFromJsonAsync<List<ChannelResponse>>($"/api/communities/{own.Id}/channels"))!.First();
+
+        var res = await w.Bob.Http.PostAsync($"/api/communities/{w.CommunityId}/channels/{carols.Id}/read", null);
+
+        Assert.AreEqual(HttpStatusCode.NotFound, res.StatusCode);
+    }
 }

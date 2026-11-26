@@ -143,10 +143,12 @@ public sealed class ChannelService : IChannelService
         return result;
     }
 
-    public async Task MarkChannelAsReadAsync(Guid channelId, Guid userId, CancellationToken cancellationToken = default)
+    public async Task MarkChannelAsReadAsync(Guid communityId, Guid channelId, Guid userId, CancellationToken cancellationToken = default)
     {
-        var channel = await _db.Channels.FindAsync([channelId], cancellationToken)
-            ?? throw new InvalidOperationException("Channel not found.");
+        // The caller's membership was checked for the route's community, so the channel must be in it.
+        var channel = await _db.Channels.FindAsync([channelId], cancellationToken);
+        if (channel is null || channel.CommunityId != communityId)
+            throw new InvalidOperationException("Channel not found.");
 
         // Get the latest message in the channel
         var latestMessage = await _db.Messages
@@ -178,30 +180,22 @@ public sealed class ChannelService : IChannelService
         await _db.SaveChangesAsync(cancellationToken);
     }
 
+    /// <summary>
+    /// Messages in the channel's main list since the user last read it, not counting their own
+    /// messages or thread replies (those aren't in the channel list).
+    /// </summary>
     public async Task<int> GetUnreadCountAsync(Guid channelId, Guid userId, CancellationToken cancellationToken = default)
     {
-        var readState = await _db.ChannelReadStates
-            .FirstOrDefaultAsync(crs => crs.UserId == userId && crs.ChannelId == channelId, cancellationToken);
+        var lastReadAt = await _db.ChannelReadStates
+            .Where(crs => crs.UserId == userId && crs.ChannelId == channelId)
+            .Select(crs => (DateTime?)crs.LastReadAt)
+            .FirstOrDefaultAsync(cancellationToken);
 
-        if (readState is null || readState.LastReadMessageId is null)
-        {
-            // Never read this channel - count all messages
-            return await _db.Messages
-                .CountAsync(m => m.ChannelId == channelId, cancellationToken);
-        }
-
-        // Get the timestamp of the last read message
-        var lastReadMessage = await _db.Messages.FindAsync([readState.LastReadMessageId], cancellationToken);
-        if (lastReadMessage is null)
-        {
-            // Message was deleted - count all messages
-            return await _db.Messages
-                .CountAsync(m => m.ChannelId == channelId, cancellationToken);
-        }
-
-        // Count messages created after the last read message
-        return await _db.Messages
-            .CountAsync(m => m.ChannelId == channelId && m.CreatedAt > lastReadMessage.CreatedAt, cancellationToken);
+        return await _db.Messages.CountAsync(m =>
+            m.ChannelId == channelId &&
+            m.AuthorId != userId &&
+            m.ThreadParentMessageId == null &&
+            (lastReadAt == null || m.CreatedAt > lastReadAt), cancellationToken);
     }
 
     private async Task EnsureCanManageCommunityAsync(Guid communityId, Guid userId, CancellationToken cancellationToken)

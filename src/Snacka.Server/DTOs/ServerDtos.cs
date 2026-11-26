@@ -114,6 +114,9 @@ public record SendMessageRequest(
     Guid? ReplyToId = null
 );
 
+/// <summary>Hub event "ChannelActivity": a new message in a channel of the community (for unread counts).</summary>
+public record ChannelActivityEvent(Guid CommunityId, Guid ChannelId, Guid MessageId, Guid AuthorId);
+
 public record UpdateMessageRequest([Required, StringLength(2000, MinimumLength = 1)] string Content);
 
 public record CommunityMemberResponse(

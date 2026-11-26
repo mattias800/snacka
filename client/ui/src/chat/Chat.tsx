@@ -26,6 +26,7 @@ import {
   type ProfileUpdated,
   type ReactionUpdated,
   type ThreadMetadataEvent,
+  type ChannelActivityEvent,
 } from "./model";
 
 type Community = Schemas["CommunityResponse"];
@@ -113,6 +114,15 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     [api],
   );
 
+  /** Marks a channel read on the server (and here). */
+  const markChannelRead = useCallback(
+    (communityId: string, channelId: string) => {
+      setChannels((prev) => prev.map((c) => (c.id === channelId && c.unreadCount > 0 ? { ...c, unreadCount: 0 } : c)));
+      void api.POST("/api/communities/{communityId}/Channels/{channelId}/read", { params: { path: { communityId, channelId } } }).catch(() => {});
+    },
+    [api],
+  );
+
   const isOpen = (kind: "channel" | "dm", id: string) => {
     const v = viewRef.current;
     return v?.kind === kind && (v.kind === "channel" ? v.channel.id : v.conversation.id) === id;
@@ -149,6 +159,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
     hub.on("ThreadMetadataUpdated", (e: ThreadMetadataEvent) =>
       setMessages((prev) => prev.map((m) => (m.id === e.messageId ? { ...m, replyCount: e.replyCount } : m))),
     );
+    // Unread counts for the open community's channels. The open channel stays read while it's
+    // on screen; in a hidden tab it counts up and is marked read when the tab is shown again.
+    hub.on("ChannelActivity", (e: ChannelActivityEvent) => {
+      if (communityRef.current?.id !== e.communityId || e.authorId === myId) return;
+      if (isOpen("channel", e.channelId) && !document.hidden) markChannelRead(e.communityId, e.channelId);
+      else setChannels((prev) => prev.map((c) => (c.id === e.channelId ? { ...c, unreadCount: c.unreadCount + 1 } : c)));
+    });
     hub.on("MessagePinned", (e: MessagePinned) => setMessages((prev) => applyPin(prev, e)));
     hub.on("ChannelMessageDeleted", (e: { channelId: string; messageId: string }) => setMessages((prev) => prev.filter((m) => m.id !== e.messageId)));
     // Someone's name or picture changed: update it wherever it's on screen. A community nickname wins over the global name.
@@ -216,7 +233,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       setHubState("connected");
       // Events may have been missed while disconnected: refetch what's on screen.
       const c = communityRef.current;
-      if (c) void loadPresence(c.id).catch(() => {});
+      if (c) {
+        void loadPresence(c.id).catch(() => {});
+        void api.GET("/api/communities/{communityId}/Channels", { params: { path: { communityId: c.id } } }).then(ok).then(
+          (list) => communityRef.current?.id === c.id && setChannels(list),
+          () => {},
+        );
+      }
       void loadConversations().catch(() => {});
       const v = viewRef.current;
       if (v) void openViewRef.current(v);
@@ -238,7 +261,18 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
       void hub.stop();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps -- one connection per server/session
-  }, [serverUrl, tokenRef, myId, api]);
+  }, [serverUrl, tokenRef, myId, api, markChannelRead]);
+
+  // Back to a tab with the open channel unread: it's been seen now.
+  useEffect(() => {
+    const onVisible = () => {
+      const v = viewRef.current;
+      const c = communityRef.current;
+      if (!document.hidden && v?.kind === "channel" && c) markChannelRead(c.id, v.channel.id);
+    };
+    document.addEventListener("visibilitychange", onVisible);
+    return () => document.removeEventListener("visibilitychange", onVisible);
+  }, [markChannelRead]);
 
   useEffect(() => {
     void loadCommunities();
@@ -268,6 +302,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
         }
         const list = ok(await api.GET("/api/channels/{channelId}/messages", { params: { path: { channelId: next.channel.id } } }));
         if (viewRef.current === next) setMessages(list.map(fromChannel));
+        markChannelRead(next.channel.communityId, next.channel.id);
       } else {
         const id = next.conversation.id;
         const list = ok(await api.GET("/api/conversations/{conversationId}/messages", { params: { path: { conversationId: id } } }));
@@ -518,8 +553,15 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; tokenRef:
           <>
             {channels.map((ch) =>
               ch.type === ChannelKind.Text ? (
-                <button key={ch.id} className={view?.kind === "channel" && view.channel.id === ch.id ? "active" : ""} onClick={() => void openView({ kind: "channel", channel: ch })}>
+                <button
+                  key={ch.id}
+                  data-testid="channel"
+                  data-name={ch.name}
+                  className={`${view?.kind === "channel" && view.channel.id === ch.id ? "active" : ""}${ch.unreadCount > 0 ? " unread" : ""}`}
+                  onClick={() => void openView({ kind: "channel", channel: ch })}
+                >
                   # {ch.name}
+                  {ch.unreadCount > 0 && <span className="badge" data-testid="channel-unread">{ch.unreadCount}</span>}
                 </button>
               ) : (
                 <div key={ch.id}>

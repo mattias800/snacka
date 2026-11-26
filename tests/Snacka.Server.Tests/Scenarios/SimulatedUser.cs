@@ -22,7 +22,7 @@ public sealed class SimulatedUser : IAsyncDisposable
         "ReceiveThreadReply", "ThreadMetadataUpdated", "ConversationUserTyping",
         "ConversationCreated", "ConversationMessageReceived", "ConversationMessageUpdated", "ConversationMessageDeleted",
         "AddedToConversation", "VoiceParticipantJoined", "VoiceParticipantLeft", "CommunityMemberAdded",
-        "UserProfileUpdated",
+        "UserProfileUpdated", "ChannelActivity",
     ];
 
     private readonly IntegrationTestBase _server;
