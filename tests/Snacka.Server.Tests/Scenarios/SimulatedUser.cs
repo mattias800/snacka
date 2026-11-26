@@ -22,7 +22,7 @@ public sealed class SimulatedUser : IAsyncDisposable
         "ReceiveThreadReply", "ThreadMetadataUpdated", "ConversationUserTyping",
         "ConversationCreated", "ConversationMessageReceived", "ConversationMessageUpdated", "ConversationMessageDeleted",
         "AddedToConversation", "VoiceParticipantJoined", "VoiceParticipantLeft", "CommunityMemberAdded",
-        "UserProfileUpdated", "ChannelActivity",
+        "UserProfileUpdated", "ChannelActivity", "UserOnline", "UserOffline",
     ];
 
     private readonly IntegrationTestBase _server;
@@ -43,12 +43,12 @@ public sealed class SimulatedUser : IAsyncDisposable
         Http.DefaultRequestHeaders.Authorization = new AuthenticationHeaderValue("Bearer", auth.AccessToken);
     }
 
-    /// <summary>Registers the user and opens one realtime connection (one "device").</summary>
-    public static async Task<SimulatedUser> CreateAsync(IntegrationTestBase server, string name)
+    /// <summary>Registers the user and, unless <paramref name="connect"/> is false, opens one realtime connection (one "device").</summary>
+    public static async Task<SimulatedUser> CreateAsync(IntegrationTestBase server, string name, bool connect = true)
     {
         var auth = await server.RegisterUserAsync(name, $"{name}@test.com", "Password123!");
         var user = new SimulatedUser(server, auth);
-        await user.ConnectAsync();
+        if (connect) await user.ConnectAsync();
         return user;
     }
 

@@ -50,6 +50,7 @@ public class InvitesController : ControllerBase
     [HttpPost("{inviteId:guid}/accept")]
     public async Task<ActionResult<CommunityInviteResponse>> AcceptInvite(
         Guid inviteId,
+        [FromServices] IRealtimeMembership realtime,
         CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -58,6 +59,7 @@ public class InvitesController : ControllerBase
         try
         {
             var invite = await _inviteService.AcceptInviteAsync(inviteId, userId.Value, cancellationToken);
+            await realtime.JoinedCommunityAsync(userId.Value, invite.CommunityId, cancellationToken);
 
             // Notify the community about the new member
             _logger.LogInformation("Broadcasting CommunityMemberAdded to group community:{CommunityId} for user {UserId}",

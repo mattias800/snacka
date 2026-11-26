@@ -167,14 +167,9 @@ public class UsersController : ControllerBase
     /// </summary>
     private async Task BroadcastProfileAsync(UserProfileResponse profile, CancellationToken cancellationToken)
     {
-        var communityIds = _db.UserCommunities.Where(uc => uc.UserId == profile.Id).Select(uc => uc.CommunityId);
-        var conversationIds = _db.ConversationParticipants.Where(p => p.UserId == profile.Id).Select(p => p.ConversationId);
-        var audience = await _db.UserCommunities.Where(uc => communityIds.Contains(uc.CommunityId)).Select(uc => uc.UserId)
-            .Union(_db.ConversationParticipants.Where(p => conversationIds.Contains(p.ConversationId)).Select(p => p.UserId))
-            .ToListAsync(cancellationToken);
-        audience.Add(profile.Id);
-
-        await _hubContext.Clients.Users(audience.Distinct().Select(id => id.ToString()).ToList()).SendAsync(
+        var audience = await _db.AcquaintancesOfAsync(profile.Id, cancellationToken);
+        audience.Add(profile.Id.ToString());
+        await _hubContext.Clients.Users(audience).SendAsync(
             "UserProfileUpdated",
             new UserProfileUpdatedEvent(profile.Id, profile.Username, profile.EffectiveDisplayName, profile.Avatar),
             cancellationToken);

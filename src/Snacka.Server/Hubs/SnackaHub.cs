@@ -108,8 +108,8 @@ public class SnackaHub : Hub
                     user.UpdatedAt = DateTime.UtcNow;
                     await _db.SaveChangesAsync();
 
-                    // Notify all clients about user coming online
-                    await Clients.Others.SendAsync("UserOnline", new UserPresence(user.Id, user.Username, true));
+                    // Only people who share a community or conversation hear about it (#20).
+                    await Clients.Users(await _db.AcquaintancesOfAsync(user.Id)).SendAsync("UserOnline", new UserPresence(user.Id, user.Username, true));
                 }
 
                 // Add user to their community groups
@@ -348,22 +348,13 @@ public class SnackaHub : Hub
                         user.UpdatedAt = DateTime.UtcNow;
                         await _db.SaveChangesAsync();
 
-                        await Clients.Others.SendAsync("UserOffline", new UserPresence(user.Id, user.Username, false));
+                        await Clients.Users(await _db.AcquaintancesOfAsync(user.Id)).SendAsync("UserOffline", new UserPresence(user.Id, user.Username, false));
                         _logger.LogInformation("User {Username} disconnected (last connection)", user.Username);
                     }
                 }
                 catch (Exception ex)
                 {
                     _logger.LogWarning(ex, "Failed to update user offline status for user {UserId}", userId.Value);
-                    // Still try to notify clients even if DB update failed
-                    try
-                    {
-                        await Clients.Others.SendAsync("UserOffline", new UserPresence(userId.Value, "Unknown", false));
-                    }
-                    catch
-                    {
-                        // Ignore notification failures
-                    }
                 }
             }
             else
@@ -374,6 +365,15 @@ public class SnackaHub : Hub
         }
 
         await base.OnDisconnectedAsync(exception);
+    }
+
+    /// <summary>The user's open connections (one per device or tab), for adding them to groups from outside the hub.</summary>
+    public static IReadOnlyList<string> ConnectionsOf(Guid userId)
+    {
+        lock (Lock)
+        {
+            return UserConnections.TryGetValue(userId, out var connections) ? connections.ToList() : [];
+        }
     }
 
     /// <summary>

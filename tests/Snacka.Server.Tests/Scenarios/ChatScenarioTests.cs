@@ -585,4 +585,57 @@ public class ChatScenarioTests
         var names = ChannelActivityService.MentionedNames(content);
         Assert.AreEqual(expected, string.Join(",", names.Order()));
     }
+
+    private sealed record Presence(Guid UserId, string Username, bool IsOnline);
+
+    [TestMethod]
+    public async Task Presence_ReachesOnlyPeopleWhoShareACommunityOrConversation()
+    {
+        await using var w = await CreateWorldAsync();
+        await using var dan = await SimulatedUser.CreateAsync(w.Server, "dan", connect: false);
+        (await dan.Http.PostAsync($"/api/communities/{w.CommunityId}/join", null)).EnsureSuccessStatusCode();
+        // Erin shares nothing with Dan but a DM.
+        await using var erin = await SimulatedUser.CreateAsync(w.Server, "erin");
+        await Ok<ConversationResponse>(await erin.Http.GetAsync($"/api/conversations/direct/{dan.Id}"));
+
+        await dan.ConnectAsync();
+        await w.Alice.WaitForAsync<Presence>("UserOnline", p => p.UserId == dan.Id && p.IsOnline);
+        await erin.WaitForAsync<Presence>("UserOnline", p => p.UserId == dan.Id);
+        await dan.DisconnectAsync();
+        await w.Bob.WaitForAsync<Presence>("UserOffline", p => p.UserId == dan.Id && !p.IsOnline);
+
+        await w.Carol.SettleAsync();
+        Assert.AreEqual(0, w.Carol.Received<Presence>("UserOnline").Count(p => p.UserId == dan.Id), "Carol shares nothing with Dan");
+        Assert.AreEqual(0, w.Carol.Received<Presence>("UserOffline").Count(p => p.UserId == dan.Id));
+    }
+
+    [TestMethod]
+    public async Task LeavingACommunity_StopsItsEventsAtOnce()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Bob.Hub().InvokeAsync("JoinServer", w.CommunityId);
+        await w.Bob.Hub().InvokeAsync("JoinChannel", w.General);
+        var before = await SendAsync(w.Alice, w.General, "still here?");
+        await w.Bob.WaitForAsync<MessageResponse>("ReceiveChannelMessage", m => m.Id == before.Id);
+
+        (await w.Bob.Http.PostAsync($"/api/communities/{w.CommunityId}/leave", null)).EnsureSuccessStatusCode();
+        var after = await SendAsync(w.Alice, w.General, "bob left");
+
+        await w.Alice.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.Message.Id == after.Id);
+        await w.Bob.SettleAsync();
+        Assert.AreEqual(0, w.Bob.Received<MessageResponse>("ReceiveChannelMessage").Count(m => m.Id == after.Id), "channel group");
+        Assert.AreEqual(0, w.Bob.Received<ChannelActivityEvent>("ChannelActivity").Count(e => e.Message.Id == after.Id), "community group");
+    }
+
+    [TestMethod]
+    public async Task JoiningACommunity_DeliversItsActivityWithoutReconnecting()
+    {
+        await using var w = await CreateWorldAsync();
+        // Carol is connected already; joining over HTTP is enough (no JoinServer call).
+        (await w.Carol.Http.PostAsync($"/api/communities/{w.CommunityId}/join", null)).EnsureSuccessStatusCode();
+
+        var m = await SendAsync(w.Alice, w.Random, "welcome carol");
+
+        await w.Carol.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.Message.Id == m.Id);
+    }
 }

@@ -84,6 +84,7 @@ public class CommunitiesController : ControllerBase
     [HttpPost]
     public async Task<ActionResult<CommunityResponse>> CreateCommunity(
         [FromBody] CreateCommunityRequest request,
+        [FromServices] IRealtimeMembership realtime,
         CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
@@ -92,6 +93,7 @@ public class CommunitiesController : ControllerBase
         try
         {
             var community = await _communityService.CreateCommunityAsync(userId.Value, request, cancellationToken);
+            await realtime.JoinedCommunityAsync(userId.Value, community.Id, cancellationToken);
             return CreatedAtAction(nameof(GetCommunity), new { communityId = community.Id }, community);
         }
         catch (InvalidOperationException ex)
@@ -215,7 +217,7 @@ public class CommunitiesController : ControllerBase
     }
 
     [HttpPost("{communityId:guid}/join")]
-    public async Task<IActionResult> JoinCommunity(Guid communityId, CancellationToken cancellationToken)
+    public async Task<IActionResult> JoinCommunity(Guid communityId, [FromServices] IRealtimeMembership realtime, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
@@ -223,6 +225,7 @@ public class CommunitiesController : ControllerBase
         try
         {
             await _memberService.JoinCommunityAsync(communityId, userId.Value, cancellationToken);
+            await realtime.JoinedCommunityAsync(userId.Value, communityId, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("CommunityMemberAdded", communityId, userId.Value, cancellationToken);
             return NoContent();
@@ -234,7 +237,7 @@ public class CommunitiesController : ControllerBase
     }
 
     [HttpPost("{communityId:guid}/leave")]
-    public async Task<IActionResult> LeaveCommunity(Guid communityId, CancellationToken cancellationToken)
+    public async Task<IActionResult> LeaveCommunity(Guid communityId, [FromServices] IRealtimeMembership realtime, CancellationToken cancellationToken)
     {
         var userId = GetCurrentUserId();
         if (userId is null) return Unauthorized();
@@ -242,6 +245,7 @@ public class CommunitiesController : ControllerBase
         try
         {
             await _memberService.LeaveCommunityAsync(communityId, userId.Value, cancellationToken);
+            await realtime.LeftCommunityAsync(userId.Value, communityId, cancellationToken);
             await _hubContext.Clients.Group($"community:{communityId}")
                 .SendAsync("CommunityMemberRemoved", communityId, userId.Value, cancellationToken);
             return NoContent();
