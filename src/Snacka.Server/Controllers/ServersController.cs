@@ -40,6 +40,17 @@ public class CommunitiesController : ControllerBase
         return Ok(communities);
     }
 
+    /// <summary>Unread message counts per community of the caller (for badges on community icons).</summary>
+    [HttpGet("unread")]
+    public async Task<ActionResult<IReadOnlyList<CommunityUnreadResponse>>> GetUnread(
+        [FromServices] IChannelService channels,
+        CancellationToken cancellationToken)
+    {
+        var userId = GetCurrentUserId();
+        if (userId is null) return Unauthorized();
+        return Ok(await channels.GetUnreadByCommunityAsync(userId.Value, cancellationToken));
+    }
+
     [HttpGet("discover")]
     public async Task<ActionResult<IEnumerable<CommunityResponse>>> DiscoverCommunities(CancellationToken cancellationToken)
     {

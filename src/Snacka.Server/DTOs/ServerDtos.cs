@@ -114,8 +114,21 @@ public record SendMessageRequest(
     Guid? ReplyToId = null
 );
 
-/// <summary>Hub event "ChannelActivity": a new message in a channel of the community (for unread counts).</summary>
-public record ChannelActivityEvent(Guid CommunityId, Guid ChannelId, Guid MessageId, Guid AuthorId);
+/// <summary>
+/// Hub event "ChannelActivity", to the whole community: a new message in one of its channels, for
+/// unread counts and notifications. A thread reply has Message.ThreadParentMessageId set, and
+/// ThreadParentAuthorId says whose message started the thread.
+/// </summary>
+public record ChannelActivityEvent(
+    Guid CommunityId,
+    Guid ChannelId,
+    string ChannelName,
+    MessageResponse Message,
+    IReadOnlyList<Guid> MentionedUserIds,
+    Guid? ThreadParentAuthorId);
+
+/// <summary>Unread messages across a community's channels, for the badge on its icon.</summary>
+public record CommunityUnreadResponse(Guid CommunityId, int UnreadCount);
 
 public record UpdateMessageRequest([Required, StringLength(2000, MinimumLength = 1)] string Content);
 

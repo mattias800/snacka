@@ -12,6 +12,7 @@ export function channelActions(o: {
   api: Api;
   channelId: string;
   myId: string;
+  myUsername: string;
   canModerate: boolean;
   loadFile: FileLoader;
   run: (f: () => Promise<void>) => Promise<void>;
@@ -23,6 +24,7 @@ export function channelActions(o: {
   const path = (messageId: string) => ({ params: { path: { channelId, messageId } } });
   return {
     myId,
+    myUsername: o.myUsername,
     loadFile: o.loadFile,
     canModerate: o.canModerate,
     onReply: o.onReply,

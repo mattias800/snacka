@@ -3,6 +3,7 @@ import { useVirtualizer } from "@tanstack/react-virtual";
 import type { Attachment, ChatMessage } from "./chat/model";
 import { formatSize, type FileLoader } from "./chat/files";
 import { renderMarkdown } from "./chat/markdown";
+import { mentionsUser } from "./chat/mentions";
 import { Avatar } from "./chat/Avatar";
 
 export type Message = ChatMessage;
@@ -10,6 +11,8 @@ export type Message = ChatMessage;
 /** What the current user may do to messages in this list (all optional: the benchmark has none). */
 export type MessageActions = {
   myId: string;
+  /** Highlights messages that mention the reader (by username, or @everyone). */
+  myUsername?: string;
   /** Owners, admins and moderators may delete anyone's message. */
   canModerate: boolean;
   onEdit?: (id: string, content: string) => void;
@@ -116,7 +119,7 @@ const MessageBody = memo(function MessageBody({ m, actions }: { m: Message; acti
           <input name="content" defaultValue={m.content} autoFocus onKeyDown={(e) => e.key === "Escape" && setEditing(false)} aria-label="Edit message" />
         </form>
       ) : (
-        m.content && <div className="content">{renderMarkdown(m.content)}</div>
+        m.content && <div className="content">{renderMarkdown(m.content, actions?.myUsername)}</div>
       )}
       {m.attachments.length > 0 && (
         <div className="attachments">
@@ -193,18 +196,23 @@ export function MessageList({ messages, actions }: { messages: Message[]; action
   return (
     <div ref={scrollerRef} className="message-scroller">
       <ol className="message-list" style={{ height: virtualizer.getTotalSize() }}>
-        {virtualizer.getVirtualItems().map((row) => (
-          <li
-            key={row.key}
-            data-index={row.index}
-            data-testid="message"
-            data-message-id={messages[row.index].id}
-            ref={virtualizer.measureElement}
-            style={{ transform: `translateY(${row.start}px)` }}
-          >
-            <MessageBody m={messages[row.index]} actions={actions} />
-          </li>
-        ))}
+        {virtualizer.getVirtualItems().map((row) => {
+          const m = messages[row.index];
+          const forMe = !!actions?.myUsername && m.authorId !== actions.myId && mentionsUser(m.content, actions.myUsername);
+          return (
+            <li
+              key={row.key}
+              className={forMe ? "mentions-me" : undefined}
+              data-index={row.index}
+              data-testid="message"
+              data-message-id={m.id}
+              ref={virtualizer.measureElement}
+              style={{ transform: `translateY(${row.start}px)` }}
+            >
+              <MessageBody m={m} actions={actions} />
+            </li>
+          );
+        })}
       </ol>
     </div>
   );

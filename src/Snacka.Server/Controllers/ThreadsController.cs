@@ -15,11 +15,13 @@ public class ThreadsController : ControllerBase
 {
     private readonly IMessageService _messageService;
     private readonly IHubContext<SnackaHub> _hubContext;
+    private readonly IChannelActivityService _activity;
 
-    public ThreadsController(IMessageService messageService, IHubContext<SnackaHub> hubContext)
+    public ThreadsController(IMessageService messageService, IHubContext<SnackaHub> hubContext, IChannelActivityService activity)
     {
         _messageService = messageService;
         _hubContext = hubContext;
+        _activity = activity;
     }
 
     private Guid GetUserId() => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)!);
@@ -85,6 +87,7 @@ public class ThreadsController : ControllerBase
                     LastReplyAt = thread.ParentMessage.LastReplyAt
                 }, cancellationToken);
 
+            await _activity.MessagePostedAsync(reply, cancellationToken);
             return Ok(reply);
         }
         catch (InvalidOperationException ex)

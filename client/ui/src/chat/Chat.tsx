@@ -11,6 +11,8 @@ import { Avatar } from "./Avatar";
 import { createFileLoader, formatSize } from "./files";
 import { Settings, type Profile } from "./Settings";
 import { channelActions } from "./channelActions";
+import { channelAlert, dmAlert, type Alert } from "./alerts";
+import { notifier, notificationsMuted } from "../notifier";
 import { PinnedPane, ThreadPane } from "./SidePane";
 import {
   applyPin,
@@ -86,13 +88,23 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const voice = useVoice(api);
   // Who is in which voice channel of the open community (LiveKit webhooks -> server -> hub).
   const [presence, setPresence] = useState<VoiceParticipant[]>([]);
+  /** Unread messages in communities other than the open one (the open one's come from its channels). */
+  const [communityUnread, setCommunityUnread] = useState<Record<string, number>>({});
+  /** Mentions of me (and replies to me) since each channel was last read, this session. */
+  const [mentions, setMentions] = useState<Record<string, { communityId: string; count: number }>>({});
   const communityRef = useRef<Community | null>(null);
+  const communitiesRef = useRef<Community[]>([]);
+  const conversationsRef = useRef<Conversation[]>([]);
+  /** Opens what a clicked notification was about. */
+  const jumpRef = useRef<(to: { communityId: string; channelId: string } | { conversationId: string }) => void>(() => {});
   const viewRef = useRef<View>(null);
   const hubRef = useRef<HubConnection | null>(null);
   const openViewRef = useRef<(v: View) => Promise<void>>(async () => {});
   useEffect(() => {
     communityRef.current = community;
     viewRef.current = view;
+    communitiesRef.current = communities;
+    conversationsRef.current = conversations;
   });
 
   const run = useCallback(async (f: () => Promise<void>) => {
@@ -106,6 +118,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
 
   const loadCommunities = useCallback(() => run(async () => setCommunities(ok(await api.GET("/api/communities")))), [api, run]);
   const loadConversations = useCallback(async () => setConversations(ok(await api.GET("/api/conversations"))), [api]);
+  const loadCommunityUnread = useCallback(
+    async () => setCommunityUnread(Object.fromEntries(ok(await api.GET("/api/communities/unread")).map((u) => [u.communityId, u.unreadCount]))),
+    [api],
+  );
 
   const loadPresence = useCallback(
     async (communityId: string) => {
@@ -119,6 +135,12 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const markChannelRead = useCallback(
     (communityId: string, channelId: string) => {
       setChannels((prev) => prev.map((c) => (c.id === channelId && c.unreadCount > 0 ? { ...c, unreadCount: 0 } : c)));
+      setMentions((prev) => {
+        if (!(channelId in prev)) return prev;
+        const next = { ...prev };
+        delete next[channelId];
+        return next;
+      });
       void api.POST("/api/communities/{communityId}/Channels/{channelId}/read", { params: { path: { communityId, channelId } } }).catch(() => {});
     },
     [api],
@@ -127,6 +149,11 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const isOpen = (kind: "channel" | "dm", id: string) => {
     const v = viewRef.current;
     return v?.kind === kind && (v.kind === "channel" ? v.channel.id : v.conversation.id) === id;
+  };
+  /** Open, and actually in front of the user. */
+  const isSeen = (kind: "channel" | "dm", id: string) => isOpen(kind, id) && !document.hidden && document.hasFocus();
+  const alert = (a: Alert | null, tag: string, to: Parameters<typeof jumpRef.current>[0]) => {
+    if (a && !notificationsMuted()) notifier.show({ ...a, tag, onClick: () => jumpRef.current(to) });
   };
 
   // One hub connection per session. Events for the open channel/DM update the message list;
@@ -160,11 +187,18 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     hub.on("ThreadMetadataUpdated", (e: ThreadMetadataEvent) =>
       setMessages((prev) => prev.map((m) => (m.id === e.messageId ? { ...m, replyCount: e.replyCount } : m))),
     );
-    // Unread counts for the open community's channels. The open channel stays read while it's
-    // on screen; in a hidden tab it counts up and is marked read when the tab is shown again.
+    // Unread counts, mentions and notifications for messages anywhere in my communities. The open
+    // channel stays read while it's on screen; in a hidden tab it counts up and is marked read
+    // when the tab is shown again. Thread replies don't count as unread in the channel.
     hub.on("ChannelActivity", (e: ChannelActivityEvent) => {
-      if (communityRef.current?.id !== e.communityId || e.authorId === myId) return;
-      if (isOpen("channel", e.channelId) && !document.hidden) markChannelRead(e.communityId, e.channelId);
+      if (e.message.authorId === myId) return;
+      const seen = isSeen("channel", e.channelId);
+      const a = channelAlert(e, myId);
+      if (!seen) alert(a, e.message.id, { communityId: e.communityId, channelId: e.channelId });
+      if (a && !seen) setMentions((prev) => ({ ...prev, [e.channelId]: { communityId: e.communityId, count: (prev[e.channelId]?.count ?? 0) + 1 } }));
+      if (e.message.threadParentMessageId) return;
+      if (communityRef.current?.id !== e.communityId) setCommunityUnread((prev) => ({ ...prev, [e.communityId]: (prev[e.communityId] ?? 0) + 1 }));
+      else if (isOpen("channel", e.channelId) && !document.hidden) markChannelRead(e.communityId, e.channelId);
       else setChannels((prev) => prev.map((c) => (c.id === e.channelId ? { ...c, unreadCount: c.unreadCount + 1 } : c)));
     });
     hub.on("MessagePinned", (e: MessagePinned) => setMessages((prev) => applyPin(prev, e)));
@@ -188,6 +222,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
 
     hub.on("ConversationMessageReceived", (m: DmMessage) => {
       const open = isOpen("dm", m.conversationId);
+      if (!isSeen("dm", m.conversationId)) alert(dmAlert(m, myId), m.id, { conversationId: m.conversationId });
       if (open) {
         stopTyping(m.senderId);
         setMessages((prev) => upsert(prev, fromDm(m)));
@@ -220,6 +255,9 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
       if (communityRef.current?.id !== communityId) return;
       void api.GET("/api/communities/{communityId}/members", { params: { path: { communityId } } }).then(ok).then(setMembers).catch(() => {});
     });
+    // The server's notification inbox (legacy client); this client notifies from the events above.
+    hub.on("PendingNotifications", () => {});
+    hub.on("UnreadNotificationCount", () => {});
     hub.on("VoiceParticipantJoined", (e: { channelId: string; participant: VoiceParticipant }) =>
       setPresence((prev) => [...prev.filter((p) => p.userId !== e.participant.userId), e.participant]),
     );
@@ -242,6 +280,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
         );
       }
       void loadConversations().catch(() => {});
+      void loadCommunityUnread().catch(() => {});
       const v = viewRef.current;
       if (v) void openViewRef.current(v);
     });
@@ -279,8 +318,9 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   useEffect(() => {
     void loadCommunities();
     void loadConversations().catch(() => {});
+    void loadCommunityUnread().catch(() => {});
     void api.GET("/api/Users/me").then(ok).then(setProfile, () => {});
-  }, [api, loadCommunities, loadConversations]);
+  }, [api, loadCommunities, loadConversations, loadCommunityUnread]);
 
   /** Shows a channel or DM: joins its realtime group (channels) and loads its history. */
   const openView = (next: View) =>
@@ -320,9 +360,16 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     openViewRef.current = openView;
   });
 
-  const openCommunity = (c: Community) =>
+  /** Leaving the open community: its unread count now lives in communityUnread. */
+  const rememberUnread = () => {
+    const prev = communityRef.current;
+    if (prev) setCommunityUnread((u) => ({ ...u, [prev.id]: channels.reduce((n, ch) => n + ch.unreadCount, 0) }));
+  };
+
+  const openCommunity = (c: Community, channelId?: string) =>
     run(async () => {
       setPanel(null);
+      if (communityRef.current?.id !== c.id) rememberUnread();
       setCommunity(c);
       communityRef.current = c;
       setPresence([]);
@@ -335,13 +382,14 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
       setChannels(list);
       setMembers(people);
       if (hubRef.current?.state === "Connected") await hubRef.current.invoke("JoinServer", c.id);
-      const firstText = list.find((ch) => ch.type === ChannelKind.Text);
-      await openView(firstText ? { kind: "channel", channel: firstText } : null);
+      const target = list.find((ch) => ch.id === channelId) ?? list.find((ch) => ch.type === ChannelKind.Text);
+      await openView(target ? { kind: "channel", channel: target } : null);
     });
 
   const openHome = () =>
     run(async () => {
       setPanel(null);
+      rememberUnread();
       setCommunity(null);
       communityRef.current = null;
       await loadConversations();
@@ -352,11 +400,42 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     run(async () => {
       setPanel(null);
       const conversation = ok(await api.GET("/api/conversations/direct/{otherUserId}", { params: { path: { otherUserId: userId } } }));
+      rememberUnread();
       setCommunity(null);
       communityRef.current = null;
       setConversations((prev) => (prev.some((c) => c.id === conversation.id) ? prev : [conversation, ...prev]));
       await openView({ kind: "dm", conversation });
     });
+
+  /** A clicked notification: open the channel or conversation it was about. */
+  const jumpTo = (to: Parameters<typeof jumpRef.current>[0]) => {
+    if ("conversationId" in to) {
+      const { conversationId } = to;
+      void run(async () => {
+        // A brand-new conversation may not be in the list yet.
+        const conversation =
+          conversationsRef.current.find((c) => c.id === conversationId) ??
+          ok(await api.GET("/api/conversations/{conversationId}", { params: { path: { conversationId } } }));
+        setPanel(null);
+        rememberUnread();
+        setCommunity(null);
+        communityRef.current = null;
+        await openView({ kind: "dm", conversation });
+      });
+      return;
+    }
+    const c = communitiesRef.current.find((x) => x.id === to.communityId);
+    if (!c) return;
+    if (communityRef.current?.id !== c.id) void openCommunity(c, to.channelId);
+    else {
+      setPanel(null);
+      const channel = channels.find((ch) => ch.id === to.channelId);
+      if (channel) void openView({ kind: "channel", channel });
+    }
+  };
+  useEffect(() => {
+    jumpRef.current = jumpTo;
+  });
 
   /** After joining or creating a community from the browse panel. */
   const enterCommunity = (c: Community) =>
@@ -458,6 +537,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
         api,
         channelId: openChannelId ?? "",
         myId,
+        myUsername: auth.username,
         canModerate,
         loadFile,
         run,
@@ -465,7 +545,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
         onReply: main ? (m) => setReplyingTo(m) : undefined,
         onOpenThread: main ? (m) => setSide({ kind: "thread", parent: m }) : undefined,
       }),
-    [api, openChannelId, myId, canModerate, loadFile, run],
+    [api, openChannelId, myId, auth.username, canModerate, loadFile, run],
   );
   const makeSideActions = useCallback((setList: React.Dispatch<React.SetStateAction<ChatMessage[]>>) => makeChannelActions(setList), [makeChannelActions]);
   const actions = useMemo<MessageActions | undefined>(() => {
@@ -497,6 +577,12 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const placeholder = view?.kind === "channel" ? `Message #${view.channel.name}` : openConversation ? `Message ${conversationName(openConversation, myId)}` : "";
   const showSide = side !== null && !panel && !showStreamTest && view?.kind === "channel";
   const unreadTotal = conversations.reduce((n, c) => n + c.unreadCount, 0);
+  const mentionTotal = Object.values(mentions).reduce((n, m) => n + m.count, 0);
+  // Unread DMs and mentions in the tab title, for when the tab is in the background.
+  useEffect(() => {
+    const n = unreadTotal + mentionTotal;
+    document.title = n > 0 ? `(${n}) Snacka` : "Snacka";
+  }, [unreadTotal, mentionTotal]);
 
   return (
     <div className={`chat${showSide ? " with-side" : ""}`}>
@@ -505,11 +591,29 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
           💬{unreadTotal > 0 && <span className="badge" data-testid="unread-total">{unreadTotal}</span>}
         </button>
         <hr />
-        {communities.map((c) => (
-          <button key={c.id} className={c.id === community?.id ? "active" : ""} title={c.name} onClick={() => void openCommunity(c)}>
-            {c.name.slice(0, 2).toUpperCase()}
-          </button>
-        ))}
+        {communities.map((c) => {
+          const unread = c.id === community?.id ? channels.reduce((n, ch) => n + ch.unreadCount, 0) : (communityUnread[c.id] ?? 0);
+          const mentioned = Object.values(mentions).reduce((n, m) => (m.communityId === c.id ? n + m.count : n), 0);
+          return (
+            <button
+              key={c.id}
+              className={[c.id === community?.id && "active", unread > 0 && "unread"].filter(Boolean).join(" ")}
+              title={c.name}
+              data-testid="community"
+              data-name={c.name}
+              onClick={() => void openCommunity(c)}
+            >
+              {c.name.slice(0, 2).toUpperCase()}
+              {mentioned > 0 ? (
+                <span className="badge" data-testid="community-mentions">
+                  {mentioned}
+                </span>
+              ) : (
+                unread > 0 && <span className="unread-dot" data-testid="community-unread" />
+              )}
+            </button>
+          );
+        })}
         <button className={panel === "browse" ? "active" : ""} title="Join or create a community" data-testid="browse" onClick={() => setPanel("browse")}>+</button>
       </nav>
       <aside className="channels">
@@ -559,7 +663,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
                   onClick={() => void openView({ kind: "channel", channel: ch })}
                 >
                   # {ch.name}
-                  {ch.unreadCount > 0 && <span className="badge" data-testid="channel-unread">{ch.unreadCount}</span>}
+                  {mentions[ch.id] ? (
+                    <span className="badge" data-testid="channel-mentions" title="Mentions of you">
+                      @{mentions[ch.id].count}
+                    </span>
+                  ) : (
+                    ch.unreadCount > 0 && <span className="badge quiet" data-testid="channel-unread">{ch.unreadCount}</span>
+                  )}
                 </button>
               ) : (
                 <div key={ch.id}>

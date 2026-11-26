@@ -66,9 +66,10 @@ export const test = base.extend<{ closeBrowsers: void }>({
   ],
 });
 
-/** A fresh browser context logged in as `name`, with `community` open. */
-export async function logIn(browser: Browser, name: string, community: string): Promise<Page> {
+/** A fresh browser context logged in as `name`, with `community` open. `setup` runs before the app loads. */
+export async function logIn(browser: Browser, name: string, community: string, setup?: (page: Page) => Promise<void>): Promise<Page> {
   const page = await newPage(browser);
+  await setup?.(page);
   await page.goto("/");
   await page.getByLabel("Server").fill(SERVER);
   await page.getByLabel("Email").fill(`${name}@test.com`);

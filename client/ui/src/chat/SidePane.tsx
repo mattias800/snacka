@@ -157,7 +157,7 @@ export function PinnedPane(props: { api: Api; hubRef: RefObject<HubConnection | 
   // Unpinning here drops the message from this list right away.
   const actions = useMemo<MessageActions>(() => {
     const base = makeActions((update) => setPinned((prev) => (prev ? (typeof update === "function" ? update(prev) : update).filter((m) => m.pinned) : prev)));
-    return { myId: base.myId, canModerate: base.canModerate, loadFile: base.loadFile, onPin: base.onPin };
+    return { myId: base.myId, myUsername: base.myUsername, canModerate: base.canModerate, loadFile: base.loadFile, onPin: base.onPin };
   }, [makeActions]);
 
   return (

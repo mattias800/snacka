@@ -471,6 +471,45 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/Auth/logout": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get?: never;
+        put?: never;
+        post: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody: {
+                content: {
+                    "application/json": components["schemas"]["RefreshTokenRequest"];
+                    "text/json": components["schemas"]["RefreshTokenRequest"];
+                    "application/*+json": components["schemas"]["RefreshTokenRequest"];
+                };
+            };
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content?: never;
+                };
+            };
+        };
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/Users/me": {
         parameters: {
             query?: never;
@@ -2773,6 +2812,43 @@ export interface paths {
         patch?: never;
         trace?: never;
     };
+    "/api/communities/unread": {
+        parameters: {
+            query?: never;
+            header?: never;
+            path?: never;
+            cookie?: never;
+        };
+        get: {
+            parameters: {
+                query?: never;
+                header?: never;
+                path?: never;
+                cookie?: never;
+            };
+            requestBody?: never;
+            responses: {
+                /** @description OK */
+                200: {
+                    headers: {
+                        [name: string]: unknown;
+                    };
+                    content: {
+                        "text/plain": components["schemas"]["CommunityUnreadResponse"][];
+                        "application/json": components["schemas"]["CommunityUnreadResponse"][];
+                        "text/json": components["schemas"]["CommunityUnreadResponse"][];
+                    };
+                };
+            };
+        };
+        put?: never;
+        post?: never;
+        delete?: never;
+        options?: never;
+        head?: never;
+        patch?: never;
+        trace?: never;
+    };
     "/api/communities/discover": {
         parameters: {
             query?: never;
@@ -3699,6 +3775,12 @@ export interface components {
             createdAt: string;
             /** Format: int32 */
             memberCount: number;
+        };
+        CommunityUnreadResponse: {
+            /** Format: uuid */
+            communityId: string;
+            /** Format: int32 */
+            unreadCount: number;
         };
         ConversationMessageResponse: {
             /** Format: uuid */

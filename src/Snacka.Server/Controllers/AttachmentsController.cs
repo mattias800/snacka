@@ -50,6 +50,7 @@ public class AttachmentsController : ControllerBase
         [FromForm] string? content,
         [FromForm] Guid? replyToId,
         [FromForm] List<IFormFile> files,
+        [FromServices] IChannelActivityService activity,
         CancellationToken ct)
     {
         var userId = GetCurrentUserId();
@@ -171,7 +172,7 @@ public class AttachmentsController : ControllerBase
         // Broadcast via SignalR
         await _hubContext.Clients.Group($"channel:{channelId}")
             .SendAsync("ReceiveChannelMessage", response, ct);
-        await ChannelActivity.NotifyAsync(_hubContext, _db, channelId, response.Id, response.AuthorId, ct);
+        await activity.MessagePostedAsync(response, ct);
 
         return Ok(response);
     }

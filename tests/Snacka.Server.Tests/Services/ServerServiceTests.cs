@@ -42,7 +42,7 @@ public class CommunityServiceTests
         Assert.AreEqual(1, community.MemberCount);
 
         // Verify default channels were created (text and voice)
-        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var channels = (await channelService.GetChannelsAsync(community.Id, Guid.Empty)).ToList();
         Assert.AreEqual(2, channels.Count);
         Assert.IsTrue(channels.Any(c => c.Name == "general" && c.Type == ChannelType.Text));
         Assert.IsTrue(channels.Any(c => c.Name == "general" && c.Type == ChannelType.Voice));
@@ -207,7 +207,7 @@ public class CommunityServiceTests
         await channelService.DeleteChannelAsync(channel.Id, user.Id);
 
         // Assert
-        var channels = await channelService.GetChannelsAsync(community.Id);
+        var channels = await channelService.GetChannelsAsync(community.Id, Guid.Empty);
         Assert.IsFalse(channels.Any(c => c.Name == "to-delete"));
     }
 
@@ -225,7 +225,7 @@ public class CommunityServiceTests
         var channelService = new ChannelService(db);
         var messageService = new MessageService(db);
         var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var channels = (await channelService.GetChannelsAsync(community.Id, Guid.Empty)).ToList();
         var channelId = channels[0].Id;
 
         // Act
@@ -247,7 +247,7 @@ public class CommunityServiceTests
         var channelService = new ChannelService(db);
         var messageService = new MessageService(db);
         var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var channels = (await channelService.GetChannelsAsync(community.Id, Guid.Empty)).ToList();
         var channelId = channels[0].Id;
 
         await messageService.SendMessageAsync(channelId, user.Id, "Message 1");
@@ -273,7 +273,7 @@ public class CommunityServiceTests
         var channelService = new ChannelService(db);
         var messageService = new MessageService(db);
         var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var channels = (await channelService.GetChannelsAsync(community.Id, Guid.Empty)).ToList();
         var message = await messageService.SendMessageAsync(channels[0].Id, user.Id, "Original");
 
         // Act
@@ -297,7 +297,7 @@ public class CommunityServiceTests
         var memberService = new CommunityMemberService(db, new NullNotificationService());
         var community = await communityService.CreateCommunityAsync(author.Id, new CreateCommunityRequest("Test", null));
         await memberService.JoinCommunityAsync(community.Id, other.Id);
-        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var channels = (await channelService.GetChannelsAsync(community.Id, Guid.Empty)).ToList();
         var message = await messageService.SendMessageAsync(channels[0].Id, author.Id, "Original");
 
         // Act & Assert
@@ -315,7 +315,7 @@ public class CommunityServiceTests
         var channelService = new ChannelService(db);
         var messageService = new MessageService(db);
         var community = await communityService.CreateCommunityAsync(user.Id, new CreateCommunityRequest("Test", null));
-        var channels = (await channelService.GetChannelsAsync(community.Id)).ToList();
+        var channels = (await channelService.GetChannelsAsync(community.Id, Guid.Empty)).ToList();
         var message = await messageService.SendMessageAsync(channels[0].Id, user.Id, "To delete");
 
         // Act

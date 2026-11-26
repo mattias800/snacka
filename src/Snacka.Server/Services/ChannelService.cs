@@ -11,31 +11,38 @@ public sealed class ChannelService : IChannelService
 
     public ChannelService(SnackaDbContext db) => _db = db;
 
-    public async Task<IEnumerable<ChannelResponse>> GetChannelsAsync(Guid communityId, CancellationToken cancellationToken = default)
-    {
-        var channels = await _db.Channels
-            .Where(c => c.CommunityId == communityId)
-            .OrderBy(c => c.Position)
-            .ToListAsync(cancellationToken);
-
-        return channels.Select(c => ToChannelResponse(c, 0));
-    }
-
     public async Task<IEnumerable<ChannelResponse>> GetChannelsAsync(Guid communityId, Guid userId, CancellationToken cancellationToken = default)
     {
         var channels = await _db.Channels
             .Where(c => c.CommunityId == communityId)
             .OrderBy(c => c.Position)
             .ToListAsync(cancellationToken);
-
-        var result = new List<ChannelResponse>();
-        foreach (var channel in channels)
-        {
-            var unreadCount = await GetUnreadCountAsync(channel.Id, userId, cancellationToken);
-            result.Add(ToChannelResponse(channel, unreadCount));
-        }
-        return result;
+        var unread = await UnreadCountsAsync(_db.Channels.Where(c => c.CommunityId == communityId), userId, cancellationToken);
+        return channels.Select(c => ToChannelResponse(c, unread.GetValueOrDefault(c.Id)));
     }
+
+    public async Task<IReadOnlyList<CommunityUnreadResponse>> GetUnreadByCommunityAsync(Guid userId, CancellationToken cancellationToken = default)
+    {
+        var mine = _db.Channels.Where(c => _db.UserCommunities.Any(uc => uc.UserId == userId && uc.CommunityId == c.CommunityId));
+        var unread = await UnreadCountsAsync(mine, userId, cancellationToken);
+        var communityOf = await mine.Select(c => new { c.Id, c.CommunityId }).ToDictionaryAsync(c => c.Id, c => c.CommunityId, cancellationToken);
+        return unread
+            .GroupBy(u => communityOf[u.Key])
+            .Select(g => new CommunityUnreadResponse(g.Key, g.Sum(u => u.Value)))
+            .ToList();
+    }
+
+    /// <summary>
+    /// Unread messages per channel (channels with none are left out): other people's messages, not
+    /// thread replies, newer than the user's read mark (all of them if the channel was never opened).
+    /// </summary>
+    private async Task<Dictionary<Guid, int>> UnreadCountsAsync(IQueryable<Channel> channels, Guid userId, CancellationToken cancellationToken) =>
+        await _db.Messages
+            .Where(m => channels.Any(c => c.Id == m.ChannelId) && m.AuthorId != userId && m.ThreadParentMessageId == null)
+            .Where(m => !_db.ChannelReadStates.Any(r => r.UserId == userId && r.ChannelId == m.ChannelId && r.LastReadAt >= m.CreatedAt))
+            .GroupBy(m => m.ChannelId)
+            .Select(g => new { ChannelId = g.Key, Count = g.Count() })
+            .ToDictionaryAsync(x => x.ChannelId, x => x.Count, cancellationToken);
 
     public async Task<ChannelResponse> GetChannelAsync(Guid channelId, CancellationToken cancellationToken = default)
     {
@@ -133,14 +140,8 @@ public sealed class ChannelService : IChannelService
 
         await _db.SaveChangesAsync(cancellationToken);
 
-        // Return updated channels with unread counts
-        var result = new List<ChannelResponse>();
-        foreach (var channel in channels.OrderBy(c => c.Position))
-        {
-            var unreadCount = await GetUnreadCountAsync(channel.Id, userId, cancellationToken);
-            result.Add(ToChannelResponse(channel, unreadCount));
-        }
-        return result;
+        var unread = await UnreadCountsAsync(_db.Channels.Where(c => c.CommunityId == communityId), userId, cancellationToken);
+        return channels.OrderBy(c => c.Position).Select(c => ToChannelResponse(c, unread.GetValueOrDefault(c.Id))).ToList();
     }
 
     public async Task MarkChannelAsReadAsync(Guid communityId, Guid channelId, Guid userId, CancellationToken cancellationToken = default)
@@ -184,20 +185,6 @@ public sealed class ChannelService : IChannelService
     /// Messages in the channel's main list since the user last read it, not counting their own
     /// messages or thread replies (those aren't in the channel list).
     /// </summary>
-    public async Task<int> GetUnreadCountAsync(Guid channelId, Guid userId, CancellationToken cancellationToken = default)
-    {
-        var lastReadAt = await _db.ChannelReadStates
-            .Where(crs => crs.UserId == userId && crs.ChannelId == channelId)
-            .Select(crs => (DateTime?)crs.LastReadAt)
-            .FirstOrDefaultAsync(cancellationToken);
-
-        return await _db.Messages.CountAsync(m =>
-            m.ChannelId == channelId &&
-            m.AuthorId != userId &&
-            m.ThreadParentMessageId == null &&
-            (lastReadAt == null || m.CreatedAt > lastReadAt), cancellationToken);
-    }
-
     private async Task EnsureCanManageCommunityAsync(Guid communityId, Guid userId, CancellationToken cancellationToken)
     {
         var userCommunity = await _db.UserCommunities

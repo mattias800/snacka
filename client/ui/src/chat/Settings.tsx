@@ -3,6 +3,7 @@ import { ok, type Api, type Schemas } from "../api/client";
 import type { Session } from "../api/session";
 import { Avatar } from "./Avatar";
 import type { FileLoader } from "./files";
+import { notificationsMuted, notifier, setNotificationsMuted, type NotifyPermission } from "../notifier";
 
 export type Profile = Schemas["UserProfileResponse"];
 
@@ -115,6 +116,7 @@ export function Settings(props: {
       <p className="muted">
         Username <strong>{profile.username}</strong> · {profile.email}
       </p>
+      <Notifications />
       <h2>Password</h2>
       <form className="column" onSubmit={changePassword}>
         <input type="password" autoComplete="current-password" value={passwords.current} onChange={(e) => setPasswords({ ...passwords, current: e.target.value })} placeholder="Current password" aria-label="Current password" />
@@ -122,5 +124,42 @@ export function Settings(props: {
         <button className="primary" type="submit" disabled={busy || !passwords.current || passwords.next.length < 8}>Change password</button>
       </form>
     </div>
+  );
+}
+
+/** Desktop notifications for DMs, mentions and replies: browser permission plus an off switch. */
+function Notifications() {
+  const [permission, setPermission] = useState<NotifyPermission>(notifier.permission());
+  const [muted, setMuted] = useState(notificationsMuted());
+  const on = permission === "granted" && !muted;
+  const turnOn = async () => {
+    setNotificationsMuted(false);
+    setMuted(false);
+    if (permission !== "granted") setPermission(await notifier.request());
+  };
+  const turnOff = () => {
+    setNotificationsMuted(true);
+    setMuted(true);
+  };
+  return (
+    <>
+      <h2>Notifications</h2>
+      <div className="row" data-testid="notification-settings">
+        <span className="grow">
+          {permission === "unsupported"
+            ? "This app can't show desktop notifications yet."
+            : permission === "denied"
+              ? "Blocked: allow notifications for this site in the browser's settings."
+              : on
+                ? "On for direct messages, mentions and replies to you."
+                : "Off."}
+        </span>
+        {permission !== "unsupported" && permission !== "denied" && (
+          <button className={on ? "" : "primary"} onClick={() => void (on ? turnOff() : turnOn())}>
+            {on ? "Turn off" : "Turn on"}
+          </button>
+        )}
+      </div>
+    </>
   );
 }

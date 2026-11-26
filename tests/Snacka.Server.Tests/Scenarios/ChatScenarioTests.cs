@@ -3,6 +3,7 @@ using System.Net.Http.Json;
 using Microsoft.AspNetCore.SignalR.Client;
 using SkiaSharp;
 using Snacka.Server.DTOs;
+using Snacka.Server.Services;
 using Snacka.Shared.Models;
 
 namespace Snacka.Server.Tests.Scenarios;
@@ -486,9 +487,12 @@ public class ChatScenarioTests
         await w.Bob.Hub().InvokeAsync("JoinServer", w.CommunityId);
         var m = await SendAsync(w.Alice, w.Random, "anyone?");
 
-        var e = await w.Bob.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.MessageId == m.Id);
+        var e = await w.Bob.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.Message.Id == m.Id);
         Assert.AreEqual(w.Random, e.ChannelId);
-        Assert.AreEqual(w.Alice.Id, e.AuthorId);
+        Assert.AreEqual("random", e.ChannelName);
+        Assert.AreEqual(w.Alice.Id, e.Message.AuthorId);
+        Assert.AreEqual("anyone?", e.Message.Content);
+        Assert.AreEqual(0, e.MentionedUserIds.Count);
         await w.Carol.SettleAsync();
         Assert.AreEqual(0, w.Carol.Received<ChannelActivityEvent>("ChannelActivity").Count, "Carol isn't a member");
         Assert.AreEqual(0, w.Bob.Received<MessageResponse>("ReceiveChannelMessage").Count);
@@ -504,5 +508,81 @@ public class ChatScenarioTests
         var res = await w.Bob.Http.PostAsync($"/api/communities/{w.CommunityId}/channels/{carols.Id}/read", null);
 
         Assert.AreEqual(HttpStatusCode.NotFound, res.StatusCode);
+    }
+
+    [TestMethod]
+    public async Task Mentions_NameOnlyMembers_AnyCase_NeverTheAuthor()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Bob.Hub().InvokeAsync("JoinServer", w.CommunityId);
+        // Carol exists but isn't a member; an email address isn't a mention.
+        var m = await SendAsync(w.Alice, w.General, "@BOB look, and @carol @alice @nobody mail alice@test.com");
+
+        var e = await w.Bob.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.Message.Id == m.Id);
+
+        CollectionAssert.AreEquivalent(new[] { w.Bob.Id }, e.MentionedUserIds.ToArray());
+    }
+
+    [TestMethod]
+    public async Task EveryoneMention_NamesAllMembersButTheAuthor()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Bob.Hub().InvokeAsync("JoinServer", w.CommunityId);
+
+        var m = await SendAsync(w.Alice, w.General, "dinner? @everyone");
+
+        var e = await w.Bob.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.Message.Id == m.Id);
+        CollectionAssert.AreEquivalent(new[] { w.Bob.Id }, e.MentionedUserIds.ToArray());
+    }
+
+    [TestMethod]
+    public async Task ThreadReply_TellsTheCommunityWhoseThreadItIs()
+    {
+        await using var w = await CreateWorldAsync();
+        await w.Bob.Hub().InvokeAsync("JoinServer", w.CommunityId);
+        var parent = await SendAsync(w.Bob, w.General, "who's up for a game?");
+
+        var reply = await Ok<MessageResponse>(await w.Alice.Http.PostAsJsonAsync($"/api/messages/{parent.Id}/replies", new SendMessageRequest("me!")));
+
+        var e = await w.Bob.WaitForAsync<ChannelActivityEvent>("ChannelActivity", e => e.Message.Id == reply.Id);
+        Assert.AreEqual(parent.Id, e.Message.ThreadParentMessageId);
+        Assert.AreEqual(w.Bob.Id, e.ThreadParentAuthorId);
+    }
+
+    [TestMethod]
+    public async Task UnreadByCommunity_SumsItsChannels_UntilRead()
+    {
+        await using var w = await CreateWorldAsync();
+        var parent = await SendAsync(w.Alice, w.General, "one");
+        await SendAsync(w.Alice, w.General, "two");
+        await SendAsync(w.Alice, w.Random, "three");
+        await SendAsync(w.Bob, w.Random, "bob's own");
+        await w.Alice.Http.PostAsJsonAsync($"/api/messages/{parent.Id}/replies", new SendMessageRequest("thread replies don't count"));
+
+        Task<List<CommunityUnreadResponse>> Unread() => w.Bob.Http.GetFromJsonAsync<List<CommunityUnreadResponse>>("/api/communities/unread")!;
+
+        var before = await Unread();
+        Assert.AreEqual(1, before.Count);
+        Assert.AreEqual(w.CommunityId, before[0].CommunityId);
+        Assert.AreEqual(3, before[0].UnreadCount);
+
+        (await w.Bob.Http.PostAsync($"/api/communities/{w.CommunityId}/channels/{w.General}/read", null)).EnsureSuccessStatusCode();
+        Assert.AreEqual(1, (await Unread()).Single().UnreadCount);
+
+        (await w.Bob.Http.PostAsync($"/api/communities/{w.CommunityId}/channels/{w.Random}/read", null)).EnsureSuccessStatusCode();
+        Assert.AreEqual(0, (await Unread()).Count);
+        Assert.AreEqual(0, (await w.Carol.Http.GetFromJsonAsync<List<CommunityUnreadResponse>>("/api/communities/unread"))!.Count, "Carol isn't a member");
+    }
+
+    [TestMethod]
+    [DataRow("hi @bob", "bob")]
+    [DataRow("(@Bob), @bob.", "bob")]
+    [DataRow("@bob_the-builder!", "bob_the-builder")]
+    [DataRow("bob@test.com @@bob", "")]
+    [DataRow("@everyone", "everyone")]
+    public void MentionedNames_FindsAtNamesStartingAWord(string content, string expected)
+    {
+        var names = ChannelActivityService.MentionedNames(content);
+        Assert.AreEqual(expected, string.Join(",", names.Order()));
     }
 }

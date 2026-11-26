@@ -176,3 +176,10 @@ label.button { display: inline-block; cursor: pointer; }
 .thread-link { display: inline-block; margin-top: 4px; background: none; border: 0; padding: 2px 0; color: #00a8fc; font-size: 13px; cursor: pointer; }
 .thread-link:hover { text-decoration: underline; }
 .channels > button.unread, .channels > div > button.unread { color: var(--text); font-weight: 600; }
+
+/* Unread and mentions */
+.communities .unread-dot { position: absolute; left: -10px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--text); }
+.badge.quiet { background: #4e5058; }
+.mention { background: rgba(88, 101, 242, 0.3); color: #c9cdfb; border-radius: 3px; padding: 0 2px; font-weight: 500; }
+.mention.me { background: rgba(240, 178, 50, 0.25); color: #f0b232; }
+.message-list > li.mentions-me { background: rgba(240, 178, 50, 0.08); box-shadow: inset 2px 0 #f0b232; }
