@@ -183,3 +183,6 @@ label.button { display: inline-block; cursor: pointer; }
 .mention { background: rgba(88, 101, 242, 0.3); color: #c9cdfb; border-radius: 3px; padding: 0 2px; font-weight: 500; }
 .mention.me { background: rgba(240, 178, 50, 0.25); color: #f0b232; }
 .message-list > li.mentions-me { background: rgba(240, 178, 50, 0.08); box-shadow: inset 2px 0 #f0b232; }
+.rename-channel { display: flex; gap: 6px; align-items: center; }
+.rename-channel input { max-width: 280px; padding: 4px 8px; }
+.rename-channel button { white-space: nowrap; }

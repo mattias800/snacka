@@ -74,6 +74,8 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const loadFile = useMemo(() => createFileLoader(serverUrl, session.fetch), [serverUrl, session]);
   const [newChannel, setNewChannel] = useState<{ name: string; voice: boolean } | null>(null);
+  /** Renaming the open channel: the name being typed. */
+  const [renaming, setRenaming] = useState<string | null>(null);
   /** The view whose realtime events we're receiving (joined its channel group while connected). */
   const [liveView, setLiveView] = useState<View>(null);
   /** Who is typing in the open channel/DM, and until when (ms) to show it. */
@@ -245,11 +247,19 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     hub.on("ConversationCreated", () => void loadConversations().catch(() => {}));
 
     hub.on("ChannelCreated", (ch: Channel) => ch.communityId === communityRef.current?.id && setChannels((prev) => (prev.some((c) => c.id === ch.id) ? prev : [...prev, ch])));
-    hub.on("ChannelUpdated", (ch: Channel) => setChannels((prev) => prev.map((c) => (c.id === ch.id ? ch : c))));
+    // The event's unread count is the server's default, not ours: keep ours.
+    hub.on("ChannelUpdated", (ch: Channel) => setChannels((prev) => prev.map((c) => (c.id === ch.id ? { ...ch, unreadCount: c.unreadCount } : c))));
     hub.on("ChannelDeleted", (e: { channelId: string }) => {
-      setChannels((prev) => prev.filter((c) => c.id !== e.channelId));
-      const v = viewRef.current;
-      if (v?.kind === "channel" && v.channel.id === e.channelId) void openViewRef.current(null);
+      setChannels((prev) => {
+        const rest = prev.filter((c) => c.id !== e.channelId);
+        // Looking at it: move to the first text channel left.
+        const v = viewRef.current;
+        if (v?.kind === "channel" && v.channel.id === e.channelId) {
+          const next = rest.find((c) => c.type === ChannelKind.Text);
+          void openViewRef.current(next ? { kind: "channel", channel: next } : null);
+        }
+        return rest;
+      });
     });
     hub.on("CommunityMemberAdded", (communityId: string) => {
       if (communityRef.current?.id !== communityId) return;
@@ -505,6 +515,35 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     });
   };
 
+  const renameChannel = (e: React.FormEvent) => {
+    e.preventDefault();
+    const name = renaming?.trim();
+    const c = community;
+    const ch = openChannel;
+    if (!name || !c || !ch) return;
+    setRenaming(null);
+    if (name === ch.name) return;
+    void run(async () => {
+      const updated = ok(
+        await api.PUT("/api/communities/{communityId}/Channels/{channelId}", {
+          params: { path: { communityId: c.id, channelId: ch.id } },
+          body: { name, topic: null, position: null },
+        }),
+      );
+      setChannels((prev) => prev.map((x) => (x.id === updated.id ? { ...updated, unreadCount: x.unreadCount } : x)));
+    });
+  };
+
+  const deleteChannel = (ch: Channel) => {
+    const c = community;
+    if (!c || !confirm(`Delete #${ch.name} and all its messages? This can't be undone.`)) return;
+    void run(async () => {
+      const res = await api.DELETE("/api/communities/{communityId}/Channels/{channelId}", { params: { path: { communityId: c.id, channelId: ch.id } } });
+      if (!res.response.ok) throw new Error(`Couldn't delete the channel: ${res.response.status}`);
+      // The ChannelDeleted event updates the list and moves us off it, here as for everyone.
+    });
+  };
+
   /** Tells the others we're typing, at most every 3 s while the draft changes. */
   const onDraftChange = (value: string) => {
     setDraft(value);
@@ -528,6 +567,8 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
 
   const me = members.find((m) => m.userId === myId);
   const canModerate = me !== undefined && me.role !== Role.Member;
+  /** Creating, renaming and deleting channels: owners and admins (as the server checks). */
+  const canManage = me !== undefined && (me.role === Role.Owner || me.role === Role.Admin);
   const openChannelId = view?.kind === "channel" ? view.channel.id : null;
   const closeSide = useCallback(() => setSide(null), []);
   /** Message actions in the open channel, for the channel's list (with replies and threads) or a side pane's. */
@@ -573,8 +614,10 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
 
   // The conversation as currently known (names in it change live), not the copy taken when it was opened.
   const openConversation = view?.kind === "dm" ? (conversations.find((c) => c.id === view.conversation.id) ?? view.conversation) : null;
-  const title = !view ? (community ? community.name : "Direct messages") : view.kind === "channel" ? `# ${view.channel.name}` : `@ ${conversationName(openConversation ?? view.conversation, myId)}`;
-  const placeholder = view?.kind === "channel" ? `Message #${view.channel.name}` : openConversation ? `Message ${conversationName(openConversation, myId)}` : "";
+  // Likewise the open channel as currently known (it may have been renamed).
+  const openChannel = view?.kind === "channel" ? (channels.find((c) => c.id === view.channel.id) ?? view.channel) : null;
+  const title = !view ? (community ? community.name : "Direct messages") : view.kind === "channel" ? `# ${(openChannel ?? view.channel).name}` : `@ ${conversationName(openConversation ?? view.conversation, myId)}`;
+  const placeholder = openChannel ? `Message #${openChannel.name}` : openConversation ? `Message ${conversationName(openConversation, myId)}` : "";
   const showSide = side !== null && !panel && !showStreamTest && view?.kind === "channel";
   const unreadTotal = conversations.reduce((n, c) => n + c.unreadCount, 0);
   const mentionTotal = Object.values(mentions).reduce((n, m) => n + m.count, 0);
@@ -619,7 +662,7 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
       <aside className="channels">
         <header className="sidebar-header">
           <span>{community?.name ?? "Direct messages"}</span>
-          {community && me !== undefined && me.role !== Role.Member && (
+          {community && canManage && (
             <button className="link" title="Create channel" data-testid="new-channel" onClick={() => setNewChannel(newChannel ? null : { name: "", voice: false })}>
               ＋
             </button>
@@ -767,7 +810,25 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
           }}
         >
           <header>
-            <span className="grow" data-testid="view-title">{title}</span>
+            {openChannel && renaming !== null ? (
+              <form className="grow rename-channel" onSubmit={renameChannel}>
+                <input value={renaming} onChange={(e) => setRenaming(e.target.value)} aria-label="Channel name" maxLength={100} autoFocus onKeyDown={(e) => e.key === "Escape" && setRenaming(null)} />
+                <button className="primary" type="submit">Save</button>
+                <button type="button" className="link" onClick={() => setRenaming(null)}>Cancel</button>
+              </form>
+            ) : (
+              <span className="grow" data-testid="view-title">{title}</span>
+            )}
+            {openChannel && canManage && renaming === null && (
+              <>
+                <button className="link" title="Rename channel" data-testid="rename-channel" onClick={() => setRenaming(openChannel.name)}>
+                  ✏️
+                </button>
+                <button className="link" title="Delete channel" data-testid="delete-channel" onClick={() => deleteChannel(openChannel)}>
+                  🗑️
+                </button>
+              </>
+            )}
             {view?.kind === "channel" && (
               <button className={`link${side?.kind === "pins" ? " active" : ""}`} title="Pinned messages" data-testid="open-pins" onClick={() => setSide(side?.kind === "pins" ? null : { kind: "pins" })}>
                 📌
