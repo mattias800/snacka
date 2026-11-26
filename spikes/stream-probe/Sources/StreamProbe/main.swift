@@ -6,6 +6,8 @@ import Foundation
 //   stream-probe loop --width 3840 --height 2160 --fps 120 --codec hevc --bitrate 80 --seconds 10
 //   stream-probe recv --port 9000            (on the viewer)
 //   stream-probe send --host 1.2.3.4 --port 9000 --width 1920 --height 1080 --fps 60
+//   stream-probe screen --width 1920 --height 1080 --fps 120 --codec hevc   (real screen capture;
+//                needs Screen Recording permission, see ScreenProbe.swift)
 //
 // "total" is measured from the timestamp embedded in the pixels, so it is only meaningful when
 // sender and receiver share a clock (same machine). Display/present latency is NOT included.
@@ -153,6 +155,8 @@ case "loop":
     if !jsonPath.isEmpty { try summary.write(toFile: jsonPath, atomically: true, encoding: .utf8) }
     if let d = rx.decoder, d.errors > 0 { print("decode errors: \(d.errors)") }
     print("dropped frames: \(rx.receiver.framesDropped)")
+case "screen":
+    runScreenLoop()
 case "recv":
     stats.recording = true
     let rx = ReceiverPipeline(port: port)
@@ -176,6 +180,6 @@ case "send":
         last = now
     }
 default:
-    fputs("usage: stream-probe [loop|send|recv] [--width W --height H --fps N --codec h264|hevc --bitrate Mbps --seconds S --warmup S --realtime on|off --quality 0..1 --host H --port P --no-lowlatency --json path]\n", stderr)
+    fputs("usage: stream-probe [loop|screen|send|recv] [--width W --height H --fps N --codec h264|hevc --bitrate Mbps --seconds S --warmup S --realtime on|off --quality 0..1 --host H --port P --no-lowlatency --json path]\n", stderr)
     exit(2)
 }
