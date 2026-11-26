@@ -8,11 +8,11 @@ import { StreamTest, inNativeApp } from "../StreamTest";
 import { VoicePanel, useVoice } from "../VoicePanel";
 import { BrowseCommunities, InviteFriends } from "./Onboarding";
 import { Avatar } from "./Avatar";
-import { createFileLoader, formatSize } from "./files";
+import { createFileLoader } from "./files";
 import { Settings, type Profile } from "./Settings";
 import { channelActions } from "./channelActions";
 import { createPreviewLoader } from "./previews";
-import { EmojiPicker } from "./EmojiPicker";
+import { Composer } from "./Composer";
 import { NewGroup } from "./NewGroup";
 import { channelAlert, dmAlert, type Alert } from "./alerts";
 import { notifier, notificationsMuted } from "../notifier";
@@ -67,7 +67,6 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const [conversations, setConversations] = useState<Conversation[]>([]);
   const [view, setView] = useState<View>(null);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
-  const [draft, setDraft] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [hubState, setHubState] = useState("connecting");
   const [showStreamTest, setShowStreamTest] = useState(false);
@@ -75,8 +74,6 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   /** Files to send with the next message (channels only). */
   const [pendingFiles, setPendingFiles] = useState<File[]>([]);
   const [dragging, setDragging] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
-  const composerRef = useRef<HTMLTextAreaElement>(null);
   const loadFile = useMemo(() => createFileLoader(serverUrl, session.fetch), [serverUrl, session]);
   const loadPreview = useMemo(() => createPreviewLoader(api), [api]);
   const [newChannel, setNewChannel] = useState<{ name: string; voice: boolean } | null>(null);
@@ -86,7 +83,6 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
   const [liveView, setLiveView] = useState<View>(null);
   /** Who is typing in the open channel/DM, and until when (ms) to show it. */
   const [typing, setTyping] = useState<Record<string, { name: string; until: number }>>({});
-  const lastTypingSentRef = useRef(0);
   /** Replaces the message pane: joining/creating communities, or inviting friends. */
   const [panel, setPanel] = useState<"browse" | "invite" | "settings" | "new-group" | null>(null);
   /** Right-hand pane next to a channel: a message's thread, or the pinned messages. */
@@ -462,17 +458,13 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
       await openCommunity(c);
     });
 
-  const send = (e: React.FormEvent) => {
-    e.preventDefault();
-    const content = draft.trim();
+  const send = (content: string) => {
     const v = view;
-    const files = v?.kind === "channel" ? pendingFiles : [];
-    if ((!content && files.length === 0) || !v) return;
-    setDraft("");
+    if (!v) return;
+    const files = v.kind === "channel" ? pendingFiles : [];
     setPendingFiles([]);
     const replyToId = replyingTo?.id ?? null;
     setReplyingTo(null);
-    lastTypingSentRef.current = 0;
     void run(async () => {
       const m =
         v.kind === "channel" && files.length > 0
@@ -562,25 +554,11 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
     });
   };
 
-  /** Puts an emoji where the cursor is in the composer, and the cursor after it. */
-  const insertEmoji = (emoji: string) => {
-    const el = composerRef.current;
-    const start = el?.selectionStart ?? draft.length;
-    const end = el?.selectionEnd ?? draft.length;
-    onDraftChange(draft.slice(0, start) + emoji + draft.slice(end));
-    requestAnimationFrame(() => {
-      el?.focus();
-      el?.setSelectionRange(start + emoji.length, start + emoji.length);
-    });
-  };
-
-  /** Tells the others we're typing, at most every 3 s while the draft changes. */
-  const onDraftChange = (value: string) => {
-    setDraft(value);
+  /** Tells the others in the open channel or DM that we're typing (the composer throttles it). */
+  const sendTyping = () => {
     const hub = hubRef.current;
     const v = view;
-    if (!value || !v || hub?.state !== "Connected" || Date.now() - lastTypingSentRef.current < 3000) return;
-    lastTypingSentRef.current = Date.now();
+    if (!v || hub?.state !== "Connected") return;
     void (v.kind === "channel" ? hub.invoke("SendTyping", v.channel.id) : hub.invoke("SendConversationTyping", v.conversation.id)).catch(() => {});
   };
 
@@ -907,70 +885,18 @@ export function Chat(props: { serverUrl: string; api: Api; auth: Auth; session: 
           {error && <p className="error">{error}</p>}
           <MessageList messages={messages} actions={actions} />
           {view && (
-            <form onSubmit={send}>
-              {replyingTo && (
-                <div className="replying" data-testid="replying">
-                  Replying to <strong>{replyingTo.authorName}</strong>
-                  <button type="button" className="link" title="Cancel reply" onClick={() => setReplyingTo(null)}>✕</button>
-                </div>
-              )}
-              {pendingFiles.length > 0 && (
-                <ul className="pending-files">
-                  {pendingFiles.map((f, i) => (
-                    <li key={`${f.name}-${i}`} data-testid="pending-file">
-                      📄 {f.name} <span className="muted">{formatSize(f.size)}</span>
-                      <button type="button" className="link" title={`Remove ${f.name}`} onClick={() => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}>✕</button>
-                    </li>
-                  ))}
-                </ul>
-              )}
-              <div className="composer">
-                {view.kind === "channel" && (
-                  <>
-                    <button type="button" className="attach" title="Attach files" onClick={() => fileInputRef.current?.click()}>📎</button>
-                    <input
-                      ref={fileInputRef}
-                      type="file"
-                      multiple
-                      hidden
-                      data-testid="file-input"
-                      onChange={(e) => {
-                        addFiles(e.target.files ?? []);
-                        e.target.value = "";
-                      }}
-                    />
-                  </>
-                )}
-                <EmojiPicker icon="😀" label="Insert emoji" testId="composer-emoji" onPick={insertEmoji} />
-                <textarea
-                  ref={composerRef}
-                  rows={Math.min(8, draft.split("\n").length)}
-                  value={draft}
-                  onChange={(e) => onDraftChange(e.target.value)}
-                  onKeyDown={(e) => {
-                    // Enter sends; Shift+Enter is a new line (and IME composition is left alone).
-                    if (e.key === "Enter" && !e.shiftKey && !e.nativeEvent.isComposing) {
-                      e.preventDefault();
-                      e.currentTarget.form?.requestSubmit();
-                    }
-                  }}
-                  onPaste={(e) => {
-                    const files = [...e.clipboardData.files];
-                    if (files.length > 0 && view.kind === "channel") {
-                      e.preventDefault();
-                      addFiles(files);
-                    }
-                  }}
-                  placeholder={placeholder}
-                  aria-label="Message"
-                  autoFocus
-                />
-              </div>
-              <div className="typing" data-testid="typing">
-                {typingNames.length === 1 && <><strong>{typingNames[0]}</strong> is typing…</>}
-                {typingNames.length > 1 && <><strong>{typingNames.join(", ")}</strong> are typing…</>}
-              </div>
-            </form>
+            <Composer
+              placeholder={placeholder}
+              canAttach={view.kind === "channel"}
+              replyingTo={replyingTo}
+              onCancelReply={() => setReplyingTo(null)}
+              files={pendingFiles}
+              onAddFiles={addFiles}
+              onRemoveFile={(i) => setPendingFiles((prev) => prev.filter((_, j) => j !== i))}
+              typingNames={typingNames}
+              onSend={send}
+              onTyping={sendTyping}
+            />
           )}
         </main>
       )}
