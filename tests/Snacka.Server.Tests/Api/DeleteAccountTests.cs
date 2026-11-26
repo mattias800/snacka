@@ -58,4 +58,31 @@ public class DeleteAccountTests
 
         Assert.AreEqual(HttpStatusCode.BadRequest, (await DeleteAsync(test, "Password123!")).StatusCode);
     }
+
+    [TestMethod]
+    public async Task AdminRemovingAnOwner_HandsTheCommunityOn()
+    {
+        using var test = new IntegrationTestBase();
+        var admin = await test.RegisterUserAsync("admin", "admin@test.com", "Password123!");
+        var bob = await test.RegisterUserAsync("bob", "bob@test.com", "Password123!");
+        var carol = await test.RegisterUserAsync("carol", "carol@test.com", "Password123!");
+        var dave = await test.RegisterUserAsync("dave", "dave@test.com", "Password123!");
+        test.SetAuthToken(bob.AccessToken);
+        var community = (await (await test.Client.PostAsJsonAsync("/api/communities", new CreateCommunityRequest("Bob's", null))).Content.ReadFromJsonAsync<CommunityResponse>())!;
+        foreach (var member in new[] { carol, dave })
+        {
+            test.SetAuthToken(member.AccessToken);
+            (await test.Client.PostAsync($"/api/communities/{community.Id}/join", null)).EnsureSuccessStatusCode();
+        }
+        // Dave joined later but ranks higher.
+        test.SetAuthToken(bob.AccessToken);
+        (await test.Client.PutAsJsonAsync($"/api/communities/{community.Id}/members/{dave.UserId}/role", new UpdateMemberRoleRequest(Snacka.Shared.Models.UserRole.Admin))).EnsureSuccessStatusCode();
+
+        test.SetAuthToken(admin.AccessToken);
+        Assert.AreEqual(HttpStatusCode.NoContent, (await test.Client.DeleteAsync($"/api/admin/users/{bob.UserId}")).StatusCode);
+
+        test.SetAuthToken(carol.AccessToken);
+        var after = await test.Client.GetFromJsonAsync<CommunityResponse>($"/api/communities/{community.Id}");
+        Assert.AreEqual(dave.UserId, after!.OwnerId);
+    }
 }

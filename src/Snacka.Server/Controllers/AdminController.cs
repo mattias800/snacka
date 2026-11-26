@@ -5,6 +5,7 @@ using Microsoft.EntityFrameworkCore;
 using Snacka.Server.Data;
 using Snacka.Server.DTOs;
 using Snacka.Server.Services;
+using Snacka.Shared.Models;
 
 namespace Snacka.Server.Controllers;
 
@@ -185,6 +186,21 @@ public class AdminController : ControllerBase
         var user = await _db.Users.FindAsync([id], cancellationToken);
         if (user is null)
             return NotFound(new { error = "User not found." });
+
+        // Communities cascade with their owner: hand each one with other members to its
+        // highest-ranking, longest-standing member instead of deleting it for everyone.
+        var owned = await _db.Communities.Where(c => c.OwnerId == id).ToListAsync(cancellationToken);
+        foreach (var community in owned)
+        {
+            var successor = await _db.UserCommunities
+                .Where(uc => uc.CommunityId == community.Id && uc.UserId != id)
+                .OrderBy(uc => uc.Role)
+                .ThenBy(uc => uc.JoinedAt)
+                .FirstOrDefaultAsync(cancellationToken);
+            if (successor is null) continue; // nobody else in it: it goes with its owner
+            community.OwnerId = successor.UserId;
+            successor.Role = UserRole.Owner;
+        }
 
         _db.Users.Remove(user);
         await _db.SaveChangesAsync(cancellationToken);
